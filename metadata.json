@@ -1,0 +1,5 @@
+{
+  "name": "Torneo Balonmano Playa Muskiz",
+  "description": "La plataforma definitiva para la gestión de torneos de balonmano playa. Incluye marcadores en vivo, registro de equipos, asistente de programación con IA y generación automática de resúmenes con Google Veo.",
+  "requestFramePermissions": []
+}
