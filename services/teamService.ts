@@ -42,15 +42,12 @@ export const teamService = {
     },
 
     async registerTeam(team: Partial<Team>): Promise<Team | null> {
-        // Normalize division to avoid accent issues (Élite -> Elite)
-        const normalizedDivision = team.division === 'Élite' ? 'Elite' : team.division;
-
         const { data, error } = await supabase
             .from('teams')
             .insert([{
                 name: team.name,
                 city: team.city,
-                division: normalizedDivision,
+                division: team.division,
                 payment_status: team.paymentStatus || 'PENDING',
                 fee: team.fee
             }])

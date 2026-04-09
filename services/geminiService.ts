@@ -9,23 +9,23 @@ const getAiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY || apiKe
 
 // --- Bracket Generation ---
 export const generateBracketAI = async (
-    teams: Team[], 
-    config: {
-        startTime: string,
-        endTime: string,
-        intervalMins: number,
-        courts: string[],
-        lunchBreak: boolean,
-        customPrompt: string
-    }
+  teams: Team[],
+  config: {
+    startTime: string,
+    endTime: string,
+    intervalMins: number,
+    courts: string[],
+    lunchBreak: boolean,
+    customPrompt: string
+  }
 ): Promise<Match[]> => {
-    try {
-        const ai = getAiClient();
-        
-        // Prepare team data string for context
-        const teamsContext = teams.map(t => `${t.name} (${t.division})`).join(', ');
+  try {
+    const ai = getAiClient();
 
-        const systemPrompt = `
+    // Prepare team data string for context
+    const teamsContext = teams.map(t => `${t.name} (${t.division})`).join(', ');
+
+    const systemPrompt = `
             Actúa como un organizador experto de torneos deportivos.
             Tu tarea es generar un calendario de partidos en formato JSON.
             
@@ -47,44 +47,44 @@ export const generateBracketAI = async (
             - Devuelve SOLO el array JSON.
         `;
 
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: systemPrompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            id: { type: Type.STRING },
-                            time: { type: Type.STRING },
-                            court: { type: Type.STRING },
-                            teamA: { type: Type.STRING },
-                            teamB: { type: Type.STRING },
-                            round: { type: Type.STRING },
-                            status: { type: Type.STRING, enum: ['SCHEDULED'] },
-                            scoreA: { type: Type.NUMBER, nullable: true },
-                            scoreB: { type: Type.NUMBER, nullable: true },
-                        }
-                    }
-                }
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: systemPrompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING },
+              time: { type: Type.STRING },
+              court: { type: Type.STRING },
+              teamA: { type: Type.STRING },
+              teamB: { type: Type.STRING },
+              round: { type: Type.STRING },
+              status: { type: Type.STRING, enum: ['SCHEDULED'] },
+              scoreA: { type: Type.NUMBER, nullable: true },
+              scoreB: { type: Type.NUMBER, nullable: true },
             }
-        });
+          }
+        }
+      }
+    });
 
-        // Ensure IDs are unique strings if AI generates duplicates or numbers
-        const matches = (JSON.parse(response.text || '[]') as Match[]).map((m, i) => ({
-            ...m,
-            scoreA: 0,
-            scoreB: 0,
-            id: `match-ai-${Date.now()}-${i}`
-        }));
-        
-        return matches;
-    } catch (error) {
-        console.error("Bracket Generation Error:", error);
-        return [];
-    }
+    // Ensure IDs are unique strings if AI generates duplicates or numbers
+    const matches = (JSON.parse(response.text || '[]') as Match[]).map((m, i) => ({
+      ...m,
+      scoreA: 0,
+      scoreB: 0,
+      id: `match-ai-${Date.now()}-${i}`
+    }));
+
+    return matches;
+  } catch (error) {
+    console.error("Bracket Generation Error:", error);
+    return [];
+  }
 };
 
 // --- Text Generation (Chat) ---
@@ -143,8 +143,8 @@ export const analyzePlayerId = async (base64Image: string, mimeType: string = 'i
 
 // --- Video Generation (Veo) ---
 export const generateHighlightVideo = async (
-  prompt: string, 
-  imageBytes?: string, 
+  prompt: string,
+  imageBytes?: string,
   mimeType: string = 'image/png'
 ): Promise<string | null> => {
   // 1. Check/Request Key
@@ -152,14 +152,14 @@ export const generateHighlightVideo = async (
   if (win.aistudio) {
     const hasKey = await win.aistudio.hasSelectedApiKey();
     if (!hasKey) {
-       await win.aistudio.openSelectKey();
+      await win.aistudio.openSelectKey();
     }
   }
 
   try {
     // Re-init client to ensure we pick up the injected key
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
+
     console.log("Starting video generation...");
     let operation;
 
@@ -178,16 +178,16 @@ export const generateHighlightVideo = async (
         }
       });
     } else {
-        // Text only
-        operation = await ai.models.generateVideos({
-            model: 'veo-3.1-fast-generate-preview',
-            prompt: prompt,
-            config: {
-              numberOfVideos: 1,
-              resolution: '720p',
-              aspectRatio: '16:9'
-            }
-          });
+      // Text only
+      operation = await ai.models.generateVideos({
+        model: 'veo-3.1-fast-generate-preview',
+        prompt: prompt,
+        config: {
+          numberOfVideos: 1,
+          resolution: '720p',
+          aspectRatio: '16:9'
+        }
+      });
     }
 
     console.log("Video operation started. Polling...", operation);
@@ -210,40 +210,77 @@ export const generateHighlightVideo = async (
     console.error("Veo Error:", error);
     // If entity not found, might need to re-select key
     if (win.aistudio && String(error).includes("Requested entity was not found")) {
-         await win.aistudio.openSelectKey();
+      await win.aistudio.openSelectKey();
     }
     throw error;
   }
 };
 
 // --- Search Grounding ---
-export const searchRules = async (query: string): Promise<{text: string, links: {title: string, uri: string}[]}> => {
-    try {
-        const ai = getAiClient();
-        const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: `Responde a esta pregunta sobre las reglas de Balonmano Playa o localización: ${query}`,
-            config: {
-                tools: [{googleSearch: {}}],
-            },
-        });
-        
-        const text = response.text || "No se encontró respuesta.";
-        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-        
-        const links: {title: string, uri: string}[] = [];
-        groundingChunks.forEach((chunk: any) => {
-            if (chunk.web?.uri) {
-                links.push({
-                    title: chunk.web.title || "Fuente",
-                    uri: chunk.web.uri
-                });
-            }
-        });
+export const searchRules = async (query: string): Promise<{ text: string, links: { title: string, uri: string }[] }> => {
+  try {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Responde a esta pregunta sobre las reglas de Balonmano Playa o localización: ${query}`,
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
 
-        return { text, links };
-    } catch (e) {
-        console.error(e);
-        return { text: "Error buscando reglas.", links: [] };
-    }
+    const text = response.text || "No se encontró respuesta.";
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+
+    const links: { title: string, uri: string }[] = [];
+    groundingChunks.forEach((chunk: any) => {
+      if (chunk.web?.uri) {
+        links.push({
+          title: chunk.web.title || "Fuente",
+          uri: chunk.web.uri
+        });
+      }
+    });
+
+    return { text, links };
+  } catch (e) {
+    console.error(e);
+    return { text: "Error buscando reglas.", links: [] };
+  }
 }
+
+// --- Marketing / Social Media Generator ---
+export const generateSocialMediaPost = async (match: Match): Promise<string> => {
+  try {
+    const ai = getAiClient();
+    const scoreString = (match.scoreA !== null && match.scoreB !== null)
+      ? `${match.scoreA} - ${match.scoreB}`
+      : 'Resultado pendiente';
+
+    const prompt = `
+            Actúa como el Community Manager del "Torneo Muskizko Udala", un evento espectacular de balonmano playa.
+            Redacta un post para Instagram emocionante e impactante sobre el siguiente partido.
+            Usa emojis y hashtags relevantes (ej. #MuskizArena #BalonmanoPlaya #Handball).
+            No incluyas corchetes para rellenar, sé directo e inventa el tono adecuado.
+
+            Datos del partido:
+            - Equipo A: ${match.teamA}
+            - Equipo B: ${match.teamB}
+            - Resultado: ${scoreString}
+            - Pista: ${match.court}
+            - Fase: ${match.round || 'Grupos'}
+        `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        systemInstruction: "Eres un redactor experto en redes sociales. Respuestas cortas, enérgicas y directas al grano."
+      }
+    });
+
+    return response.text || "¡Increíble partido en Muskiz! 🔥 #BalonmanoPlaya";
+  } catch (error) {
+    console.error("Social Media Post Error:", error);
+    return "¡Partidazo! 🏖️ #TorneoMuskiz";
+  }
+};

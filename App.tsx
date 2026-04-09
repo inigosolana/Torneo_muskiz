@@ -13,6 +13,8 @@ import { Information } from './views/Information';
 import { VideoGenerator } from './components/VideoGenerator';
 import { teamService, matchService } from './services/teamService';
 import { generateBracketAI } from './services/geminiService';
+import { PlayerSelfRegistration } from './views/PlayerSelfRegistration';
+import { supabase } from './services/supabaseClient';
 
 
 const App: React.FC = () => {
@@ -78,9 +80,14 @@ const App: React.FC = () => {
   // Category Limits (Admin controlled)
   // NOTE: Registration view checks these limits to block signup when full.
   const [categoryLimits, setCategoryLimits] = useState<CategoryLimits>({
-    Elite: 1, // Using 'Elite' as key for consistency
-    Amateur: 1,
-    Juvenil: 1
+    'Infantil Femenino': 4,
+    'Infantil Masculino': 4,
+    'Cadete Femenino': 4,
+    'Cadete Masculino': 4,
+    'Juvenil Femenino': 4,
+    'Juvenil Masculino': 4,
+    'Senior Femenino': 8,
+    'Senior Masculino': 8
   });
 
   // Teams Data (Includes Players)
@@ -96,8 +103,26 @@ const App: React.FC = () => {
       const dbMatches = await matchService.getMatches();
       if (dbTeams.length > 0) setTeams(dbTeams);
       if (dbMatches.length > 0) setMatches(dbMatches);
+
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'slfreg') {
+        setCurrentView(View.PLAYER_SELF_REGISTRATION);
+      }
     };
     loadData();
+
+    // Realtime Events from Supabase
+    const matchSubscription = supabase
+      .channel('public:matches')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, (payload) => {
+        console.log('Match change received!', payload);
+        matchService.getMatches().then(dbMatches => setMatches(dbMatches));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(matchSubscription);
+    };
   }, []);
 
   // --- Automatic Bracket Generation ---
@@ -105,15 +130,17 @@ const App: React.FC = () => {
   React.useEffect(() => {
     const autoGenerate = async () => {
       const counts = {
-        Elite: teams.filter(t => t.division === 'Elite').length,
-        Amateur: teams.filter(t => t.division === 'Amateur').length,
-        Juvenil: teams.filter(t => t.division === 'Juvenil').length,
+        'Infantil Femenino': teams.filter(t => t.division === 'Infantil Femenino').length,
+        'Infantil Masculino': teams.filter(t => t.division === 'Infantil Masculino').length,
+        'Cadete Femenino': teams.filter(t => t.division === 'Cadete Femenino').length,
+        'Cadete Masculino': teams.filter(t => t.division === 'Cadete Masculino').length,
+        'Juvenil Femenino': teams.filter(t => t.division === 'Juvenil Femenino').length,
+        'Juvenil Masculino': teams.filter(t => t.division === 'Juvenil Masculino').length,
+        'Senior Femenino': teams.filter(t => t.division === 'Senior Femenino').length,
+        'Senior Masculino': teams.filter(t => t.division === 'Senior Masculino').length
       };
 
-      const isAllFull =
-        counts.Elite >= categoryLimits.Elite &&
-        counts.Amateur >= categoryLimits.Amateur &&
-        counts.Juvenil >= categoryLimits.Juvenil;
+      const isAllFull = Object.keys(categoryLimits).every(key => counts[key as keyof CategoryLimits] >= categoryLimits[key as keyof CategoryLimits]);
 
       if (isAllFull && matches.length === 0 && teams.length > 0) {
         console.log("Automatic Generation Triggered: All categories full!");
@@ -174,6 +201,7 @@ const App: React.FC = () => {
       case View.REGISTRATION: return <Registration onRegister={addTeam} teams={teams} categoryLimits={categoryLimits} />;
       case View.SPONSORS: return <Sponsors content={siteContent} />;
       case View.MEDIA: return <Media content={siteContent} />;
+      case View.PLAYER_SELF_REGISTRATION: return <PlayerSelfRegistration teams={teams} onUpdateTeam={updateTeam} onNavigate={setCurrentView} />;
       default: return <Home onNavigate={setCurrentView} content={siteContent} />;
     }
   };

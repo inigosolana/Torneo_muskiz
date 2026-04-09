@@ -6,7 +6,8 @@ export enum View {
   REGISTRATION = 'REGISTRATION',
   TEAM = 'TEAM',
   MEDIA = 'MEDIA',
-  SPONSORS = 'SPONSORS'
+  SPONSORS = 'SPONSORS',
+  PLAYER_SELF_REGISTRATION = 'PLAYER_SELF_REGISTRATION'
 }
 
 export interface Sponsor {
@@ -21,6 +22,7 @@ export interface GalleryItem {
   url: string;
   title: string;
   year: number;
+  category?: 'Goles' | 'Ambiente' | 'Entrevistas';
 }
 
 export interface SocialConfig {
@@ -99,6 +101,7 @@ export interface Player {
   position?: string; // Playing position (Portero, etc.)
   avatarUrl?: string;
   dniUrl?: string;
+  signatureUrl?: string; // Evidence of electronic signature
   insuranceUrl?: string;
   dniStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EMPTY';
   insuranceStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EMPTY';
@@ -108,18 +111,23 @@ export interface Team {
   id: string;
   name: string;
   city: string;
-  division: 'Elite' | 'Élite' | 'Amateur' | 'Juvenil';
+  division: 'Infantil Femenino' | 'Infantil Masculino' | 'Cadete Femenino' | 'Cadete Masculino' | 'Juvenil Femenino' | 'Juvenil Masculino' | 'Senior Femenino' | 'Senior Masculino';
   logoUrl?: string; // Team Logo
   paymentStatus: 'PAID' | 'PENDING';
-  paymentMethod?: 'CARD' | 'PAYPAL' | 'TRANSFER' | 'CASH' | 'MANUAL';
+  paymentMethod?: 'CARD' | 'PAYPAL' | 'TRANSFER' | 'CASH';
   players: Player[];
   fee: number;
 }
 
 export interface CategoryLimits {
-  Elite: number;
-  Amateur: number;
-  Juvenil: number;
+  'Infantil Femenino': number;
+  'Infantil Masculino': number;
+  'Cadete Femenino': number;
+  'Cadete Masculino': number;
+  'Juvenil Femenino': number;
+  'Juvenil Masculino': number;
+  'Senior Femenino': number;
+  'Senior Masculino': number;
 }
 
 export interface ChatMessage {
