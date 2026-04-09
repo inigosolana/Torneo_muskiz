@@ -11,6 +11,9 @@ import { Sponsors } from './views/Sponsors';
 import { Media } from './views/Media';
 import { Information } from './views/Information';
 import { VideoGenerator } from './components/VideoGenerator';
+import { teamService, matchService } from './services/teamService';
+import { generateBracketAI } from './services/geminiService';
+
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.HOME);
@@ -19,48 +22,48 @@ const App: React.FC = () => {
   const [siteContent, setSiteContent] = useState<SiteContent>({
     heroTitle: "Torneo Muskizko Udala 2026",
     heroSubtitle: "El evento principal de balonmano playa en Muskiz. Vive la adrenalina, la arena y la gloria en nuestra costa.",
-    
+
     // History
     aboutTitle: "Historia y Evolución",
     aboutText: "El Torneo Muskizko Udala nació en el verano de 2015 como una pequeña iniciativa local para fomentar el deporte en la playa de La Arena. Lo que comenzó con apenas 8 equipos y una sola cancha marcada con cintas improvisadas, se ha transformado en un referente de la costa cantábrica.\n\nA lo largo de esta década, hemos crecido exponencialmente. De ser un torneo de un solo día, hemos pasado a un festival de fin de semana completo, atrayendo a equipos de nivel nacional e internacional.\n\nNuestra evolución no ha sido solo en números, sino en calidad: arbitrajes federados, streaming en directo, marcadores electrónicos y una experiencia para el jugador que prioriza el espectáculo y el juego limpio.",
     aboutImageUrl: "https://picsum.photos/800/800?grayscale",
     aboutStats: [
-        { value: "2015", label: "Año Fundación" },
-        { value: "+300", label: "Jugadores/año" },
-        { value: "10ª", label: "Edición" }
+      { value: "2015", label: "Año Fundación" },
+      { value: "+300", label: "Jugadores/año" },
+      { value: "10ª", label: "Edición" }
     ],
 
     // Venue
     venue: {
-        title: "La Sede: Playa de La Arena",
-        description: "Situada en un entorno natural privilegiado, la Playa de La Arena ofrece las condiciones perfectas para la práctica del balonmano playa. Su arena fina y compacta permite un juego rápido y espectacular.",
-        imageUrl: "https://picsum.photos/800/600?nature",
-        features: [
-            "Orientación perfecta para el sol",
-            "Más de 2000 plazas de aparcamiento",
-            "Amplia oferta gastronómica local"
-        ]
+      title: "La Sede: Playa de La Arena",
+      description: "Situada en un entorno natural privilegiado, la Playa de La Arena ofrece las condiciones perfectas para la práctica del balonmano playa. Su arena fina y compacta permite un juego rápido y espectacular.",
+      imageUrl: "https://picsum.photos/800/600?nature",
+      features: [
+        "Orientación perfecta para el sol",
+        "Más de 2000 plazas de aparcamiento",
+        "Amplia oferta gastronómica local"
+      ]
     },
 
     // Socials
     socials: {
-        instagram: { handle: "@muskizbeach", url: "#" },
-        twitter: { handle: "@MuskizTorneo", url: "#" },
-        tiktok: { handle: "@handball_muskiz", url: "#" },
-        youtube: { handle: "Canal Oficial", url: "#" }
+      instagram: { handle: "@muskizbeach", url: "#" },
+      twitter: { handle: "@MuskizTorneo", url: "#" },
+      tiktok: { handle: "@handball_muskiz", url: "#" },
+      youtube: { handle: "Canal Oficial", url: "#" }
     },
-    
+
     contactEmail: "torneo@muskiz.com",
 
     // Sponsors
     sponsors: [
-        { id: 's1', name: 'Ayuntamiento de Muskiz', logoUrl: 'apartment', tier: 'Platinum' },
-        { id: 's2', name: 'Petronor', logoUrl: 'energy_savings_leaf', tier: 'Platinum' },
-        { id: 's3', name: 'Caja Rural', logoUrl: 'account_balance', tier: 'Gold' },
-        { id: 's4', name: 'Euskaltel', logoUrl: 'wifi', tier: 'Gold' },
-        { id: 's5', name: 'Coca Cola', logoUrl: 'local_drink', tier: 'Gold' },
-        { id: 's6', name: 'Deportes Base', logoUrl: 'sports_soccer', tier: 'Silver' },
-        { id: 's7', name: 'Bar La Playa', logoUrl: 'restaurant', tier: 'Silver' },
+      { id: 's1', name: 'Ayuntamiento de Muskiz', logoUrl: 'apartment', tier: 'Platinum' },
+      { id: 's2', name: 'Petronor', logoUrl: 'energy_savings_leaf', tier: 'Platinum' },
+      { id: 's3', name: 'Caja Rural', logoUrl: 'account_balance', tier: 'Gold' },
+      { id: 's4', name: 'Euskaltel', logoUrl: 'wifi', tier: 'Gold' },
+      { id: 's5', name: 'Coca Cola', logoUrl: 'local_drink', tier: 'Gold' },
+      { id: 's6', name: 'Deportes Base', logoUrl: 'sports_soccer', tier: 'Silver' },
+      { id: 's7', name: 'Bar La Playa', logoUrl: 'restaurant', tier: 'Silver' },
     ],
 
     // Gallery
@@ -73,56 +76,81 @@ const App: React.FC = () => {
   });
 
   // Category Limits (Admin controlled)
+  // NOTE: Registration view checks these limits to block signup when full.
   const [categoryLimits, setCategoryLimits] = useState<CategoryLimits>({
-      Elite: 8,
-      Amateur: 16,
-      Juvenil: 12
+    Elite: 1, // Using 'Elite' as key for consistency
+    Amateur: 1,
+    Juvenil: 1
   });
-  
+
   // Teams Data (Includes Players)
-  const [teams, setTeams] = useState<Team[]>([
-    {
-      id: 't1',
-      name: 'Sand Stormers',
-      city: 'Muskiz',
-      division: 'Amateur',
-      paymentStatus: 'PENDING', // Changed to PENDING for testing purposes
-      fee: 150,
-      players: [
-        { 
-          id: 'p1', name: 'Marcus Johnson', number: 10, verified: true, 
-          avatarUrl: 'https://i.pravatar.cc/150?u=1', dniStatus: 'APPROVED', insuranceStatus: 'EMPTY'
-        }
-      ]
-    },
-    {
-      id: 't2',
-      name: 'Beach Kings',
-      city: 'Bilbao',
-      division: 'Elite',
-      paymentStatus: 'PENDING',
-      fee: 250,
-      players: []
-    }
-  ]);
+  const [teams, setTeams] = useState<Team[]>([]);
 
   // Matches Data
-  const [matches, setMatches] = useState<Match[]>([
-     { id: 'm1', time: '10:00', court: 'Central', teamA: 'Sand Stormers', teamB: 'Dune Kings', scoreA: 2, scoreB: 0, status: 'FINISHED', round: 'Quarter Final' },
-  ]);
+  const [matches, setMatches] = useState<Match[]>([]);
+
+  // Load initial data
+  React.useEffect(() => {
+    const loadData = async () => {
+      const dbTeams = await teamService.getTeams();
+      const dbMatches = await matchService.getMatches();
+      if (dbTeams.length > 0) setTeams(dbTeams);
+      if (dbMatches.length > 0) setMatches(dbMatches);
+    };
+    loadData();
+  }, []);
+
+  // --- Automatic Bracket Generation ---
+  // When all categories are full and no matches exist, generate automatically
+  React.useEffect(() => {
+    const autoGenerate = async () => {
+      const counts = {
+        Elite: teams.filter(t => t.division === 'Elite').length,
+        Amateur: teams.filter(t => t.division === 'Amateur').length,
+        Juvenil: teams.filter(t => t.division === 'Juvenil').length,
+      };
+
+      const isAllFull =
+        counts.Elite >= categoryLimits.Elite &&
+        counts.Amateur >= categoryLimits.Amateur &&
+        counts.Juvenil >= categoryLimits.Juvenil;
+
+      if (isAllFull && matches.length === 0 && teams.length > 0) {
+        console.log("Automatic Generation Triggered: All categories full!");
+        const newMatches = await generateBracketAI(teams, {
+          startTime: '09:00',
+          endTime: '21:00',
+          intervalMins: 30,
+          courts: ['Pista Central', 'Pista 2', 'Pista 3'],
+          lunchBreak: true,
+          customPrompt: 'Generar fase de grupos y eliminatorias para todas las categorías.'
+        });
+        if (newMatches.length > 0) {
+          setMatches(newMatches);
+          await matchService.saveMatches(newMatches);
+        }
+      }
+    };
+    autoGenerate();
+  }, [teams, matches.length, categoryLimits]);
 
   // Functions to modify state
-  const addTeam = (team: Team) => {
-    setTeams([...teams, team]);
-    setCurrentView(View.TEAM); // Redirect to manager after registration
+  const addTeam = async (team: Team) => {
+    const savedTeam = await teamService.registerTeam(team);
+    if (savedTeam) {
+      setTeams([...teams, savedTeam]);
+      setCurrentView(View.TEAM);
+    }
   };
 
-  const updateTeam = (updatedTeam: Team) => {
+  const updateTeam = async (updatedTeam: Team) => {
+    await teamService.updateTeam(updatedTeam);
     setTeams(prev => prev.map(t => t.id === updatedTeam.id ? updatedTeam : t));
   };
 
-  const updateMatches = (newMatches: Match[]) => {
-      setMatches(newMatches);
+  const updateMatches = async (newMatches: Match[]) => {
+    setMatches(newMatches);
+    await matchService.saveMatches(newMatches);
   }
 
   const renderView = () => {
@@ -131,15 +159,15 @@ const App: React.FC = () => {
       case View.INFO: return <Information content={siteContent} />;
       case View.SCHEDULE: return <Schedule matches={matches} teams={teams} />;
       case View.ADMIN: return (
-        <Admin 
-            teams={teams} 
-            onUpdateTeam={updateTeam} 
-            matches={matches} 
-            onUpdateMatches={updateMatches}
-            categoryLimits={categoryLimits}
-            onUpdateLimits={setCategoryLimits}
-            content={siteContent}
-            onUpdateContent={setSiteContent}
+        <Admin
+          teams={teams}
+          onUpdateTeam={updateTeam}
+          matches={matches}
+          onUpdateMatches={updateMatches}
+          categoryLimits={categoryLimits}
+          onUpdateLimits={setCategoryLimits}
+          content={siteContent}
+          onUpdateContent={setSiteContent}
         />
       );
       case View.TEAM: return <TeamManager teams={teams} onUpdateTeam={updateTeam} onNavigate={setCurrentView} />;

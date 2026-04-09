@@ -10,35 +10,35 @@ export enum View {
 }
 
 export interface Sponsor {
-    id: string;
-    name: string;
-    logoUrl: string; // Can be a URL or a material icon name for demo purposes
-    tier: 'Platinum' | 'Gold' | 'Silver' | 'Collaborator';
+  id: string;
+  name: string;
+  logoUrl: string; // Can be a URL or a material icon name for demo purposes
+  tier: 'Platinum' | 'Gold' | 'Silver' | 'Collaborator';
 }
 
 export interface GalleryItem {
-    id: string;
-    url: string;
-    title: string;
-    year: number;
+  id: string;
+  url: string;
+  title: string;
+  year: number;
 }
 
 export interface SocialConfig {
-    handle: string;
-    url: string;
+  handle: string;
+  url: string;
 }
 
 export interface VenueInfo {
-    title: string;
-    description: string;
-    imageUrl: string;
-    features: string[]; // Array of strings for bullet points
+  title: string;
+  description: string;
+  imageUrl: string;
+  features: string[]; // Array of strings for bullet points
 }
 
 export interface SiteContent {
   heroTitle: string;
   heroSubtitle: string;
-  
+
   // Information Page - History
   aboutTitle: string;
   aboutText: string;
@@ -48,10 +48,10 @@ export interface SiteContent {
   // Information Page - Venue & Socials
   venue: VenueInfo;
   socials: {
-      instagram: SocialConfig;
-      twitter: SocialConfig;
-      tiktok: SocialConfig;
-      youtube: SocialConfig;
+    instagram: SocialConfig;
+    twitter: SocialConfig;
+    tiktok: SocialConfig;
+    youtube: SocialConfig;
   };
 
   contactEmail: string;
@@ -98,7 +98,7 @@ export interface Player {
   verified: boolean;
   position?: string; // Playing position (Portero, etc.)
   avatarUrl?: string;
-  dniUrl?: string; 
+  dniUrl?: string;
   insuranceUrl?: string;
   dniStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EMPTY';
   insuranceStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EMPTY';
@@ -108,7 +108,7 @@ export interface Team {
   id: string;
   name: string;
   city: string;
-  division: 'Elite' | 'Amateur' | 'Juvenil';
+  division: 'Elite' | 'Élite' | 'Amateur' | 'Juvenil';
   logoUrl?: string; // Team Logo
   paymentStatus: 'PAID' | 'PENDING';
   paymentMethod?: 'CARD' | 'PAYPAL' | 'TRANSFER' | 'CASH' | 'MANUAL';

@@ -1,0 +1,148 @@
+import { supabase } from './supabaseClient';
+import { Team, Player, Match } from '../types';
+
+export const teamService = {
+    async getTeams(): Promise<Team[]> {
+        const { data, error } = await supabase
+            .from('teams')
+            .select(`
+        *,
+        players (*)
+      `);
+
+        if (error) {
+            console.error('Error fetching teams:', error);
+            return [];
+        }
+
+        // Map snake_case from DB to camelCase in app
+        return data.map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            city: t.city,
+            division: t.division,
+            paymentStatus: t.payment_status,
+            paymentMethod: t.payment_method,
+            fee: t.fee,
+            logoUrl: t.logo_url,
+            players: t.players.map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                surnames: p.surnames,
+                dniNumber: p.dni_number,
+                birthDate: p.birth_date,
+                number: p.number,
+                position: p.position,
+                verified: p.verified,
+                dniStatus: p.dni_status,
+                insuranceStatus: p.insurance_status,
+                avatarUrl: p.avatar_url
+            }))
+        }));
+    },
+
+    async registerTeam(team: Partial<Team>): Promise<Team | null> {
+        // Normalize division to avoid accent issues (Élite -> Elite)
+        const normalizedDivision = team.division === 'Élite' ? 'Elite' : team.division;
+
+        const { data, error } = await supabase
+            .from('teams')
+            .insert([{
+                name: team.name,
+                city: team.city,
+                division: normalizedDivision,
+                payment_status: team.paymentStatus || 'PENDING',
+                fee: team.fee
+            }])
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error registering team:', error);
+            return null;
+        }
+
+        return { ...data, players: [] };
+    },
+
+    async updateTeam(team: Team): Promise<void> {
+        const { error } = await supabase
+            .from('teams')
+            .update({
+                name: team.name,
+                city: team.city,
+                division: team.division,
+                payment_status: team.paymentStatus,
+                payment_method: team.paymentMethod,
+                logo_url: team.logoUrl
+            })
+            .eq('id', team.id);
+
+        if (error) console.error('Error updating team:', error);
+    },
+
+    async addPlayer(teamId: string, player: Partial<Player>): Promise<void> {
+        const { error } = await supabase
+            .from('players')
+            .insert([{
+                team_id: teamId,
+                name: player.name,
+                surnames: player.surnames,
+                dni_number: player.dniNumber,
+                birth_date: player.birthDate,
+                number: player.number,
+                position: player.position,
+                dni_status: 'EMPTY',
+                insurance_status: 'EMPTY'
+            }]);
+
+        if (error) console.error('Error adding player:', error);
+    }
+};
+
+export const matchService = {
+    async getMatches(): Promise<Match[]> {
+        const { data, error } = await supabase
+            .from('matches')
+            .select('*');
+
+        if (error) {
+            console.error('Error fetching matches:', error);
+            return [];
+        }
+
+        return data.map((m: any) => ({
+            id: m.id,
+            time: m.time,
+            court: m.court,
+            teamA: m.team_a,
+            teamB: m.team_b,
+            scoreA: m.score_a,
+            scoreB: m.score_b,
+            status: m.status,
+            round: m.round,
+            report: m.report
+        }));
+    },
+
+    async saveMatches(matches: Match[]): Promise<void> {
+        // Basic implementation: delete existing and insert new for bracket regen
+        await supabase.from('matches').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Hack to clear
+
+        const { error } = await supabase
+            .from('matches')
+            .insert(matches.map(m => ({
+                time: m.time,
+                court: m.court,
+                team_a: m.teamA,
+                team_b: m.teamB,
+                score_a: m.scoreA,
+                score_b: m.scoreB,
+                status: m.status,
+                round: m.round,
+                report: m.report
+            })));
+
+        if (error) console.error('Error saving matches:', error);
+    }
+};
