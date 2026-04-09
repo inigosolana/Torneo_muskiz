@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Team, Match, CategoryLimits, MatchReport, PlayerStat, SiteContent, Sponsor, GalleryItem } from '../types';
 import { generateBracketAI, generateSocialMediaPost } from '../services/geminiService';
+import { resizeAndCompressImage } from '../utils/imageProcessor';
+import { toast } from 'sonner';
 
 interface AdminProps {
     teams: Team[];
@@ -96,7 +98,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         if (passwordInput === 'admin123') {
             setIsAuthenticated(true);
         } else {
-            alert("Contraseña incorrecta");
+            toast.error("Contraseña incorrecta");
         }
     };
 
@@ -188,9 +190,9 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
 
         if (newMatches.length > 0) {
             onUpdateMatches(newMatches);
-            alert(`¡Calendario Generado! ${newMatches.length} partidos creados siguiendo tus instrucciones.`);
+            toast.success(`¡Calendario Generado! ${newMatches.length} partidos creados siguiendo tus instrucciones.`);
         } else {
-            alert("Error generando el cuadro. Intenta simplificar el prompt.");
+            toast.error("Error generando el cuadro. Intenta simplificar el prompt.");
         }
         setGeneratingBracket(false);
     };
@@ -278,22 +280,28 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         });
     };
 
-    const handleReportImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleReportImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file && selectedMatchForReport) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                setSelectedMatchForReport({
-                    ...selectedMatchForReport,
-                    report: {
-                        ...selectedMatchForReport.report!,
-                        type: 'IMAGE',
-                        imageUri: ev.target?.result as string
-                    }
-                });
-                setReportMode('IMAGE');
-            };
-            reader.readAsDataURL(file);
+            try {
+                const compressedBlob = await resizeAndCompressImage(file);
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    setSelectedMatchForReport({
+                        ...selectedMatchForReport,
+                        report: {
+                            ...selectedMatchForReport.report!,
+                            type: 'IMAGE',
+                            imageUri: ev.target?.result as string
+                        }
+                    });
+                    setReportMode('IMAGE');
+                };
+                reader.readAsDataURL(compressedBlob);
+            } catch (error) {
+                console.error("Error comprimiendo acta:", error);
+                toast.error("Hubo un error procesando el acta. Asegúrate de que es una imagen.");
+            }
         }
     };
 
@@ -1089,7 +1097,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                 <div>
                                     <textarea className="w-full h-40 p-4 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500" readOnly value={socialPostModal.content}></textarea>
                                     <button
-                                        onClick={() => { navigator.clipboard.writeText(socialPostModal.content); alert('¡Copiado!'); }}
+                                        onClick={() => { navigator.clipboard.writeText(socialPostModal.content); toast.success('¡Copiado!'); }}
                                         className="mt-4 w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition-colors flex justify-center items-center gap-2"
                                     >
                                         <span className="material-symbols-outlined">content_copy</span> Copiar Portapapeles

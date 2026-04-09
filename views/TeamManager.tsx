@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { analyzePlayerId } from '../services/geminiService';
 import { Team, Player, View } from '../types';
+import { resizeAndCompressImage } from '../utils/imageProcessor';
+import { toast } from 'sonner';
 
 interface TeamManagerProps {
     teams: Team[];
@@ -48,14 +50,20 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
 
     // --- Actions ---
 
-    const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                onUpdateTeam({ ...selectedTeam, logoUrl: ev.target?.result as string });
-            };
-            reader.readAsDataURL(file);
+            try {
+                const compressedBlob = await resizeAndCompressImage(file);
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    onUpdateTeam({ ...selectedTeam, logoUrl: ev.target?.result as string });
+                };
+                reader.readAsDataURL(compressedBlob);
+            } catch (error) {
+                console.error("Error comprimiendo imagen:", error);
+                toast.error("Hubo un error procesando la imagen. Asegúrate de que sea un formato válido.");
+            }
         }
     };
 
@@ -65,7 +73,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
         setTimeout(() => {
             setPaymentProcessing(false);
             onUpdateTeam({ ...selectedTeam, paymentStatus: 'PAID' });
-            alert(`¡Pago de ${selectedTeam.fee}€ recibido correctamente! Ya puedes añadir jugadores.`);
+            toast.success(`¡Pago de ${selectedTeam.fee}€ recibido correctamente! Ya puedes añadir jugadores.`);
         }, 2000);
     };
 
@@ -156,7 +164,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                     ...selectedTeam,
                     players: [...selectedTeam.players, ...newPlayers]
                 });
-                alert(`Se han importado ${newPlayers.length} jugadores. Recuerda subir sus fotos de DNI y Seguro.`);
+                toast.success(`Se han importado ${newPlayers.length} jugadores. Recuerda subir sus fotos de DNI y Seguro.`);
             }
         };
         reader.readAsText(file);
@@ -359,7 +367,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                                             onClick={() => {
                                                 const link = `${window.location.origin}${window.location.pathname}?view=slfreg&teamId=${selectedTeam.id}`;
                                                 navigator.clipboard.writeText(link);
-                                                alert('Enlace de invitación copiado al portapapeles.');
+                                                toast.success('Enlace de invitación copiado al portapapeles.');
                                             }}
                                             className="text-primary hover:text-primary-dark text-xs font-bold flex items-center gap-1 px-3 py-2 bg-primary/10 rounded-lg border border-primary/20"
                                         >

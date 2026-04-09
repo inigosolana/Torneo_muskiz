@@ -15,6 +15,7 @@ import { teamService, matchService } from './services/teamService';
 import { generateBracketAI } from './services/geminiService';
 import { PlayerSelfRegistration } from './views/PlayerSelfRegistration';
 import { supabase } from './services/supabaseClient';
+import { Toaster, toast } from 'sonner';
 
 
 const App: React.FC = () => {
@@ -208,6 +209,7 @@ const App: React.FC = () => {
 
   return (
     <Layout currentView={currentView} onNavigate={setCurrentView}>
+      <Toaster richColors position="bottom-right" />
       {renderView()}
       <ChatBot />
       {/* Video Generator can be accessed from Media view now mostly, but keeping component available if needed */}
