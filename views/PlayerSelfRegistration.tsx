@@ -20,7 +20,9 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
         dniNumber: '',
         birthDate: '',
         number: '',
-        position: 'Universal'
+        position: 'Universal',
+        dniUrl: '',
+        insuranceUrl: ''
     });
     const sigCanvas = useRef<SignatureCanvas>(null);
 
@@ -52,8 +54,10 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
                 position: form.position,
                 signatureUrl: sigCanvas.current?.isEmpty() ? undefined : sigCanvas.current?.getTrimmedCanvas().toDataURL('image/png'),
                 verified: false,
-                dniStatus: 'EMPTY',
-                insuranceStatus: 'EMPTY'
+                dniUrl: form.dniUrl,
+                insuranceUrl: form.insuranceUrl,
+                dniStatus: form.dniUrl ? 'PENDING' : 'EMPTY',
+                insuranceStatus: form.insuranceUrl ? 'PENDING' : 'EMPTY'
             };
 
             onUpdateTeam({
@@ -134,6 +138,32 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
                         </div>
 
                         {/* Paso 6 (Firmas Electrónicas) */}
+                        {/* Paso 7 (Documentación) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Foto DNI / Pasaporte</label>
+                                <div className="relative group border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-center">
+                                    <input type="file" required accept="image/*" onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) setForm({ ...form, dniUrl: 'https://fake.storage/dni.jpg' });
+                                    }} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                    <span className={`material-symbols-outlined text-3xl mb-1 ${form.dniUrl ? 'text-green-500' : 'text-slate-400'}`}>{form.dniUrl ? 'check_circle' : 'upload_file'}</span>
+                                    <p className="text-[10px] text-slate-500">{form.dniUrl ? 'Archivo seleccionado' : 'Subir DNI'}</p>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Tarjeta Seguro / Ficha</label>
+                                <div className="relative group border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center text-center">
+                                    <input type="file" required accept="image/*" onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) setForm({ ...form, insuranceUrl: 'https://fake.storage/insurance.jpg' });
+                                    }} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                    <span className={`material-symbols-outlined text-3xl mb-1 ${form.insuranceUrl ? 'text-green-500' : 'text-slate-400'}`}>{form.insuranceUrl ? 'check_circle' : 'upload_file'}</span>
+                                    <p className="text-[10px] text-slate-500">{form.insuranceUrl ? 'Archivo seleccionado' : 'Subir Seguro'}</p>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                             <div className="sm:col-span-3">
                                 <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Firma Electrónica</label>

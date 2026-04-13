@@ -14,6 +14,7 @@ import { VideoGenerator } from './components/VideoGenerator';
 import { teamService, matchService } from './services/teamService';
 import { generateBracketAI } from './services/geminiService';
 import { PlayerSelfRegistration } from './views/PlayerSelfRegistration';
+import { ManagerLogin } from './views/ManagerLogin';
 import { supabase } from './services/supabaseClient';
 import { Toaster, toast } from 'sonner';
 
@@ -96,6 +97,21 @@ const App: React.FC = () => {
 
   // Matches Data
   const [matches, setMatches] = useState<Match[]>([]);
+
+  // Auth Manager
+  const [managerEmail, setManagerEmail] = useState<string | null>(localStorage.getItem('managerEmail'));
+
+  const handleManagerLogin = (email: string) => {
+    setManagerEmail(email);
+    localStorage.setItem('managerEmail', email);
+    setCurrentView(View.TEAM);
+  };
+
+  const handleManagerLogout = () => {
+    setManagerEmail(null);
+    localStorage.removeItem('managerEmail');
+    setCurrentView(View.HOME);
+  };
 
   // Load initial data
   React.useEffect(() => {
@@ -198,8 +214,26 @@ const App: React.FC = () => {
           onUpdateContent={setSiteContent}
         />
       );
-      case View.TEAM: return <TeamManager teams={teams} onUpdateTeam={updateTeam} onNavigate={setCurrentView} />;
-      case View.REGISTRATION: return <Registration onRegister={addTeam} teams={teams} categoryLimits={categoryLimits} />;
+      case View.TEAM: 
+        if (!managerEmail) {
+          return <ManagerLogin teams={teams} onLogin={handleManagerLogin} onNavigate={setCurrentView} />;
+        }
+        return (
+          <div className="relative">
+            <div className="absolute top-4 right-4 z-50">
+               <button onClick={handleManagerLogout} className="bg-red-500/10 text-red-500 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2">
+                 <span className="material-symbols-outlined text-sm">logout</span> Cerrar Sesión
+               </button>
+            </div>
+            <TeamManager 
+              teams={teams.filter(t => t.managerEmail === managerEmail)} 
+              onUpdateTeam={updateTeam} 
+              onNavigate={setCurrentView} 
+            />
+          </div>
+        );
+      case View.MANAGER_LOGIN: return <ManagerLogin teams={teams} onLogin={handleManagerLogin} onNavigate={setCurrentView} />;
+      case View.REGISTRATION: return <Registration onRegister={(t) => { addTeam(t); setManagerEmail(t.managerEmail); localStorage.setItem('managerEmail', t.managerEmail); }} teams={teams} categoryLimits={categoryLimits} />;
       case View.SPONSORS: return <Sponsors content={siteContent} />;
       case View.MEDIA: return <Media content={siteContent} />;
       case View.PLAYER_SELF_REGISTRATION: return <PlayerSelfRegistration teams={teams} onUpdateTeam={updateTeam} onNavigate={setCurrentView} />;
@@ -211,7 +245,7 @@ const App: React.FC = () => {
     <Layout currentView={currentView} onNavigate={setCurrentView}>
       <Toaster richColors position="bottom-right" />
       {renderView()}
-      <ChatBot />
+      <ChatBot matches={matches} />
       {/* Video Generator can be accessed from Media view now mostly, but keeping component available if needed */}
     </Layout>
   );

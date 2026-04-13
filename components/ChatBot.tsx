@@ -1,8 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { sendChatMessage } from '../services/geminiService';
-import { ChatMessage } from '../types';
+import { ChatMessage, Match } from '../types';
 
-export const ChatBot: React.FC = () => {
+interface ChatBotProps {
+  matches?: Match[];
+}
+
+export const ChatBot: React.FC<ChatBotProps> = ({ matches = [] }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -40,7 +44,9 @@ export const ChatBot: React.FC = () => {
       parts: [{ text: m.text }]
     }));
 
-    const responseText = await sendChatMessage(history, userMsg.text);
+    const matchesContext = matches.map(m => `[${m.time} - Pista: ${m.court}] ${m.teamA} vs ${m.teamB} (Resultado: ${m.scoreA !== null ? m.scoreA : '-'} - ${m.scoreB !== null ? m.scoreB : '-'})`).join('\\n') || "No hay partidos programados aún en tiempo real.";
+
+    const responseText = await sendChatMessage(history, userMsg.text, matchesContext);
 
     const botMsg: ChatMessage = {
       id: (Date.now() + 1).toString(),

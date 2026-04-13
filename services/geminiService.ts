@@ -2,10 +2,10 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Match, Team } from "../types";
 
 // We check for the API key in the environment
-const apiKey = process.env.API_KEY || '';
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 
 // --- Initialization ---
-const getAiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY || apiKey });
+const getAiClient = () => new GoogleGenAI({ apiKey });
 
 // --- Bracket Generation ---
 export const generateBracketAI = async (
@@ -90,7 +90,8 @@ export const generateBracketAI = async (
 // --- Text Generation (Chat) ---
 export const sendChatMessage = async (
   history: { role: string; parts: { text: string }[] }[],
-  newMessage: string
+  newMessage: string,
+  realTimeData: string = ""
 ): Promise<string> => {
   try {
     const ai = getAiClient();
@@ -98,7 +99,25 @@ export const sendChatMessage = async (
       model: 'gemini-3-pro-preview', // Good for reasoning/chat
       history: history,
       config: {
-        systemInstruction: "Eres el asistente oficial de IA para 'Summer Slam 2024', un torneo de balonmano playa. Ayudas con reglas, horarios y localización de canchas. Responde siempre en español. Mantén las respuestas concisas y con energía positiva.",
+        systemInstruction: `Eres el asistente virtual oficial del "Torneo Muskizko Udala 2026" de balonmano playa.
+Tu objetivo es ayudar a jugadores, espectadores y organizadores con dudas sobre el evento.
+
+PERFIL Y TONO:
+- Tono: Enérgico, deportivo, amable y "playero" (puedes usar emojis como 🏖️, 🤾‍♂️, 🔥).
+- Idioma: Responde en el mismo idioma en el que te hable el usuario (principalmente Castellano o Euskera).
+
+CONOCIMIENTO BASE DEL TORNEO:
+- Sede: Playa de la Arena, Muskiz.
+- Fechas: Del 25 al 27 de Julio de 2026.
+- Reglas clave: Equipos de 6 a 12 jugadores, partidos al mejor de 2 sets (10 mins cada uno). Desempate por "Shoot-out". Goles espectaculares (giro 360º, fly) valen doble.
+
+DATOS EN TIEMPO REAL:
+${realTimeData}
+
+REGLAS DE COMPORTAMIENTO (MUY IMPORTANTE):
+1. NO inventes información. Si te preguntan por un resultado o equipo que no conoces o no está en tus datos en tiempo real, responde que no tienes esa información.
+2. Si te hacen preguntas ajenas al torneo o al deporte, responde educadamente que solo estás programado para hablar del evento.
+3. Si alguien reporta un problema médico o incidente grave, dile que se dirija INMEDIATAMENTE a la carpa principal de la organización o busque a un árbitro.`,
       }
     });
 

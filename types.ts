@@ -7,7 +7,8 @@ export enum View {
   TEAM = 'TEAM',
   MEDIA = 'MEDIA',
   SPONSORS = 'SPONSORS',
-  PLAYER_SELF_REGISTRATION = 'PLAYER_SELF_REGISTRATION'
+  PLAYER_SELF_REGISTRATION = 'PLAYER_SELF_REGISTRATION',
+  MANAGER_LOGIN = 'MANAGER_LOGIN'
 }
 
 export interface Sponsor {
@@ -117,6 +118,9 @@ export interface Team {
   paymentMethod?: 'CARD' | 'PAYPAL' | 'TRANSFER' | 'CASH';
   players: Player[];
   fee: number;
+  managerName: string;
+  managerEmail: string;
+  password?: string;
 }
 
 export interface CategoryLimits {

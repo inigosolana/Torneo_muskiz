@@ -198,13 +198,33 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
     };
 
     const handleDocumentUpload = (playerId: string, type: 'dni' | 'insurance') => {
-        const updatedPlayers = selectedTeam.players.map(p => {
-            if (p.id === playerId) {
-                return { ...p, [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'PENDING' as const };
+        // Real upload simulation
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*,application/pdf';
+        input.onchange = async (e: any) => {
+            const file = e.target.files?.[0];
+            if (file) {
+                toast.loading(`Subiendo ${type.toUpperCase()}...`);
+                // Simulate network delay
+                setTimeout(() => {
+                    const updatedPlayers = selectedTeam.players.map(p => {
+                        if (p.id === playerId) {
+                            return { 
+                                ...p, 
+                                [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'APPROVED' as const,
+                                [type === 'dni' ? 'dniUrl' : 'insuranceUrl']: 'https://fake-supabase-storage.com/uploaded-file.jpg' 
+                            };
+                        }
+                        return p;
+                    });
+                    onUpdateTeam({ ...selectedTeam, players: updatedPlayers });
+                    toast.dismiss();
+                    toast.success(`${type.toUpperCase()} subido correctamente.`);
+                }, 2000);
             }
-            return p;
-        });
-        onUpdateTeam({ ...selectedTeam, players: updatedPlayers });
+        };
+        input.click();
     };
 
     const getStatusBadge = (status: string) => {

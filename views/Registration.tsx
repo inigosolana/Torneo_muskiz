@@ -13,7 +13,10 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
         name: '',
         city: '',
         division: 'Senior Masculino' as 'Infantil Femenino' | 'Infantil Masculino' | 'Cadete Femenino' | 'Cadete Masculino' | 'Juvenil Femenino' | 'Juvenil Masculino' | 'Senior Femenino' | 'Senior Masculino',
-        fee: 200
+        fee: 200,
+        managerName: '',
+        managerEmail: '',
+        password: ''
     });
 
     // Calculate current counts
@@ -40,8 +43,8 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
     ];
 
     const handleRegister = () => {
-        if (!formData.name || !formData.city) {
-            alert("Por favor completa todos los campos");
+        if (!formData.name || !formData.city || !formData.managerName || !formData.managerEmail || !formData.password) {
+            alert("Por favor completa todos los campos, incluyendo los datos del responsable");
             return;
         }
 
@@ -52,7 +55,10 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             division: formData.division,
             paymentStatus: 'PENDING',
             fee: formData.fee,
-            players: []
+            players: [],
+            managerName: formData.managerName,
+            managerEmail: formData.managerEmail,
+            password: formData.password
         };
 
         onRegister(newTeam);
@@ -143,6 +149,49 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                     placeholder="ej. Muskiz"
                                 />
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Step 3: Manager Credentials */}
+                    <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className={`size-8 rounded-full flex items-center justify-center font-bold ${formData.managerEmail ? 'bg-primary text-background-dark' : 'bg-slate-100 text-slate-500'}`}>3</div>
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Responsable del Equipo</h3>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre del Responsable</label>
+                                <input
+                                    type="text"
+                                    value={formData.managerName}
+                                    onChange={(e) => setFormData({ ...formData, managerName: e.target.value })}
+                                    className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                    placeholder="Nombre completo"
+                                />
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Email (Usuario)</label>
+                                    <input
+                                        type="email"
+                                        value={formData.managerEmail}
+                                        onChange={(e) => setFormData({ ...formData, managerEmail: e.target.value })}
+                                        className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                        placeholder="correo@ejemplo.com"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña Gesti&oacute;n</label>
+                                    <input
+                                        type="password"
+                                        value={formData.password}
+                                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                        className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                        placeholder="********"
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-slate-400">Usa estas credenciales para acceder al panel de gesti&oacute;n y añadir jugadores.</p>
                         </div>
                     </div>
 
