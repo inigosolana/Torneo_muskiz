@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { View, SiteContent } from '../types';
+import { View, SiteContent, Team } from '../types';
 
 interface HomeProps {
   onNavigate: (view: View) => void;
   content: SiteContent;
+  teams: Team[];
 }
 
-export const Home: React.FC<HomeProps> = ({ onNavigate, content }) => {
+export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
   const [isUploading, setIsUploading] = useState(false);
 
   const handleUploadClick = () => {
@@ -212,7 +213,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content }) => {
               <div className="size-20 rounded-full bg-surface-light dark:bg-surface-dark flex items-center justify-center text-primary shadow-lg mb-2">
                 <span className="material-symbols-outlined text-4xl">trophy</span>
               </div>
-              <h4 className="text-5xl font-black text-slate-900 dark:text-white">32</h4>
+              <h4 className="text-5xl font-black text-slate-900 dark:text-white">{teams.filter(t => t.paymentStatus === 'PAID').length}</h4>
               <p className="text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">Equipos Inscritos</p>
             </div>
           </div>

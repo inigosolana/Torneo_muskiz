@@ -45,50 +45,45 @@ export const teamService = {
     },
 
     async registerTeam(team: Partial<Team>, receiptFile?: File | null): Promise<Team | null> {
-        // Upload receipt file to Storage if provided
+        const teams = await this.registerTeams([team], receiptFile);
+        return teams.length > 0 ? teams[0] : null;
+    },
+
+    async registerTeams(newTeams: Partial<Team>[], receiptFile?: File | null): Promise<Team[]> {
+        // Upload receipt file once if provided
         let receiptUrl: string | undefined;
         if (receiptFile) {
             const fileExt = receiptFile.name.split('.').pop();
             const fileName = `${Date.now()}.${fileExt}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('receipts')
-                .upload(fileName, receiptFile);
-
+            const { error: uploadError } = await supabase.storage.from('receipts').upload(fileName, receiptFile);
             if (uploadError) {
                 console.error('Error uploading receipt:', uploadError);
-                return null;
+                return [];
             }
-
-            const { data: urlData } = supabase.storage
-                .from('receipts')
-                .getPublicUrl(fileName);
-
+            const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(fileName);
             receiptUrl = urlData.publicUrl;
         }
 
-        const { data, error } = await supabase
-            .from('teams')
-            .insert([{
-                name: team.name,
-                city: team.city,
-                division: team.division,
-                payment_status: 'PENDING',
-                fee: team.fee,
-                receipt_url: receiptUrl || null,
-                manager_name: team.managerName,
-                manager_email: team.managerEmail,
-                password: team.password
-            }])
-            .select()
-            .single();
+        const insertData = newTeams.map(team => ({
+            name: team.name,
+            city: team.city,
+            division: team.division,
+            payment_status: 'PENDING',
+            fee: team.fee,
+            receipt_url: receiptUrl || null,
+            manager_name: team.managerName,
+            manager_email: team.managerEmail,
+            password: team.password
+        }));
+
+        const { data, error } = await supabase.from('teams').insert(insertData).select();
 
         if (error) {
-            console.error('Error registering team:', error);
-            return null;
+            console.error('Error registering teams:', error);
+            return [];
         }
 
-        return { ...data, players: [] };
+        return data.map((t: any) => ({ ...t, players: [] }));
     },
 
     async updateTeam(team: Team): Promise<void> {

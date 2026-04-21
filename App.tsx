@@ -180,11 +180,7 @@ const App: React.FC = () => {
 
   // Functions to modify state
   const addTeams = async (newTeams: Team[], receiptFile?: File) => {
-    const savedTeams: Team[] = [];
-    for (const team of newTeams) {
-      const savedTeam = await teamService.registerTeam(team, receiptFile);
-      if (savedTeam) savedTeams.push(savedTeam);
-    }
+    const savedTeams = await teamService.registerTeams(newTeams, receiptFile);
     if (savedTeams.length > 0) {
       setTeams(prev => [...prev, ...savedTeams]);
     }
@@ -202,7 +198,7 @@ const App: React.FC = () => {
 
   const renderView = () => {
     switch (currentView) {
-      case View.HOME: return <Home onNavigate={setCurrentView} content={siteContent} />;
+      case View.HOME: return <Home onNavigate={setCurrentView} content={siteContent} teams={teams} />;
       case View.INFO: return <Information content={siteContent} />;
       case View.SCHEDULE: return <Schedule matches={matches} teams={teams} />;
       case View.ADMIN: return (
