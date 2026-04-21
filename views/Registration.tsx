@@ -203,24 +203,65 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
 
                     {/* Step 4: Payment Instructions & Receipt Upload */}
                     <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-6 rounded-xl shadow-sm">
-                        <div className="flex items-center gap-3 mb-4">
+                        <div className="flex items-center gap-3 mb-6">
                             <div className={`size-8 rounded-full flex items-center justify-center font-bold ${receiptFile ? 'bg-primary text-background-dark' : 'bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300'}`}>4</div>
-                            <h3 className="font-bold text-lg text-blue-900 dark:text-blue-100">Pago por Transferencia</h3>
+                            <h3 className="font-bold text-lg text-blue-900 dark:text-blue-100">Instrucciones de Pago ({formData.fee}€)</h3>
                         </div>
-                        <div className="bg-blue-100/50 dark:bg-blue-900/30 rounded-lg p-4 mb-4">
-                            <div className="flex items-start gap-3">
-                                <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 mt-0.5">account_balance</span>
-                                <div className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                                    <p className="font-semibold">Instrucciones de pago:</p>
-                                    <p>Para confirmar la inscripción debes realizar una transferencia al siguiente IBAN:</p>
-                                    <p className="font-mono font-bold text-base bg-blue-200/50 dark:bg-blue-800/50 px-3 py-1.5 rounded-md inline-block mt-1">ESXX XXXX XXXX XXXX XXXX</p>
-                                    <p className="mt-2 text-xs">Importe: <strong>{formData.fee}€</strong> (según categoría)</p>
-                                    <p className="text-xs font-medium">Concepto: <strong>Torneo + {formData.name || 'Nombre Equipo'}</strong></p>
+
+                        {/* Three payment options */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            {/* Option 1: Transfer */}
+                            <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
+                                <div className="size-14 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-3xl text-blue-600 dark:text-blue-400">account_balance</span>
+                                </div>
+                                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Transferencia Bancaria</h4>
+                                <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 w-full">
+                                    <p className="font-mono font-bold text-sm bg-blue-100 dark:bg-blue-900/40 px-3 py-1.5 rounded-md">ESXX XXXX XXXX XXXX XXXX</p>
+                                    <p>Concepto: <strong>Torneo + {formData.name || 'Nombre Equipo'}</strong></p>
                                 </div>
                             </div>
+
+                            {/* Option 2: Card (Stripe) */}
+                            <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
+                                <div className="size-14 rounded-full bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-3xl text-purple-600 dark:text-purple-400">credit_card</span>
+                                </div>
+                                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago Seguro con Tarjeta</h4>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Visa, Mastercard, Amex</p>
+                                <a
+                                    href="https://buy.stripe.com/PON_AQUI_TU_LINK"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-auto w-full inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold px-4 py-2.5 rounded-lg transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-base">lock</span>
+                                    Pagar con Tarjeta
+                                </a>
+                            </div>
+
+                            {/* Option 3: PayPal */}
+                            <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
+                                <div className="size-14 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-3xl text-yellow-600 dark:text-yellow-400">account_balance_wallet</span>
+                                </div>
+                                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago rápido</h4>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">PayPal</p>
+                                <a
+                                    href="https://paypal.me/PON_AQUI_TU_USUARIO/50"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-auto w-full inline-flex items-center justify-center gap-2 bg-[#0070ba] hover:bg-[#005ea6] text-white text-sm font-bold px-4 py-2.5 rounded-lg transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-base">send</span>
+                                    Pagar con PayPal
+                                </a>
+                            </div>
                         </div>
+
+                        {/* File upload */}
                         <div>
-                            <label className="block text-xs font-bold uppercase text-blue-700 dark:text-blue-300 mb-2">Adjuntar justificante de pago *</label>
+                            <label className="block text-xs font-bold uppercase text-blue-700 dark:text-blue-300 mb-2">Sube el justificante * (PDF del banco o Captura de pantalla del pago de Tarjeta/PayPal)</label>
                             <div className={`relative border-2 border-dashed rounded-lg p-4 transition-all text-center ${receiptFile
                                 ? 'border-green-400 bg-green-50 dark:bg-green-950/20'
                                 : 'border-blue-300 dark:border-blue-700 hover:border-blue-400'
@@ -239,7 +280,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                 ) : (
                                     <div>
                                         <span className="material-symbols-outlined text-3xl text-blue-400 dark:text-blue-500 mb-1">cloud_upload</span>
-                                        <p className="text-sm text-blue-600 dark:text-blue-400">Sube el comprobante bancario</p>
+                                        <p className="text-sm text-blue-600 dark:text-blue-400">Sube el comprobante de pago</p>
                                         <p className="text-xs text-blue-400 dark:text-blue-500 mt-1">Formatos: imagen o PDF</p>
                                     </div>
                                 )}
