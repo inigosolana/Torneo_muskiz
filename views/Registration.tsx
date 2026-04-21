@@ -13,7 +13,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
         name: '',
         city: '',
         division: 'Senior Masculino' as 'Infantil Femenino' | 'Infantil Masculino' | 'Cadete Femenino' | 'Cadete Masculino' | 'Juvenil Femenino' | 'Juvenil Masculino' | 'Senior Femenino' | 'Senior Masculino',
-        fee: 200,
+        fee: 120,
         managerName: '',
         managerEmail: '',
         password: ''
@@ -33,14 +33,14 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
     };
 
     const plans = [
-        { name: 'Infantil Femenino', price: 100, limit: categoryLimits['Infantil Femenino'], current: counts['Infantil Femenino'], features: ['Arbitraje escolar'] },
-        { name: 'Infantil Masculino', price: 100, limit: categoryLimits['Infantil Masculino'], current: counts['Infantil Masculino'], features: ['Arbitraje escolar'] },
-        { name: 'Cadete Femenino', price: 120, limit: categoryLimits['Cadete Femenino'], current: counts['Cadete Femenino'], features: ['Árbitros federados'] },
-        { name: 'Cadete Masculino', price: 120, limit: categoryLimits['Cadete Masculino'], current: counts['Cadete Masculino'], features: ['Árbitros federados'] },
-        { name: 'Juvenil Femenino', price: 150, limit: categoryLimits['Juvenil Femenino'], current: counts['Juvenil Femenino'], features: ['Medallas'] },
-        { name: 'Juvenil Masculino', price: 150, limit: categoryLimits['Juvenil Masculino'], current: counts['Juvenil Masculino'], features: ['Medallas'] },
-        { name: 'Senior Femenino', price: 200, limit: categoryLimits['Senior Femenino'], current: counts['Senior Femenino'], features: ['Árbitros Pro'] },
-        { name: 'Senior Masculino', price: 200, limit: categoryLimits['Senior Masculino'], current: counts['Senior Masculino'], features: ['Árbitros Pro'] },
+        { name: 'Infantil Femenino', price: 70, limit: categoryLimits['Infantil Femenino'], current: counts['Infantil Femenino'], features: ['Arbitraje escolar'] },
+        { name: 'Infantil Masculino', price: 70, limit: categoryLimits['Infantil Masculino'], current: counts['Infantil Masculino'], features: ['Arbitraje escolar'] },
+        { name: 'Cadete Femenino', price: 90, limit: categoryLimits['Cadete Femenino'], current: counts['Cadete Femenino'], features: ['Árbitros federados'] },
+        { name: 'Cadete Masculino', price: 90, limit: categoryLimits['Cadete Masculino'], current: counts['Cadete Masculino'], features: ['Árbitros federados'] },
+        { name: 'Juvenil Femenino', price: 100, limit: categoryLimits['Juvenil Femenino'], current: counts['Juvenil Femenino'], features: ['Medallas'] },
+        { name: 'Juvenil Masculino', price: 100, limit: categoryLimits['Juvenil Masculino'], current: counts['Juvenil Masculino'], features: ['Medallas'] },
+        { name: 'Senior Femenino', price: 120, limit: categoryLimits['Senior Femenino'], current: counts['Senior Femenino'], features: ['Árbitros Pro'] },
+        { name: 'Senior Masculino', price: 120, limit: categoryLimits['Senior Masculino'], current: counts['Senior Masculino'], features: ['Árbitros Pro'] },
     ];
 
     const handleRegister = () => {
