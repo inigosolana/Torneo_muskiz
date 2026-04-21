@@ -23,12 +23,17 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content }) => {
     <div className="animate-in fade-in duration-500">
       {/* Hero Section */}
       <section className="relative min-h-[85vh] flex flex-col justify-end pb-12 overflow-hidden bg-background-dark">
-        {/* Background Image */}
+        {/* Background Video */}
         <div className="absolute inset-0 z-0">
-          <div
-            className="absolute inset-0 bg-cover bg-center opacity-60"
-            style={{ backgroundImage: 'url("https://picsum.photos/1600/900?grayscale&blur=2")' }}
-          ></div>
+          <video
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover opacity-60"
+          >
+            <source src="/promo.mp4" type="video/mp4" />
+          </video>
           {/* Gradients */}
           <div className="absolute inset-0 bg-gradient-to-t from-background-dark via-background-dark/60 to-transparent"></div>
           <div className="absolute inset-0 bg-gradient-to-r from-background-dark/90 via-background-dark/40 to-transparent"></div>
@@ -37,7 +42,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content }) => {
         <div className="relative z-10 w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-20">
           <div className="grid lg:grid-cols-12 gap-8 items-end">
             {/* Hero Text */}
-            <div className="lg:col-span-7 flex flex-col gap-6 mb-8 lg:mb-0">
+            <div className="lg:col-span-12 xl:col-span-7 flex flex-col gap-6 mb-8 lg:mb-0">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 backdrop-blur-sm border border-primary/30 w-fit">
                 <span className="animate-pulse size-2 rounded-full bg-primary"></span>
                 <span className="text-primary text-xs font-bold uppercase tracking-wider">Torneo en Vivo</span>
@@ -45,18 +50,13 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content }) => {
               <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black text-white leading-[0.9] tracking-tighter uppercase drop-shadow-lg">
                 {content.heroTitle}
               </h1>
-              <p className="text-lg sm:text-xl text-slate-300 max-w-xl font-light border-l-4 border-primary pl-4">
-                {content.heroSubtitle}
-              </p>
-              <div className="flex flex-col gap-4 mt-4">
-                <button
-                  onClick={() => onNavigate(View.SCHEDULE)}
-                  className="flex items-center justify-center gap-2 bg-white text-slate-900 hover:bg-slate-100 px-8 py-3 rounded-lg font-bold text-base transition-colors w-fit min-w-[160px]"
-                >
-                  Ver Calendario
-                </button>
+              <div className="flex flex-col lg:flex-row gap-8 items-start lg:items-center">
+                <p className="text-lg sm:text-xl text-slate-300 max-w-xl font-light border-l-4 border-primary pl-4">
+                  {content.heroSubtitle}
+                </p>
+
                 {/* Streaming embedded */}
-                <div className="w-full mt-2 aspect-video max-w-2xl rounded-xl overflow-hidden shadow-2xl border border-white/20">
+                <div className="w-full lg:w-[400px] aspect-video rounded-xl overflow-hidden shadow-2xl border border-white/20 group relative">
                   <iframe
                     className="w-full h-full"
                     src="https://www.youtube.com/embed/live_stream?channel=UC4R8DWoMoI7CAwX8_LjQHig"
@@ -66,11 +66,28 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content }) => {
                   ></iframe>
                 </div>
               </div>
+
+              <div className="flex flex-wrap gap-4 mt-4">
+                <button
+                  onClick={() => onNavigate(View.SCHEDULE)}
+                  className="flex items-center justify-center gap-2 bg-white text-slate-900 hover:bg-slate-100 px-8 py-3 rounded-lg font-bold text-base transition-colors min-w-[160px]"
+                >
+                  Ver Calendario
+                </button>
+                <button
+                  onClick={() => onNavigate(View.REGISTRATION)}
+                  className="flex items-center justify-center gap-2 bg-primary text-background-dark hover:bg-primary/90 px-8 py-3 rounded-lg font-bold text-base transition-colors min-w-[160px]"
+                >
+                  Inscribir Equipo
+                </button>
+              </div>
             </div>
 
             {/* Live Dashboard Widget */}
-            <div className="lg:col-span-5 w-full">
+            <div className="xl:col-span-5 w-full">
+              {/* Simplified or existing widget */}
               <div className="bg-surface-dark/40 backdrop-blur-xl border border-white/10 rounded-2xl p-1 shadow-2xl">
+                {/* ... (keeping original widget content shortened for brevity in thought, but full in implementation) */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                   <h3 className="text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary text-lg">analytics</span>
@@ -79,7 +96,6 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content }) => {
                   <span className="text-xs text-slate-400 font-mono">ACTUALIZADO: AHORA</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 p-1">
-                  {/* Live Match */}
                   <div className="col-span-1 sm:col-span-2 bg-surface-dark/60 rounded-xl p-4 border border-white/5 hover:border-primary/50 transition-colors group cursor-pointer" onClick={() => onNavigate(View.ADMIN)}>
                     <div className="flex justify-between items-start mb-2">
                       <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
@@ -100,20 +116,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content }) => {
                       </div>
                     </div>
                   </div>
-                  {/* Weather */}
                   <div className="bg-surface-dark/60 rounded-xl p-4 border border-white/5 flex flex-col justify-between">
                     <div className="flex items-center gap-2 mb-2 text-primary">
                       <span className="material-symbols-outlined text-lg">wb_sunny</span>
                       <span className="text-xs font-bold uppercase">Playa</span>
                     </div>
-                    <div className="flex items-end justify-between">
-                      <div>
-                        <p className="text-3xl font-bold text-white">24°C</p>
-                        <p className="text-slate-400 text-xs">Despejado</p>
-                      </div>
+                    <div>
+                      <p className="text-3xl font-bold text-white">24°C</p>
+                      <p className="text-slate-400 text-xs">Despejado</p>
                     </div>
                   </div>
-                  {/* Next */}
                   <div className="bg-surface-dark/60 rounded-xl p-4 border border-white/5 flex flex-col justify-between">
                     <div className="flex items-center gap-2 mb-2 text-secondary">
                       <span className="material-symbols-outlined text-lg">schedule</span>
@@ -177,7 +189,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content }) => {
           <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-10">Últimos Resúmenes</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-            {/* Highlight Video (Veo placeholder) */}
+            {/* Highlight Video */}
             <div
               className="md:col-span-2 relative h-[400px] rounded-2xl overflow-hidden group cursor-pointer"
               onClick={() => onNavigate(View.MEDIA)}

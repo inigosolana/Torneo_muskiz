@@ -115,7 +115,8 @@ export interface Team {
   division: 'Infantil Femenino' | 'Infantil Masculino' | 'Cadete Femenino' | 'Cadete Masculino' | 'Juvenil Femenino' | 'Juvenil Masculino' | 'Senior Femenino' | 'Senior Masculino';
   logoUrl?: string; // Team Logo
   paymentStatus: 'PAID' | 'PENDING';
-  paymentMethod?: 'CARD' | 'PAYPAL' | 'TRANSFER' | 'CASH';
+  paymentMethod?: 'CARD' | 'PAYPAL' | 'TRANSFER' | 'CASH' | 'MANUAL';
+  receiptUrl?: string;
   players: Player[];
   fee: number;
   managerName: string;

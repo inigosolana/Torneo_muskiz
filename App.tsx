@@ -179,8 +179,8 @@ const App: React.FC = () => {
   }, [teams, matches.length, categoryLimits]);
 
   // Functions to modify state
-  const addTeam = async (team: Team) => {
-    const savedTeam = await teamService.registerTeam(team);
+  const addTeam = async (team: Team, receiptFile?: File) => {
+    const savedTeam = await teamService.registerTeam(team, receiptFile);
     if (savedTeam) {
       setTeams([...teams, savedTeam]);
       setCurrentView(View.TEAM);

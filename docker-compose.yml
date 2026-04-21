@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  torneo-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    ports:
+      - "8080:80"
+    restart: unless-stopped

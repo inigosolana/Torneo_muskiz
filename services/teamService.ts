@@ -25,6 +25,9 @@ export const teamService = {
             paymentMethod: t.payment_method,
             fee: t.fee,
             logoUrl: t.logo_url,
+            receiptUrl: t.receipt_url,
+            managerName: t.manager_name,
+            managerEmail: t.manager_email,
             players: t.players.map((p: any) => ({
                 id: p.id,
                 name: p.name,
@@ -41,15 +44,41 @@ export const teamService = {
         }));
     },
 
-    async registerTeam(team: Partial<Team>): Promise<Team | null> {
+    async registerTeam(team: Partial<Team>, receiptFile?: File | null): Promise<Team | null> {
+        // Upload receipt file to Storage if provided
+        let receiptUrl: string | undefined;
+        if (receiptFile) {
+            const fileExt = receiptFile.name.split('.').pop();
+            const fileName = `${Date.now()}.${fileExt}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('receipts')
+                .upload(fileName, receiptFile);
+
+            if (uploadError) {
+                console.error('Error uploading receipt:', uploadError);
+                return null;
+            }
+
+            const { data: urlData } = supabase.storage
+                .from('receipts')
+                .getPublicUrl(fileName);
+
+            receiptUrl = urlData.publicUrl;
+        }
+
         const { data, error } = await supabase
             .from('teams')
             .insert([{
                 name: team.name,
                 city: team.city,
                 division: team.division,
-                payment_status: team.paymentStatus || 'PENDING',
-                fee: team.fee
+                payment_status: 'PENDING',
+                fee: team.fee,
+                receipt_url: receiptUrl || null,
+                manager_name: team.managerName,
+                manager_email: team.managerEmail,
+                password: team.password
             }])
             .select()
             .single();

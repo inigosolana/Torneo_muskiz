@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Team, CategoryLimits } from '../types';
 
 interface RegistrationProps {
-    onRegister: (team: Team) => void;
+    onRegister: (team: Team, receiptFile: File) => void;
     teams: Team[];
     categoryLimits: CategoryLimits;
 }
@@ -18,6 +18,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
         managerEmail: '',
         password: ''
     });
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
     // Calculate current counts
     const counts = {
@@ -48,6 +49,11 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             return;
         }
 
+        if (!receiptFile) {
+            alert("Por favor adjunta el justificante de pago en el Paso 4");
+            return;
+        }
+
         const newTeam: Team = {
             id: `team-${Date.now()}`,
             name: formData.name,
@@ -61,7 +67,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             password: formData.password
         };
 
-        onRegister(newTeam);
+        onRegister(newTeam, receiptFile);
     };
 
     return (
@@ -85,7 +91,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                             <div className={`size-8 rounded-full flex items-center justify-center font-bold ${step >= 1 ? 'bg-primary text-background-dark' : 'bg-slate-100 text-slate-500'}`}>1</div>
                             <h3 className="font-bold text-lg text-slate-900 dark:text-white">Selecciona División</h3>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {plans.map((plan) => {
                                 const isFull = plan.current >= plan.limit;
                                 return (
@@ -93,10 +99,10 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                         key={plan.name}
                                         onClick={() => !isFull && setFormData({ ...formData, division: plan.name as any, fee: plan.price })}
                                         className={`relative border rounded-lg p-4 transition-all ${isFull
-                                                ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-white/5 border-slate-200'
-                                                : formData.division === plan.name
-                                                    ? 'border-primary bg-primary/5 ring-1 ring-primary cursor-pointer'
-                                                    : 'border-slate-200 dark:border-white/10 hover:border-primary/50 cursor-pointer'
+                                            ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-white/5 border-slate-200'
+                                            : formData.division === plan.name
+                                                ? 'border-primary bg-primary/5 ring-1 ring-primary cursor-pointer'
+                                                : 'border-slate-200 dark:border-white/10 hover:border-primary/50 cursor-pointer'
                                             }`}
                                     >
                                         {isFull && (
@@ -195,12 +201,64 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                         </div>
                     </div>
 
+                    {/* Step 4: Payment Instructions & Receipt Upload */}
+                    <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-6 rounded-xl shadow-sm">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className={`size-8 rounded-full flex items-center justify-center font-bold ${receiptFile ? 'bg-primary text-background-dark' : 'bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300'}`}>4</div>
+                            <h3 className="font-bold text-lg text-blue-900 dark:text-blue-100">Pago por Transferencia</h3>
+                        </div>
+                        <div className="bg-blue-100/50 dark:bg-blue-900/30 rounded-lg p-4 mb-4">
+                            <div className="flex items-start gap-3">
+                                <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 mt-0.5">account_balance</span>
+                                <div className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                                    <p className="font-semibold">Instrucciones de pago:</p>
+                                    <p>Para confirmar la inscripción debes realizar una transferencia al siguiente IBAN:</p>
+                                    <p className="font-mono font-bold text-base bg-blue-200/50 dark:bg-blue-800/50 px-3 py-1.5 rounded-md inline-block mt-1">ESXX XXXX XXXX XXXX XXXX</p>
+                                    <p className="mt-2 text-xs">Importe: <strong>{formData.fee}€</strong> (según categoría)</p>
+                                    <p className="text-xs font-medium">Concepto: <strong>Torneo + {formData.name || 'Nombre Equipo'}</strong></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-blue-700 dark:text-blue-300 mb-2">Adjuntar justificante de pago *</label>
+                            <div className={`relative border-2 border-dashed rounded-lg p-4 transition-all text-center ${receiptFile
+                                ? 'border-green-400 bg-green-50 dark:bg-green-950/20'
+                                : 'border-blue-300 dark:border-blue-700 hover:border-blue-400'
+                                }`}>
+                                {receiptFile ? (
+                                    <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
+                                        <span className="material-symbols-outlined">check_circle</span>
+                                        <span className="text-sm font-medium">{receiptFile.name}</span>
+                                        <button
+                                            onClick={() => setReceiptFile(null)}
+                                            className="ml-2 text-xs text-red-500 hover:text-red-700 underline"
+                                        >
+                                            Eliminar
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <span className="material-symbols-outlined text-3xl text-blue-400 dark:text-blue-500 mb-1">cloud_upload</span>
+                                        <p className="text-sm text-blue-600 dark:text-blue-400">Sube el comprobante bancario</p>
+                                        <p className="text-xs text-blue-400 dark:text-blue-500 mt-1">Formatos: imagen o PDF</p>
+                                    </div>
+                                )}
+                                <input
+                                    type="file"
+                                    accept="image/*,.pdf"
+                                    onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     <button
                         onClick={handleRegister}
                         className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-4 rounded-xl shadow-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                     >
-                        <span>Registrar y Continuar al Pago</span>
-                        <span className="material-symbols-outlined">payments</span>
+                        <span>Completar Inscripción</span>
+                        <span className="material-symbols-outlined">how_to_reg</span>
                     </button>
                 </div>
             </div>
