@@ -77,7 +77,18 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
         }, 2000);
     };
 
+    // Player limits
+    const isSenior = selectedTeam.division.startsWith('Senior');
+    const maxPlayers = isSenior ? 12 : 14;
+    const minPlayers = 6;
+    const currentPlayerCount = selectedTeam.players.length;
+    const canAddPlayer = currentPlayerCount < maxPlayers;
+
     const handleAddPlayer = (newPlayer: Player) => {
+        if (!canAddPlayer) {
+            toast.error(`Límite alcanzado: máximo ${maxPlayers} jugadores para ${selectedTeam.division}.`);
+            return;
+        }
         onUpdateTeam({
             ...selectedTeam,
             players: [...selectedTeam.players, newPlayer]
@@ -210,10 +221,10 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                 setTimeout(() => {
                     const updatedPlayers = selectedTeam.players.map(p => {
                         if (p.id === playerId) {
-                            return { 
-                                ...p, 
+                            return {
+                                ...p,
                                 [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'APPROVED' as const,
-                                [type === 'dni' ? 'dniUrl' : 'insuranceUrl']: 'https://fake-supabase-storage.com/uploaded-file.jpg' 
+                                [type === 'dni' ? 'dniUrl' : 'insuranceUrl']: 'https://fake-supabase-storage.com/uploaded-file.jpg'
                             };
                         }
                         return p;
@@ -379,9 +390,25 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                         ) : (
                             <>
                                 <div className="flex flex-wrap justify-between items-center">
-                                    <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                                        <span className="material-symbols-outlined">groups</span> Plantilla
-                                    </h3>
+                                    <div>
+                                        <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                                            <span className="material-symbols-outlined">groups</span> Plantilla
+                                        </h3>
+                                        <div className="flex items-center gap-3 mt-2">
+                                            <div className="h-2 w-32 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                <div className={`h-full rounded-full transition-all duration-500 ${currentPlayerCount >= minPlayers ? 'bg-green-500' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, (currentPlayerCount / maxPlayers) * 100)}%` }}></div>
+                                            </div>
+                                            <span className={`text-xs font-bold ${currentPlayerCount >= minPlayers ? 'text-green-500' : 'text-amber-500'}`}>
+                                                {currentPlayerCount}/{maxPlayers} jugadores
+                                            </span>
+                                            {currentPlayerCount < minPlayers && (
+                                                <span className="text-[10px] text-amber-500 flex items-center gap-1">
+                                                    <span className="material-symbols-outlined text-xs">warning</span>
+                                                    Mín. {minPlayers}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => {
@@ -444,38 +471,46 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                                 </div>
 
                                 {/* Add Player Actions Grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                    {/* AI Scan Option */}
-                                    <div className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center transition-colors cursor-pointer relative ${isAnalyzing ? 'border-primary bg-primary/5' : 'border-slate-300 dark:border-slate-700 hover:border-primary hover:bg-slate-50 dark:hover:bg-white/5'}`}>
-                                        <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept="image/*" onChange={handleFileUpload} />
-                                        {isAnalyzing ? (
-                                            <div className="flex flex-col items-center">
-                                                <span className="material-symbols-outlined text-3xl text-primary animate-spin">autorenew</span>
-                                                <p className="mt-2 text-sm font-bold text-primary">Analizando ID...</p>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-2">
-                                                    <span className="material-symbols-outlined text-xl">document_scanner</span>
+                                {canAddPlayer ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                        {/* AI Scan Option */}
+                                        <div className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center transition-colors cursor-pointer relative ${isAnalyzing ? 'border-primary bg-primary/5' : 'border-slate-300 dark:border-slate-700 hover:border-primary hover:bg-slate-50 dark:hover:bg-white/5'}`}>
+                                            <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept="image/*" onChange={handleFileUpload} />
+                                            {isAnalyzing ? (
+                                                <div className="flex flex-col items-center">
+                                                    <span className="material-symbols-outlined text-3xl text-primary animate-spin">autorenew</span>
+                                                    <p className="mt-2 text-sm font-bold text-primary">Analizando ID...</p>
                                                 </div>
-                                                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Escaneo IA</h4>
-                                                <p className="text-[10px] text-slate-500 max-w-[150px]">Sube foto del DNI para autocompletar.</p>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* Manual Entry Option */}
-                                    <button
-                                        onClick={() => setShowManualModal(true)}
-                                        className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center text-center transition-colors hover:border-primary hover:bg-slate-50 dark:hover:bg-white/5"
-                                    >
-                                        <div className="size-10 rounded-full bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 flex items-center justify-center mb-2">
-                                            <span className="material-symbols-outlined text-xl">edit_note</span>
+                                            ) : (
+                                                <>
+                                                    <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-2">
+                                                        <span className="material-symbols-outlined text-xl">document_scanner</span>
+                                                    </div>
+                                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Escaneo IA</h4>
+                                                    <p className="text-[10px] text-slate-500 max-w-[150px]">Sube foto del DNI para autocompletar.</p>
+                                                </>
+                                            )}
                                         </div>
-                                        <h4 className="font-bold text-sm text-slate-900 dark:text-white">Entrada Manual</h4>
-                                        <p className="text-[10px] text-slate-500 max-w-[150px]">Escribe los datos jugador por jugador.</p>
-                                    </button>
-                                </div>
+
+                                        {/* Manual Entry Option */}
+                                        <button
+                                            onClick={() => setShowManualModal(true)}
+                                            className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center text-center transition-colors hover:border-primary hover:bg-slate-50 dark:hover:bg-white/5"
+                                        >
+                                            <div className="size-10 rounded-full bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 flex items-center justify-center mb-2">
+                                                <span className="material-symbols-outlined text-xl">edit_note</span>
+                                            </div>
+                                            <h4 className="font-bold text-sm text-slate-900 dark:text-white">Entrada Manual</h4>
+                                            <p className="text-[10px] text-slate-500 max-w-[150px]">Escribe los datos jugador por jugador.</p>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="mt-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-6 text-center">
+                                        <span className="material-symbols-outlined text-3xl text-amber-500 mb-2">group_off</span>
+                                        <p className="text-amber-800 dark:text-amber-200 font-bold text-sm">Plantilla Completa</p>
+                                        <p className="text-xs text-amber-600 dark:text-amber-300">Has alcanzado el máximo de {maxPlayers} jugadores para la categoría {selectedTeam.division}.</p>
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>

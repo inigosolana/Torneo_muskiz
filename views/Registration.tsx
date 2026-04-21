@@ -1,306 +1,475 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Team, CategoryLimits } from '../types';
 
+interface TeamEntry {
+    id: string;
+    name: string;
+    city: string;
+    division: 'Infantil Femenino' | 'Infantil Masculino' | 'Cadete Femenino' | 'Cadete Masculino' | 'Juvenil Femenino' | 'Juvenil Masculino' | 'Senior Femenino' | 'Senior Masculino';
+    fee: number;
+}
+
 interface RegistrationProps {
-    onRegister: (team: Team, receiptFile: File) => void;
+    onRegister: (teams: Team[], receiptFile: File) => void;
     teams: Team[];
     categoryLimits: CategoryLimits;
 }
 
+const PRICES: Record<string, number> = {
+    'Infantil Femenino': 70, 'Infantil Masculino': 70,
+    'Cadete Femenino': 90, 'Cadete Masculino': 90,
+    'Juvenil Femenino': 100, 'Juvenil Masculino': 100,
+    'Senior Femenino': 120, 'Senior Masculino': 120,
+};
+
+const RESERVATION_MINUTES = 15;
+
 export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, categoryLimits }) => {
-    const [step, setStep] = useState(1);
-    const [formData, setFormData] = useState({
-        name: '',
-        city: '',
-        division: 'Senior Masculino' as 'Infantil Femenino' | 'Infantil Masculino' | 'Cadete Femenino' | 'Cadete Masculino' | 'Juvenil Femenino' | 'Juvenil Masculino' | 'Senior Femenino' | 'Senior Masculino',
-        fee: 120,
-        managerName: '',
-        managerEmail: '',
-        password: ''
-    });
+    // Manager info
+    const [managerName, setManagerName] = useState('');
+    const [managerEmail, setManagerEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    // Cart of teams to register
+    const [cart, setCart] = useState<TeamEntry[]>([]);
+
+    // Form for adding a team to cart
+    const [newTeamName, setNewTeamName] = useState('');
+    const [newTeamCity, setNewTeamCity] = useState('');
+    const [selectedDivision, setSelectedDivision] = useState<string>('Senior Masculino');
+
+    // Receipt
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
-    // Calculate current counts
-    const counts = {
-        'Infantil Femenino': teams.filter(t => t.division === 'Infantil Femenino').length,
-        'Infantil Masculino': teams.filter(t => t.division === 'Infantil Masculino').length,
-        'Cadete Femenino': teams.filter(t => t.division === 'Cadete Femenino').length,
-        'Cadete Masculino': teams.filter(t => t.division === 'Cadete Masculino').length,
-        'Juvenil Femenino': teams.filter(t => t.division === 'Juvenil Femenino').length,
-        'Juvenil Masculino': teams.filter(t => t.division === 'Juvenil Masculino').length,
-        'Senior Femenino': teams.filter(t => t.division === 'Senior Femenino').length,
-        'Senior Masculino': teams.filter(t => t.division === 'Senior Masculino').length,
-    };
+    // Reservation timer
+    const [reservationStart, setReservationStart] = useState<number | null>(null);
+    const [timeLeft, setTimeLeft] = useState<number>(RESERVATION_MINUTES * 60);
+    const [expired, setExpired] = useState(false);
+
+    // Completion state
+    const [isCompleted, setIsCompleted] = useState(false);
+    const [generatedCredentials, setGeneratedCredentials] = useState<{ email: string; password: string } | null>(null);
+
+    // Timer effect
+    useEffect(() => {
+        if (!reservationStart) return;
+        const interval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - reservationStart) / 1000);
+            const remaining = RESERVATION_MINUTES * 60 - elapsed;
+            if (remaining <= 0) {
+                setExpired(true);
+                setCart([]);
+                setReservationStart(null);
+                setTimeLeft(0);
+                clearInterval(interval);
+            } else {
+                setTimeLeft(remaining);
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [reservationStart]);
+
+    // Calculate occupied spots (registered teams + cart reservations)
+    const getCounts = useCallback(() => {
+        const counts: Record<string, number> = {};
+        Object.keys(categoryLimits).forEach(k => {
+            counts[k] = teams.filter(t => t.division === k).length + cart.filter(t => t.division === k).length;
+        });
+        return counts;
+    }, [teams, cart, categoryLimits]);
+
+    const counts = getCounts();
 
     const plans = [
-        { name: 'Infantil Femenino', price: 70, limit: categoryLimits['Infantil Femenino'], current: counts['Infantil Femenino'], features: ['Arbitraje escolar'] },
-        { name: 'Infantil Masculino', price: 70, limit: categoryLimits['Infantil Masculino'], current: counts['Infantil Masculino'], features: ['Arbitraje escolar'] },
-        { name: 'Cadete Femenino', price: 90, limit: categoryLimits['Cadete Femenino'], current: counts['Cadete Femenino'], features: ['Árbitros federados'] },
-        { name: 'Cadete Masculino', price: 90, limit: categoryLimits['Cadete Masculino'], current: counts['Cadete Masculino'], features: ['Árbitros federados'] },
-        { name: 'Juvenil Femenino', price: 100, limit: categoryLimits['Juvenil Femenino'], current: counts['Juvenil Femenino'], features: ['Medallas'] },
-        { name: 'Juvenil Masculino', price: 100, limit: categoryLimits['Juvenil Masculino'], current: counts['Juvenil Masculino'], features: ['Medallas'] },
-        { name: 'Senior Femenino', price: 120, limit: categoryLimits['Senior Femenino'], current: counts['Senior Femenino'], features: ['Árbitros Pro'] },
-        { name: 'Senior Masculino', price: 120, limit: categoryLimits['Senior Masculino'], current: counts['Senior Masculino'], features: ['Árbitros Pro'] },
+        { name: 'Infantil Femenino', features: ['Arbitraje escolar'] },
+        { name: 'Infantil Masculino', features: ['Arbitraje escolar'] },
+        { name: 'Cadete Femenino', features: ['Árbitros federados'] },
+        { name: 'Cadete Masculino', features: ['Árbitros federados'] },
+        { name: 'Juvenil Femenino', features: ['Medallas'] },
+        { name: 'Juvenil Masculino', features: ['Medallas'] },
+        { name: 'Senior Femenino', features: ['Árbitros Pro'] },
+        { name: 'Senior Masculino', features: ['Árbitros Pro'] },
     ];
 
-    const handleRegister = () => {
-        if (!formData.name || !formData.city || !formData.managerName || !formData.managerEmail || !formData.password) {
-            alert("Por favor completa todos los campos, incluyendo los datos del responsable");
-            return;
-        }
+    const totalFee = cart.reduce((sum, t) => sum + t.fee, 0);
 
-        if (!receiptFile) {
-            alert("Por favor adjunta el justificante de pago en el Paso 4");
-            return;
-        }
-
-        const newTeam: Team = {
-            id: `team-${Date.now()}`,
-            name: formData.name,
-            city: formData.city,
-            division: formData.division,
-            paymentStatus: 'PENDING',
-            fee: formData.fee,
-            players: [],
-            managerName: formData.managerName,
-            managerEmail: formData.managerEmail,
-            password: formData.password
-        };
-
-        onRegister(newTeam, receiptFile);
+    const formatTime = (secs: number) => {
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
+
+    const handleAddToCart = () => {
+        if (!newTeamName.trim() || !newTeamCity.trim()) {
+            alert('Introduce el nombre y la ciudad del equipo.');
+            return;
+        }
+        const limit = categoryLimits[selectedDivision as keyof CategoryLimits];
+        if (counts[selectedDivision] >= limit) {
+            alert('Esta categoría ya está llena.');
+            return;
+        }
+
+        const entry: TeamEntry = {
+            id: `cart-${Date.now()}`,
+            name: newTeamName.trim(),
+            city: newTeamCity.trim(),
+            division: selectedDivision as any,
+            fee: PRICES[selectedDivision],
+        };
+        setCart([...cart, entry]);
+        setNewTeamName('');
+        setNewTeamCity('');
+
+        // Start reservation timer on first team added
+        if (!reservationStart) {
+            setReservationStart(Date.now());
+        }
+    };
+
+    const removeFromCart = (id: string) => {
+        setCart(cart.filter(t => t.id !== id));
+    };
+
+    const handleComplete = () => {
+        if (!managerName || !managerEmail || !password) {
+            alert('Por favor, completa los datos del responsable.');
+            return;
+        }
+        if (cart.length === 0) {
+            alert('Añade al menos un equipo al carrito.');
+            return;
+        }
+        if (!receiptFile) {
+            alert('Adjunta el justificante de pago.');
+            return;
+        }
+
+        const newTeams: Team[] = cart.map(entry => ({
+            id: `team-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            name: entry.name,
+            city: entry.city,
+            division: entry.division,
+            paymentStatus: 'PENDING' as const,
+            fee: entry.fee,
+            players: [],
+            managerName: managerName,
+            managerEmail: managerEmail,
+            password: password,
+        }));
+
+        onRegister(newTeams, receiptFile);
+        setIsCompleted(true);
+        setGeneratedCredentials({ email: managerEmail, password: password });
+    };
+
+    // --- Completed state ---
+    if (isCompleted && generatedCredentials) {
+        return (
+            <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 flex justify-center animate-in fade-in">
+                <div className="w-full max-w-lg">
+                    <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-2xl p-8 text-center border border-slate-200 dark:border-white/5">
+                        <div className="size-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-6">
+                            <span className="material-symbols-outlined text-5xl text-green-600">check_circle</span>
+                        </div>
+                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">¡Inscripción Recibida!</h2>
+                        <p className="text-slate-500 text-sm mb-8">
+                            Tu inscripción ha sido enviada correctamente. Una vez validado el pago, podrás gestionar tus equipos y añadir jugadores.
+                        </p>
+
+                        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-6 text-left space-y-3 mb-6">
+                            <h3 className="font-bold text-blue-900 dark:text-blue-100 text-sm uppercase flex items-center gap-2">
+                                <span className="material-symbols-outlined text-base">key</span>
+                                Tus Credenciales de Responsable
+                            </h3>
+                            <div className="space-y-2">
+                                <div>
+                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase">Email (usuario):</span>
+                                    <p className="font-mono text-sm text-blue-800 dark:text-blue-200 bg-blue-100 dark:bg-blue-900/40 px-3 py-1.5 rounded-md mt-1">{generatedCredentials.email}</p>
+                                </div>
+                                <div>
+                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase">Contraseña:</span>
+                                    <p className="font-mono text-sm text-blue-800 dark:text-blue-200 bg-blue-100 dark:bg-blue-900/40 px-3 py-1.5 rounded-md mt-1">{generatedCredentials.password}</p>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-blue-500 mt-2">
+                                ⚠️ Guarda estas credenciales. Las necesitarás para acceder al panel de gestión y añadir jugadores a tus equipos.
+                            </p>
+                        </div>
+
+                        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-left mb-6">
+                            <div className="flex items-start gap-2">
+                                <span className="material-symbols-outlined text-amber-600 text-base mt-0.5">info</span>
+                                <div className="text-xs text-amber-800 dark:text-amber-200">
+                                    <p className="font-bold mb-1">Próximos pasos:</p>
+                                    <ol className="list-decimal list-inside space-y-1">
+                                        <li>Esperamos la validación de tu pago (máx. 24h)</li>
+                                        <li>Accede al <strong>Panel de Gestión</strong> con tus credenciales</li>
+                                        <li>Inscribe a los jugadores de cada equipo (mín. 6 — máx. 12 en Senior, 14 en el resto)</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p className="text-xs text-slate-400 mb-4">Equipos registrados: <strong>{cart.length}</strong> — Total: <strong>{totalFee}€</strong></p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // --- Expired state ---
+    if (expired) {
+        return (
+            <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 flex justify-center animate-in fade-in">
+                <div className="w-full max-w-lg">
+                    <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-2xl p-8 text-center border border-red-200 dark:border-red-800">
+                        <div className="size-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-6">
+                            <span className="material-symbols-outlined text-5xl text-red-500">timer_off</span>
+                        </div>
+                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Tiempo Agotado</h2>
+                        <p className="text-slate-500 text-sm mb-6">
+                            Han pasado los 15 minutos de reserva. Las plazas se han liberado. Por favor, inténtalo de nuevo.
+                        </p>
+                        <button
+                            onClick={() => { setExpired(false); setTimeLeft(RESERVATION_MINUTES * 60); }}
+                            className="bg-primary text-background-dark px-8 py-3 rounded-xl font-bold hover:opacity-90 transition-opacity"
+                        >
+                            Reintentar Inscripción
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 flex justify-center animate-in fade-in">
-            <div className="w-full max-w-2xl">
+            <div className="w-full max-w-3xl">
+                {/* Header */}
                 <div className="bg-gradient-to-r from-background-dark to-slate-900 rounded-2xl p-8 mb-6 text-white relative overflow-hidden">
                     <div className="relative z-10">
                         <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-primary mb-4">
                             <span className="material-symbols-outlined text-sm">info</span> Inscripción 2026
                         </div>
-                        <h2 className="text-2xl font-bold mb-2">Registra tu Equipo</h2>
-                        <p className="text-slate-300 text-sm">Completa los datos. Si una categoría está llena, aparecerá bloqueada.</p>
+                        <h2 className="text-2xl font-bold mb-2">Registra tus Equipos</h2>
+                        <p className="text-slate-300 text-sm">Un responsable puede inscribir múltiples equipos en distintas categorías. Añade equipos al carrito, paga todo junto, y recibirás tus credenciales de acceso.</p>
                     </div>
                     <span className="material-symbols-outlined absolute -bottom-8 -right-8 text-[180px] text-white/5 rotate-12">sports_handball</span>
+
+                    {/* Timer badge */}
+                    {reservationStart && (
+                        <div className={`absolute top-4 right-4 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur-md ${timeLeft <= 120 ? 'bg-red-500/80 text-white animate-pulse' : 'bg-white/10 text-white/90'}`}>
+                            <span className="material-symbols-outlined text-sm">timer</span>
+                            Reserva: {formatTime(timeLeft)}
+                        </div>
+                    )}
                 </div>
 
                 <div className="space-y-6">
-                    {/* Step 1: Division */}
+                    {/* Step 1: Manager Credentials */}
                     <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className={`size-8 rounded-full flex items-center justify-center font-bold ${step >= 1 ? 'bg-primary text-background-dark' : 'bg-slate-100 text-slate-500'}`}>1</div>
-                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Selecciona División</h3>
+                            <div className={`size-8 rounded-full flex items-center justify-center font-bold ${managerEmail ? 'bg-primary text-background-dark' : 'bg-slate-100 text-slate-500'}`}>1</div>
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Datos del Responsable</h3>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {plans.map((plan) => {
-                                const isFull = plan.current >= plan.limit;
-                                return (
-                                    <div
-                                        key={plan.name}
-                                        onClick={() => !isFull && setFormData({ ...formData, division: plan.name as any, fee: plan.price })}
-                                        className={`relative border rounded-lg p-4 transition-all ${isFull
-                                            ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-white/5 border-slate-200'
-                                            : formData.division === plan.name
-                                                ? 'border-primary bg-primary/5 ring-1 ring-primary cursor-pointer'
-                                                : 'border-slate-200 dark:border-white/10 hover:border-primary/50 cursor-pointer'
-                                            }`}
-                                    >
-                                        {isFull && (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 backdrop-blur-[1px] rounded-lg">
-                                                <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase -rotate-12 shadow-lg">Agotado</span>
-                                            </div>
-                                        )}
-                                        <h4 className="font-bold text-slate-900 dark:text-white flex justify-between">
-                                            {plan.name}
-                                            <span className="text-[10px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300">{plan.current}/{plan.limit}</span>
-                                        </h4>
-                                        <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">${plan.price}</p>
-                                        <ul className="space-y-1 mt-2">
-                                            {plan.features.map(f => (
-                                                <li key={f} className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                                                    <span className="material-symbols-outlined text-primary text-xs">check</span> {f}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Step 2: Details */}
-                    <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className={`size-8 rounded-full flex items-center justify-center font-bold ${formData.name ? 'bg-primary text-background-dark' : 'bg-slate-100 text-slate-500'}`}>2</div>
-                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Datos del Equipo</h3>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre del Equipo</label>
-                                <input
-                                    type="text"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                                    placeholder="ej. Los Guerreros de Arena"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Ciudad de Origen</label>
-                                <input
-                                    type="text"
-                                    value={formData.city}
-                                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                                    className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                                    placeholder="ej. Muskiz"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Step 3: Manager Credentials */}
-                    <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className={`size-8 rounded-full flex items-center justify-center font-bold ${formData.managerEmail ? 'bg-primary text-background-dark' : 'bg-slate-100 text-slate-500'}`}>3</div>
-                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Responsable del Equipo</h3>
-                        </div>
+                        <p className="text-xs text-slate-500 mb-4">Serás el responsable de todos los equipos que inscribas. Con estas credenciales podrás acceder al panel de gestión para añadir jugadores.</p>
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre del Responsable</label>
-                                <input
-                                    type="text"
-                                    value={formData.managerName}
-                                    onChange={(e) => setFormData({ ...formData, managerName: e.target.value })}
+                                <input type="text" value={managerName} onChange={e => setManagerName(e.target.value)}
                                     className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                                    placeholder="Nombre completo"
-                                />
+                                    placeholder="Nombre completo" />
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Email (Usuario)</label>
-                                    <input
-                                        type="email"
-                                        value={formData.managerEmail}
-                                        onChange={(e) => setFormData({ ...formData, managerEmail: e.target.value })}
+                                    <input type="email" value={managerEmail} onChange={e => setManagerEmail(e.target.value)}
                                         className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                                        placeholder="correo@ejemplo.com"
-                                    />
+                                        placeholder="correo@ejemplo.com" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña Gesti&oacute;n</label>
-                                    <input
-                                        type="password"
-                                        value={formData.password}
-                                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña</label>
+                                    <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                                         className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                                        placeholder="********"
-                                    />
+                                        placeholder="********" />
                                 </div>
                             </div>
-                            <p className="text-[10px] text-slate-400">Usa estas credenciales para acceder al panel de gesti&oacute;n y añadir jugadores.</p>
                         </div>
                     </div>
 
-                    {/* Step 4: Payment Instructions & Receipt Upload */}
-                    <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-6 rounded-xl shadow-sm">
+                    {/* Step 2: Add Teams */}
+                    <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className={`size-8 rounded-full flex items-center justify-center font-bold ${receiptFile ? 'bg-primary text-background-dark' : 'bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300'}`}>4</div>
-                            <h3 className="font-bold text-lg text-blue-900 dark:text-blue-100">Instrucciones de Pago ({formData.fee}€)</h3>
+                            <div className={`size-8 rounded-full flex items-center justify-center font-bold ${cart.length > 0 ? 'bg-primary text-background-dark' : 'bg-slate-100 text-slate-500'}`}>2</div>
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Añadir Equipos</h3>
                         </div>
 
-                        {/* Three payment options */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            {/* Option 1: Transfer */}
-                            <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
-                                <div className="size-14 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-3xl text-blue-600 dark:text-blue-400">account_balance</span>
-                                </div>
-                                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Transferencia Bancaria</h4>
-                                <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 w-full">
-                                    <p className="font-mono font-bold text-sm bg-blue-100 dark:bg-blue-900/40 px-3 py-1.5 rounded-md">ESXX XXXX XXXX XXXX XXXX</p>
-                                    <p>Concepto: <strong>Torneo + {formData.name || 'Nombre Equipo'}</strong></p>
-                                </div>
-                            </div>
+                        {/* Division selector */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+                            {plans.map(plan => {
+                                const limit = categoryLimits[plan.name as keyof CategoryLimits];
+                                const current = counts[plan.name] || 0;
+                                const isFull = current >= limit;
+                                return (
+                                    <div key={plan.name}
+                                        onClick={() => !isFull && setSelectedDivision(plan.name)}
+                                        className={`relative border rounded-lg p-3 transition-all text-center ${isFull
+                                            ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-white/5 border-slate-200'
+                                            : selectedDivision === plan.name
+                                                ? 'border-primary bg-primary/5 ring-1 ring-primary cursor-pointer'
+                                                : 'border-slate-200 dark:border-white/10 hover:border-primary/50 cursor-pointer'
+                                            }`}>
+                                        {isFull && (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 backdrop-blur-[1px] rounded-lg z-10">
+                                                <span className="bg-red-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase -rotate-12">Agotado</span>
+                                            </div>
+                                        )}
+                                        <h4 className="font-bold text-xs text-slate-900 dark:text-white">{plan.name}</h4>
+                                        <p className="text-lg font-black text-slate-900 dark:text-white mt-1">{PRICES[plan.name]}€</p>
+                                        <span className="text-[9px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300">{current}/{limit}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
 
-                            {/* Option 2: Card (Stripe) */}
-                            <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
-                                <div className="size-14 rounded-full bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-3xl text-purple-600 dark:text-purple-400">credit_card</span>
-                                </div>
-                                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago Seguro con Tarjeta</h4>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Visa, Mastercard, Amex</p>
-                                <a
-                                    href="https://buy.stripe.com/PON_AQUI_TU_LINK"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="mt-auto w-full inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold px-4 py-2.5 rounded-lg transition-colors"
-                                >
-                                    <span className="material-symbols-outlined text-base">lock</span>
-                                    Pagar con Tarjeta
-                                </a>
+                        {/* Team name & city for this entry */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre del Equipo</label>
+                                <input type="text" value={newTeamName} onChange={e => setNewTeamName(e.target.value)}
+                                    className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                    placeholder="ej. Los Guerreros de Arena" />
                             </div>
-
-                            {/* Option 3: PayPal */}
-                            <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
-                                <div className="size-14 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-3xl text-yellow-600 dark:text-yellow-400">account_balance_wallet</span>
-                                </div>
-                                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago rápido</h4>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">PayPal</p>
-                                <a
-                                    href="https://paypal.me/PON_AQUI_TU_USUARIO/50"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="mt-auto w-full inline-flex items-center justify-center gap-2 bg-[#0070ba] hover:bg-[#005ea6] text-white text-sm font-bold px-4 py-2.5 rounded-lg transition-colors"
-                                >
-                                    <span className="material-symbols-outlined text-base">send</span>
-                                    Pagar con PayPal
-                                </a>
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Ciudad</label>
+                                <input type="text" value={newTeamCity} onChange={e => setNewTeamCity(e.target.value)}
+                                    className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                    placeholder="ej. Muskiz" />
                             </div>
                         </div>
 
-                        {/* File upload */}
-                        <div>
-                            <label className="block text-xs font-bold uppercase text-blue-700 dark:text-blue-300 mb-2">Sube el justificante * (PDF del banco o Captura de pantalla del pago de Tarjeta/PayPal)</label>
-                            <div className={`relative border-2 border-dashed rounded-lg p-4 transition-all text-center ${receiptFile
-                                ? 'border-green-400 bg-green-50 dark:bg-green-950/20'
-                                : 'border-blue-300 dark:border-blue-700 hover:border-blue-400'
-                                }`}>
-                                {receiptFile ? (
-                                    <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
-                                        <span className="material-symbols-outlined">check_circle</span>
-                                        <span className="text-sm font-medium">{receiptFile.name}</span>
-                                        <button
-                                            onClick={() => setReceiptFile(null)}
-                                            className="ml-2 text-xs text-red-500 hover:text-red-700 underline"
-                                        >
-                                            Eliminar
+                        <button onClick={handleAddToCart}
+                            className="w-full bg-slate-100 dark:bg-white/5 hover:bg-primary/10 text-slate-900 dark:text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200 dark:border-white/10">
+                            <span className="material-symbols-outlined text-primary">add_circle</span>
+                            Añadir Equipo al Carrito ({PRICES[selectedDivision]}€ — {selectedDivision})
+                        </button>
+                    </div>
+
+                    {/* Cart */}
+                    {cart.length > 0 && (
+                        <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary">shopping_cart</span>
+                                    Carrito ({cart.length} equipo{cart.length > 1 ? 's' : ''})
+                                </h3>
+                                <span className="text-2xl font-black text-slate-900 dark:text-white">{totalFee}€</span>
+                            </div>
+                            <div className="space-y-2">
+                                {cart.map(entry => (
+                                    <div key={entry.id} className="flex items-center justify-between bg-slate-50 dark:bg-white/5 rounded-lg px-4 py-3 border border-slate-100 dark:border-white/5">
+                                        <div>
+                                            <span className="font-bold text-sm text-slate-900 dark:text-white">{entry.name}</span>
+                                            <span className="text-xs text-slate-500 ml-2">({entry.city})</span>
+                                            <span className="block text-xs text-primary font-medium">{entry.division} — {entry.fee}€</span>
+                                        </div>
+                                        <button onClick={() => removeFromCart(entry.id)} className="text-red-400 hover:text-red-600">
+                                            <span className="material-symbols-outlined text-sm">delete</span>
                                         </button>
                                     </div>
-                                ) : (
-                                    <div>
-                                        <span className="material-symbols-outlined text-3xl text-blue-400 dark:text-blue-500 mb-1">cloud_upload</span>
-                                        <p className="text-sm text-blue-600 dark:text-blue-400">Sube el comprobante de pago</p>
-                                        <p className="text-xs text-blue-400 dark:text-blue-500 mt-1">Formatos: imagen o PDF</p>
-                                    </div>
-                                )}
-                                <input
-                                    type="file"
-                                    accept="image/*,.pdf"
-                                    onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                />
+                                ))}
                             </div>
                         </div>
-                    </div>
+                    )}
 
-                    <button
-                        onClick={handleRegister}
-                        className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-4 rounded-xl shadow-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-                    >
-                        <span>Completar Inscripción</span>
-                        <span className="material-symbols-outlined">how_to_reg</span>
-                    </button>
+                    {/* Step 3: Payment */}
+                    {cart.length > 0 && (
+                        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-6 rounded-xl shadow-sm">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className={`size-8 rounded-full flex items-center justify-center font-bold ${receiptFile ? 'bg-primary text-background-dark' : 'bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300'}`}>3</div>
+                                <h3 className="font-bold text-lg text-blue-900 dark:text-blue-100">Instrucciones de Pago ({totalFee}€)</h3>
+                            </div>
+
+                            {/* Three payment options */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                {/* Transfer */}
+                                <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
+                                    <div className="size-14 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+                                        <span className="material-symbols-outlined text-3xl text-blue-600 dark:text-blue-400">account_balance</span>
+                                    </div>
+                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Transferencia Bancaria</h4>
+                                    <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 w-full">
+                                        <p className="font-mono font-bold text-sm bg-blue-100 dark:bg-blue-900/40 px-3 py-1.5 rounded-md">ESXX XXXX XXXX XXXX XXXX</p>
+                                        <p>Concepto: <strong>Torneo + {managerName || 'Nombre Responsable'}</strong></p>
+                                        <p className="text-[10px] text-slate-400">Importe: {totalFee}€</p>
+                                    </div>
+                                </div>
+
+                                {/* Card */}
+                                <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
+                                    <div className="size-14 rounded-full bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center">
+                                        <span className="material-symbols-outlined text-3xl text-purple-600 dark:text-purple-400">credit_card</span>
+                                    </div>
+                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago Seguro con Tarjeta</h4>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Visa, Mastercard, Amex</p>
+                                    <a href="https://buy.stripe.com/PON_AQUI_TU_LINK" target="_blank" rel="noopener noreferrer"
+                                        className="mt-auto w-full inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold px-4 py-2.5 rounded-lg transition-colors">
+                                        <span className="material-symbols-outlined text-base">lock</span>
+                                        Pagar con Tarjeta
+                                    </a>
+                                </div>
+
+                                {/* PayPal */}
+                                <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
+                                    <div className="size-14 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center">
+                                        <span className="material-symbols-outlined text-3xl text-yellow-600 dark:text-yellow-400">account_balance_wallet</span>
+                                    </div>
+                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago rápido</h4>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">PayPal</p>
+                                    <a href={`https://paypal.me/PON_AQUI_TU_USUARIO/${totalFee}`} target="_blank" rel="noopener noreferrer"
+                                        className="mt-auto w-full inline-flex items-center justify-center gap-2 bg-[#0070ba] hover:bg-[#005ea6] text-white text-sm font-bold px-4 py-2.5 rounded-lg transition-colors">
+                                        <span className="material-symbols-outlined text-base">send</span>
+                                        Pagar con PayPal
+                                    </a>
+                                </div>
+                            </div>
+
+                            {/* File upload */}
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-blue-700 dark:text-blue-300 mb-2">Sube el justificante * (PDF del banco o Captura de pantalla del pago de Tarjeta/PayPal)</label>
+                                <div className={`relative border-2 border-dashed rounded-lg p-4 transition-all text-center ${receiptFile
+                                    ? 'border-green-400 bg-green-50 dark:bg-green-950/20'
+                                    : 'border-blue-300 dark:border-blue-700 hover:border-blue-400'
+                                    }`}>
+                                    {receiptFile ? (
+                                        <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
+                                            <span className="material-symbols-outlined">check_circle</span>
+                                            <span className="text-sm font-medium">{receiptFile.name}</span>
+                                            <button onClick={() => setReceiptFile(null)} className="ml-2 text-xs text-red-500 hover:text-red-700 underline">Eliminar</button>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <span className="material-symbols-outlined text-3xl text-blue-400 dark:text-blue-500 mb-1">cloud_upload</span>
+                                            <p className="text-sm text-blue-600 dark:text-blue-400">Sube el comprobante de pago</p>
+                                            <p className="text-xs text-blue-400 dark:text-blue-500 mt-1">Formatos: imagen o PDF</p>
+                                        </div>
+                                    )}
+                                    <input type="file" accept="image/*,.pdf" onChange={e => setReceiptFile(e.target.files?.[0] || null)}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Submit */}
+                    {cart.length > 0 && (
+                        <button onClick={handleComplete}
+                            className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-4 rounded-xl shadow-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                            <span>Completar Inscripción ({cart.length} equipo{cart.length > 1 ? 's' : ''} — {totalFee}€)</span>
+                            <span className="material-symbols-outlined">how_to_reg</span>
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

@@ -179,11 +179,14 @@ const App: React.FC = () => {
   }, [teams, matches.length, categoryLimits]);
 
   // Functions to modify state
-  const addTeam = async (team: Team, receiptFile?: File) => {
-    const savedTeam = await teamService.registerTeam(team, receiptFile);
-    if (savedTeam) {
-      setTeams([...teams, savedTeam]);
-      setCurrentView(View.TEAM);
+  const addTeams = async (newTeams: Team[], receiptFile?: File) => {
+    const savedTeams: Team[] = [];
+    for (const team of newTeams) {
+      const savedTeam = await teamService.registerTeam(team, receiptFile);
+      if (savedTeam) savedTeams.push(savedTeam);
+    }
+    if (savedTeams.length > 0) {
+      setTeams(prev => [...prev, ...savedTeams]);
     }
   };
 
@@ -233,7 +236,7 @@ const App: React.FC = () => {
           </div>
         );
       case View.MANAGER_LOGIN: return <ManagerLogin teams={teams} onLogin={handleManagerLogin} onNavigate={setCurrentView} />;
-      case View.REGISTRATION: return <Registration onRegister={(t) => { addTeam(t); setManagerEmail(t.managerEmail); localStorage.setItem('managerEmail', t.managerEmail); }} teams={teams} categoryLimits={categoryLimits} />;
+      case View.REGISTRATION: return <Registration onRegister={(newTeams, receiptFile) => { addTeams(newTeams, receiptFile); if (newTeams.length > 0) { setManagerEmail(newTeams[0].managerEmail); localStorage.setItem('managerEmail', newTeams[0].managerEmail); } }} teams={teams} categoryLimits={categoryLimits} />;
       case View.SPONSORS: return <Sponsors content={siteContent} />;
       case View.MEDIA: return <Media content={siteContent} />;
       case View.PLAYER_SELF_REGISTRATION: return <PlayerSelfRegistration teams={teams} onUpdateTeam={updateTeam} onNavigate={setCurrentView} />;
