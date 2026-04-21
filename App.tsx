@@ -82,14 +82,14 @@ const App: React.FC = () => {
   // Category Limits (Admin controlled)
   // NOTE: Registration view checks these limits to block signup when full.
   const [categoryLimits, setCategoryLimits] = useState<CategoryLimits>({
-    'Infantil Femenino': 4,
-    'Infantil Masculino': 4,
-    'Cadete Femenino': 4,
-    'Cadete Masculino': 4,
-    'Juvenil Femenino': 4,
-    'Juvenil Masculino': 4,
+    'Infantil Femenino': 8,
+    'Infantil Masculino': 8,
+    'Cadete Femenino': 12,
+    'Cadete Masculino': 12,
+    'Juvenil Femenino': 8,
+    'Juvenil Masculino': 8,
     'Senior Femenino': 8,
-    'Senior Masculino': 8
+    'Senior Masculino': 12
   });
 
   // Teams Data (Includes Players)
@@ -214,21 +214,21 @@ const App: React.FC = () => {
           onUpdateContent={setSiteContent}
         />
       );
-      case View.TEAM: 
+      case View.TEAM:
         if (!managerEmail) {
           return <ManagerLogin teams={teams} onLogin={handleManagerLogin} onNavigate={setCurrentView} />;
         }
         return (
           <div className="relative">
             <div className="absolute top-4 right-4 z-50">
-               <button onClick={handleManagerLogout} className="bg-red-500/10 text-red-500 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2">
-                 <span className="material-symbols-outlined text-sm">logout</span> Cerrar Sesión
-               </button>
+              <button onClick={handleManagerLogout} className="bg-red-500/10 text-red-500 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2">
+                <span className="material-symbols-outlined text-sm">logout</span> Cerrar Sesión
+              </button>
             </div>
-            <TeamManager 
-              teams={teams.filter(t => t.managerEmail === managerEmail)} 
-              onUpdateTeam={updateTeam} 
-              onNavigate={setCurrentView} 
+            <TeamManager
+              teams={teams.filter(t => t.managerEmail === managerEmail)}
+              onUpdateTeam={updateTeam}
+              onNavigate={setCurrentView}
             />
           </div>
         );
