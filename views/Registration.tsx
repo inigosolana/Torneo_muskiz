@@ -195,6 +195,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             city: entry.city,
             division: entry.division,
             paymentStatus: 'PENDING' as const,
+            paymentMethod: selectedPayment === 'transfer' ? 'TRANSFER' : 'CARD',
             fee: entry.fee,
             players: [],
             managerName: managerName,
@@ -484,8 +485,18 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                     </div>
                                     <h4 className="font-bold text-sm text-slate-900 dark:text-white">Transferencia Bancaria</h4>
                                     <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 w-full">
-                                        <p className="font-mono font-bold text-sm bg-blue-100 dark:bg-blue-900/40 px-3 py-1.5 rounded-md">ESXX XXXX XXXX XXXX XXXX</p>
-                                        <p>Concepto: <strong>Torneo + {managerName || 'Nombre Responsable'}</strong></p>
+                                        <p className="font-mono font-bold text-[10px] sm:text-xs bg-blue-100 dark:bg-blue-900/40 px-2 py-1.5 rounded-md break-all">ES29 2095 0056 0120 5601 3105</p>
+                                        <p>Concepto: <strong className="text-[10px] sm:text-xs">Torneo + {cart[0]?.name || managerName} + {
+                                            Array.from(new Set(cart.map(t => {
+                                                const mapping: Record<string, string> = {
+                                                    'Infantil Masculino': 'INF M', 'Infantil Femenino': 'INF F',
+                                                    'Cadete Masculino': 'CAD M', 'Cadete Femenino': 'CAD F',
+                                                    'Juvenil Masculino': 'JUV M', 'Juvenil Femenino': 'JUV F',
+                                                    'Senior Masculino': 'SEN M', 'Senior Femenino': 'SEN F'
+                                                };
+                                                return mapping[t.division] || t.division;
+                                            }))).join('/')
+                                        }</strong></p>
                                         <p className="text-[10px] text-slate-400">Importe: {totalFee}€</p>
                                     </div>
                                 </button>

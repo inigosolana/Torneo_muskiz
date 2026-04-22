@@ -152,8 +152,8 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     };
 
     const handleManualPayment = (team: Team) => {
-        if (confirm(`¿Marcar a ${team.name} como PAGADO (Efectivo/Transferencia)?`)) {
-            onUpdateTeam({ ...team, paymentStatus: 'PAID', paymentMethod: 'CASH' });
+        if (confirm(`¿Confirmar validación de pago para ${team.name}?`)) {
+            onUpdateTeam({ ...team, paymentStatus: 'PAID' });
         }
     };
 
@@ -580,24 +580,40 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                 <td className="px-6 py-4">{team.division}</td>
                                                 <td className="px-6 py-4 font-mono">{team.fee}€</td>
                                                 <td className="px-6 py-4">
-                                                    {team.paymentStatus === 'PAID' ? (
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded w-fit">PAGADO</span>
-                                                            <span className="text-[10px] text-slate-400 mt-1">{team.paymentMethod || 'CARD'}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded">PENDIENTE</span>
-                                                    )}
+                                                    <div className="flex flex-col gap-1">
+                                                        {team.paymentStatus === 'PAID' ? (
+                                                            <span className="text-[10px] font-black bg-green-100 text-green-700 px-2 py-0.5 rounded w-fit">PAGADO</span>
+                                                        ) : (
+                                                            <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded w-fit uppercase">Pendiente Validación</span>
+                                                        )}
+                                                        <span className="text-[10px] text-slate-500 font-medium">
+                                                            {team.paymentMethod === 'TRANSFER' ? 'Transferencia' : (team.paymentMethod === 'CARD' ? 'Tarjeta (Stripe)' : (team.paymentMethod || 'Manual'))}
+                                                        </span>
+                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    {team.paymentStatus === 'PENDING' && (
-                                                        <button
-                                                            onClick={() => handleManualPayment(team)}
-                                                            className="text-blue-600 hover:text-blue-800 text-xs font-bold border border-blue-200 px-3 py-1 rounded hover:bg-blue-50 transition-colors"
-                                                        >
-                                                            Marcar Pagado (Manual)
-                                                        </button>
-                                                    )}
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        {team.receiptUrl && (
+                                                            <a
+                                                                href={team.receiptUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="size-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                                                                title="Ver justificante"
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">description</span>
+                                                            </a>
+                                                        )}
+                                                        {team.paymentStatus === 'PENDING' && (
+                                                            <button
+                                                                onClick={() => handleManualPayment(team)}
+                                                                className="bg-primary/10 text-primary hover:bg-primary/20 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                                            >
+                                                                <span className="material-symbols-outlined text-xs">verified</span>
+                                                                VALIDAR
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}

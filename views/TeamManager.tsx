@@ -334,86 +334,134 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                                 <div className="bg-slate-50 dark:bg-white/5 p-6 border-b border-slate-100 dark:border-white/10">
                                     <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                         <span className="material-symbols-outlined text-amber-500">lock</span>
-                                        Completa la Inscripción
+                                        {selectedTeam.paymentMethod ? 'Inscripción en Proceso de Validación' : 'Completa la Inscripción'}
                                     </h3>
-                                    <p className="text-slate-500 text-sm mt-1">Debes realizar el pago para desbloquear la gestión de jugadores.</p>
+                                    <p className="text-slate-500 text-sm mt-1">
+                                        {selectedTeam.paymentMethod 
+                                            ? 'La organización está revisando tu pago. Una vez validado, podrás gestionar tu plantilla.'
+                                            : 'Debes realizar el pago para desbloquear la gestión de jugadores.'}
+                                    </p>
                                 </div>
 
                                 <div className="p-8">
-                                    <div className="flex gap-2 mb-8 bg-slate-100 dark:bg-white/5 p-1 rounded-lg">
-                                        <button onClick={() => setPaymentMethod('CARD')} className={`flex-1 py-3 rounded-md text-sm font-bold transition-colors flex items-center justify-center gap-2 ${paymentMethod === 'CARD' ? 'bg-white dark:bg-surface-dark shadow text-primary' : 'text-slate-500'}`}>
-                                            <span className="material-symbols-outlined text-sm">credit_card</span> Tarjeta
-                                        </button>
-                                        <button onClick={() => setPaymentMethod('PAYPAL')} className={`flex-1 py-3 rounded-md text-sm font-bold transition-colors flex items-center justify-center gap-2 ${paymentMethod === 'PAYPAL' ? 'bg-white dark:bg-surface-dark shadow text-blue-500' : 'text-slate-500'}`}>
-                                            <span className="material-symbols-outlined text-sm">payments</span> PayPal
-                                        </button>
-                                        <button onClick={() => setPaymentMethod('TRANSFER')} className={`flex-1 py-3 rounded-md text-sm font-bold transition-colors flex items-center justify-center gap-2 ${paymentMethod === 'TRANSFER' ? 'bg-white dark:bg-surface-dark shadow text-purple-500' : 'text-slate-500'}`}>
-                                            <span className="material-symbols-outlined text-sm">account_balance</span> Transf.
-                                        </button>
-                                    </div>
-
-                                    <form onSubmit={handlePayment} className="space-y-6">
-                                        {paymentMethod === 'CARD' && (
-                                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                                                <div>
-                                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Titular</label>
-                                                    <input type="text" required className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3" placeholder="Nombre en tarjeta" />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Número de Tarjeta</label>
-                                                    <input type="text" required className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3" placeholder="0000 0000 0000 0000" />
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div><label className="block text-xs font-bold uppercase text-slate-500 mb-1">Caducidad</label><input type="text" required className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3" placeholder="MM/YY" /></div>
-                                                    <div><label className="block text-xs font-bold uppercase text-slate-500 mb-1">CVC</label><input type="text" required className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3" placeholder="123" /></div>
-                                                </div>
+                                    {selectedTeam.paymentMethod ? (
+                                        <div className="space-y-6 animate-in fade-in">
+                                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-6 text-center">
+                                                <span className="material-symbols-outlined text-5xl text-amber-500 mb-4 animate-pulse">hourglass_empty</span>
+                                                <h4 className="text-lg font-bold text-amber-900 dark:text-amber-100">Esperando Validación</h4>
+                                                <p className="text-sm text-amber-700 dark:text-amber-300 mt-2 max-w-md mx-auto">
+                                                    Hemos recibido tu solicitud de inscripción vía <strong>{selectedTeam.paymentMethod === 'TRANSFER' ? 'Transferencia Bancaria' : 'Tarjeta / Stripe'}</strong>. 
+                                                    El administrador validará los datos en un máximo de 24 horas laborables.
+                                                </p>
                                             </div>
-                                        )}
 
-                                        {paymentMethod === 'PAYPAL' && (
-                                            <div className="text-center py-8 animate-in fade-in slide-in-from-right-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-                                                <p className="text-slate-500 text-sm mb-4">Serás redirigido a PayPal para completar el pago de forma segura.</p>
-                                                <button type="button" className="bg-[#0070ba] text-white font-bold py-3 px-8 rounded-full flex items-center justify-center gap-2 mx-auto hover:bg-[#005ea6] transition-colors">
-                                                    Pagar con <span className="font-black italic">PayPal</span>
+                                            {selectedTeam.paymentMethod === 'TRANSFER' && (
+                                                <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-6 border border-slate-200 dark:border-white/10">
+                                                    <h5 className="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
+                                                        <span className="material-symbols-outlined text-primary">info</span>
+                                                        Recordatorio de Transferencia
+                                                    </h5>
+                                                    <div className="space-y-3 text-sm">
+                                                        <div className="flex justify-between">
+                                                            <span className="text-slate-500">IBAN:</span>
+                                                            <span className="font-mono font-bold text-slate-900 dark:text-white">ES29 2095 0056 0120 5601 3105</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-slate-500">Concepto:</span>
+                                                            <span className="font-bold text-primary">Torneo + {selectedTeam.name} + {selectedTeam.division.split(' ')[0].substring(0,3).toUpperCase()}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="flex justify-center pt-4">
+                                                <button 
+                                                    onClick={() => window.location.reload()}
+                                                    className="text-primary font-bold flex items-center gap-2 hover:underline"
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">refresh</span>
+                                                    Actualizar Estado
                                                 </button>
                                             </div>
-                                        )}
-
-                                        {paymentMethod === 'TRANSFER' && (
-                                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                                                <div className="bg-slate-100 dark:bg-white/5 p-4 rounded-lg text-sm font-mono text-slate-700 dark:text-slate-300 break-all border border-slate-200 dark:border-white/10">
-                                                    <p className="text-xs text-slate-500 font-sans mb-1 uppercase font-bold">IBAN para transferencia:</p>
-                                                    ES91 2100 0000 0000 0000 1234
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Subir Justificante</label>
-                                                    <input type="file" required className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" />
-                                                </div>
-                                                <p className="text-xs text-amber-500 flex items-center gap-1"><span className="material-symbols-outlined text-sm">warning</span> La validación puede tardar 24h.</p>
-                                            </div>
-                                        )}
-
-                                        <div className="pt-6 border-t border-slate-100 dark:border-white/10 mt-6">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <span className="text-sm font-bold text-slate-500">Total a pagar:</span>
-                                                <span className="text-3xl font-black text-slate-900 dark:text-white">{selectedTeam.fee}€</span>
-                                            </div>
-                                            <button
-                                                type="submit"
-                                                disabled={paymentProcessing}
-                                                className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:opacity-90 transition-opacity shadow-lg"
-                                            >
-                                                {paymentProcessing ? (
-                                                    <span className="material-symbols-outlined animate-spin">progress_activity</span>
-                                                ) : (
-                                                    <>
-                                                        <span className="material-symbols-outlined">check_circle</span>
-                                                        Confirmar Pago y Activar Equipo
-                                                    </>
-                                                )}
-                                            </button>
                                         </div>
-                                    </form>
+                                    ) : (
+                                        <>
+                                            <div className="flex gap-2 mb-8 bg-slate-100 dark:bg-white/5 p-1 rounded-lg">
+                                                <button onClick={() => setPaymentMethod('CARD')} className={`flex-1 py-3 rounded-md text-sm font-bold transition-colors flex items-center justify-center gap-2 ${paymentMethod === 'CARD' ? 'bg-white dark:bg-surface-dark shadow text-primary' : 'text-slate-500'}`}>
+                                                    <span className="material-symbols-outlined text-sm">credit_card</span> Tarjeta
+                                                </button>
+                                                <button onClick={() => setPaymentMethod('PAYPAL')} className={`flex-1 py-3 rounded-md text-sm font-bold transition-colors flex items-center justify-center gap-2 ${paymentMethod === 'PAYPAL' ? 'bg-white dark:bg-surface-dark shadow text-blue-500' : 'text-slate-500'}`}>
+                                                    <span className="material-symbols-outlined text-sm">payments</span> PayPal
+                                                </button>
+                                                <button onClick={() => setPaymentMethod('TRANSFER')} className={`flex-1 py-3 rounded-md text-sm font-bold transition-colors flex items-center justify-center gap-2 ${paymentMethod === 'TRANSFER' ? 'bg-white dark:bg-surface-dark shadow text-purple-500' : 'text-slate-500'}`}>
+                                                    <span className="material-symbols-outlined text-sm">account_balance</span> Transf.
+                                                </button>
+                                            </div>
+
+                                            <form onSubmit={handlePayment} className="space-y-6">
+                                                {paymentMethod === 'CARD' && (
+                                                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Titular</label>
+                                                            <input type="text" required className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3" placeholder="Nombre en tarjeta" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Número de Tarjeta</label>
+                                                            <input type="text" required className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3" placeholder="0000 0000 0000 0000" />
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div><label className="block text-xs font-bold uppercase text-slate-500 mb-1">Caducidad</label><input type="text" required className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3" placeholder="MM/YY" /></div>
+                                                            <div><label className="block text-xs font-bold uppercase text-slate-500 mb-1">CVC</label><input type="text" required className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3" placeholder="123" /></div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {paymentMethod === 'PAYPAL' && (
+                                                    <div className="text-center py-8 animate-in fade-in slide-in-from-right-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                                                        <p className="text-slate-500 text-sm mb-4">Serás redirigido a PayPal para completar el pago de forma segura.</p>
+                                                        <button type="button" className="bg-[#0070ba] text-white font-bold py-3 px-8 rounded-full flex items-center justify-center gap-2 mx-auto hover:bg-[#005ea6] transition-colors">
+                                                            Pagar con <span className="font-black italic">PayPal</span>
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {paymentMethod === 'TRANSFER' && (
+                                                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                                                        <div className="bg-slate-100 dark:bg-white/5 p-4 rounded-lg text-sm font-mono text-slate-700 dark:text-slate-300 break-all border border-slate-200 dark:border-white/10">
+                                                            <p className="text-xs text-slate-500 font-sans mb-1 uppercase font-bold">IBAN para transferencia:</p>
+                                                            ES29 2095 0056 0120 5601 3105
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Subir Justificante</label>
+                                                            <input type="file" required className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" />
+                                                        </div>
+                                                        <p className="text-xs text-amber-500 flex items-center gap-1"><span className="material-symbols-outlined text-sm">warning</span> La validación puede tardar 24h.</p>
+                                                    </div>
+                                                )}
+
+                                                <div className="pt-6 border-t border-slate-100 dark:border-white/10 mt-6">
+                                                    <div className="flex justify-between items-center mb-4">
+                                                        <span className="text-sm font-bold text-slate-500">Total a pagar:</span>
+                                                        <span className="text-3xl font-black text-slate-900 dark:text-white">{selectedTeam.fee}€</span>
+                                                    </div>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={paymentProcessing}
+                                                        className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:opacity-90 transition-opacity shadow-lg"
+                                                    >
+                                                        {paymentProcessing ? (
+                                                            <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                                                        ) : (
+                                                            <>
+                                                                <span className="material-symbols-outlined">check_circle</span>
+                                                                Confirmar Pago y Activar Equipo
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         ) : (

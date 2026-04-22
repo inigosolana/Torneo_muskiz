@@ -56,42 +56,7 @@ export const Information: React.FC<InformationProps> = ({ content }) => {
                     </div>
                 </div>
 
-                {/* Section 3: The Venue (La Sede) */}
-                <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 md:p-12 shadow-xl border border-slate-200 dark:border-white/5 relative overflow-hidden mb-12">
-                    <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
-                        <span className="material-symbols-outlined text-9xl">waves</span>
-                    </div>
 
-                    <div className="grid md:grid-cols-2 gap-12">
-                        <div className="space-y-6 order-2 md:order-1">
-                            <h3 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-                                <span className="material-symbols-outlined text-secondary text-4xl">location_on</span>
-                                {content.venue.title}
-                            </h3>
-                            <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                                {content.venue.description}
-                            </p>
-                            <ul className="space-y-3">
-                                {content.venue.features.map((feature, idx) => (
-                                    <li key={idx} className="flex items-center gap-3">
-                                        <span className="size-8 rounded-full bg-primary/20 text-primary flex items-center justify-center">
-                                            <span className="material-symbols-outlined text-sm">check</span>
-                                        </span>
-                                        <span className="text-slate-700 dark:text-slate-200 font-medium">{feature}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div className="order-1 md:order-2 h-full min-h-[300px] rounded-xl overflow-hidden relative">
-                            <img
-                                src={content.venue.imageUrl}
-                                alt="Sede del torneo"
-                                className="absolute inset-0 w-full h-full object-cover"
-                            />
-                            <div className="absolute inset-0 bg-black/20"></div>
-                        </div>
-                    </div>
-                </div>
 
 
                 {/* Section 3: Social Media & Community */}

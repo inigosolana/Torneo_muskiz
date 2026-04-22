@@ -59,8 +59,8 @@ const App: React.FC = () => {
     },
 
     // Tournament Info
-    tournamentInfoTitle: "Información del Torneo",
-    tournamentInfoText: "Detalles de la competición por categorías:\n\n• CADETES: Viernes por la tarde, 5 de Junio.\n• SENIOR Y JUVENIL: Sábado, 6 de Junio.\n• INFANTIL: Domingo por la mañana, 7 de Junio.\n\nCada equipo puede inscribir un máximo de 12 jugadores. ¡Asegura tu plaza antes de que se completen las inscripciones!",
+    tournamentInfoTitle: "Información y Reglamento",
+    tournamentInfoText: "El torneo se desarrollará en dos fases: una Fase de Grupos seguida de Eliminatorias. Garantizamos que cada equipo juegue un mínimo de 3 partidos.\n\nHorarios por categorías:\n• CADETE: Viernes 5 de Junio, desde las 17:00h.\n• JUVENIL Y SENIOR: Sábado 6 de Junio (todo el día).\n• INFANTIL: Domingo 7 de Junio.\n\nCada equipo puede inscribir un máximo de 12 jugadores. ¡Asegura tu plaza antes de que se completen las inscripciones!",
     tournamentInfoImageUrl: "/campos.jpg",
 
     contactEmail: "torneo@muskiz.com",

@@ -69,6 +69,7 @@ export const teamService = {
             city: team.city,
             division: team.division,
             payment_status: 'PENDING',
+            payment_method: team.paymentMethod || 'TRANSFER',
             fee: team.fee,
             receipt_url: receiptUrl || null,
             manager_name: team.managerName,
