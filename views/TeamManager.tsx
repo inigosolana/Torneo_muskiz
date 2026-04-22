@@ -20,9 +20,16 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
 
     // Manual Entry States
     const [showManualModal, setShowManualModal] = useState(false);
+    const [manualForm, setManualForm] = useState<{
+        name: string; surnames: string; dniNumber: string; birthDate: string;
+        number: string; position: string; role: 'PLAYER' | 'COACH' | 'OFFICIAL';
+        dniUrl: string; insuranceUrl: string;
+    }>({
+        name: '', surnames: '', dniNumber: '', birthDate: '',
         number: '',
         position: 'Universal',
-        role: 'PLAYER' as 'PLAYER' | 'COACH' | 'OFFICIAL'
+        role: 'PLAYER' as 'PLAYER' | 'COACH' | 'OFFICIAL',
+        dniUrl: '', insuranceUrl: ''
     });
 
     const selectedTeam = teams.find(t => t.id === selectedTeamId);
@@ -648,7 +655,6 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                                         />
                                     </div>
                                 )}
-                            </div>
                                 <div className="col-span-2">
                                     <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Posición</label>
                                     <select
@@ -668,6 +674,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                                     </select>
                                 </div>
                             </div>
+
 
                             <button type="submit" className="w-full bg-primary text-background-dark font-bold py-3 rounded-xl hover:opacity-90 mt-4 shadow-lg shadow-primary/20">
                                 Guardar Jugador

@@ -100,8 +100,6 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
 
-    const isRegistrationClosed = Date.now() > new Date('2026-06-04T00:00:00').getTime();
-
     const handleAddToCart = () => {
         if (!newTeamName.trim() || !newTeamCity.trim()) {
             alert('Introduce el nombre y la ciudad del equipo.');
