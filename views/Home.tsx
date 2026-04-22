@@ -184,28 +184,23 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
         </div>
       </section>
 
-      {/* News Grid */}
+      {/* Promotion Section */}
       <section className="py-16 bg-background-light dark:bg-background-dark">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-10">Últimos Resúmenes</h2>
+          <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-10">Promoción del Torneo</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
             {/* Highlight Video */}
             <div
-              className="md:col-span-2 relative h-[400px] rounded-2xl overflow-hidden group cursor-pointer"
-              onClick={() => onNavigate(View.MEDIA)}
+              className="md:col-span-2 relative h-[400px] rounded-2xl overflow-hidden shadow-2xl border border-white/10"
             >
-              <img src="https://picsum.photos/800/600?random=1" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Match highlight" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex flex-col justify-end p-8">
-                <span className="inline-block px-3 py-1 rounded-full bg-secondary text-slate-900 text-xs font-bold uppercase tracking-wider mb-3 w-fit">Noticia Destacada</span>
-                <h3 className="text-3xl font-bold text-white mb-2">Victoria épica en la arena de Muskiz</h3>
-                <p className="text-slate-200">Mira el resumen generado por IA de esta increíble final.</p>
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="bg-primary/90 rounded-full p-4 text-background-dark">
-                  <span className="material-symbols-outlined text-4xl">play_arrow</span>
-                </div>
-              </div>
+              <video 
+                src="/promo.mp4" 
+                className="absolute inset-0 w-full h-full object-cover" 
+                controls
+                poster="https://picsum.photos/800/600?grayscale"
+              />
+              {/* Removed overlay to allow video controls to be clickable easily, but we can add a subtle gradient at the top if needed */}
             </div>
 
             {/* Stats */}

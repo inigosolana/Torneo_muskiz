@@ -28,13 +28,13 @@ const App: React.FC = () => {
     heroSubtitle: "El evento principal de balonmano playa en Muskiz. Vive la adrenalina, la arena y la gloria en nuestra costa.",
 
     // History
-    aboutTitle: "Historia y Evolución",
-    aboutText: "El Torneo Muskizko Udala nació en el verano de 2015 como una pequeña iniciativa local para fomentar el deporte en la playa de La Arena. Lo que comenzó con apenas 8 equipos y una sola cancha marcada con cintas improvisadas, se ha transformado en un referente de la costa cantábrica.\n\nA lo largo de esta década, hemos crecido exponencialmente. De ser un torneo de un solo día, hemos pasado a un festival de fin de semana completo, atrayendo a equipos de nivel nacional e internacional.\n\nNuestra evolución no ha sido solo en números, sino en calidad: arbitrajes federados, streaming en directo, marcadores electrónicos y una experiencia para el jugador que prioriza el espectáculo y el juego limpio.",
+    aboutTitle: "Sobre el Torneo",
+    aboutText: "Tras el éxito del I Torneo Muskizko Udala celebrado el año pasado, volvemos con más fuerza. Este torneo está organizado por Kolosaurios, un club creado en 2022 por jugadores apasionados del Muskiz Eskubaloia. Conjuntamente con el propio Muskiz Eskubaloia y el apoyo fundamental del Ayuntamiento de Muskiz, hemos hecho realidad esta segunda edición.\n\nNuestro objetivo sigue siendo el mismo: disfrutar del mejor balonmano en un entorno inmejorable. Contamos con equipos que vienen desde todos los rincones del norte de España, abarcando todas las categorías desde Benjamín hasta Senior, garantizando un fin de semana lleno de deporte, competición y buen ambiente.",
     aboutImageUrl: "https://picsum.photos/800/800?grayscale",
     aboutStats: [
-      { value: "2015", label: "Año Fundación" },
-      { value: "+300", label: "Jugadores/año" },
-      { value: "10ª", label: "Edición" }
+      { value: "2022", label: "Fundación Kolosaurios" },
+      { value: "Norte", label: "Equipos de toda la zona" },
+      { value: "2ª", label: "Edición del Torneo" }
     ],
 
     // Venue
