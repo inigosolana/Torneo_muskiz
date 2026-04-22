@@ -84,10 +84,13 @@ const App: React.FC = () => {
 
     // Gallery
     gallery: [
-      { id: 'g1', url: 'https://picsum.photos/600/400?random=1', title: 'Final Masculina', year: 2025 },
-      { id: 'g2', url: 'https://picsum.photos/600/400?random=2', title: 'Entrega de Trofeos', year: 2025 },
-      { id: 'g3', url: 'https://picsum.photos/600/400?random=3', title: 'Ambiente en la grada', year: 2024 },
-      { id: 'g4', url: 'https://picsum.photos/600/400?random=4', title: 'Gol aéreo espectacular', year: 2024 },
+      { id: 'g7', url: '/galeria/PHOTO-2025-11-13-12-40-07.jpg', title: 'Torneo 2025 - Arena', year: 2025 },
+      { id: 'g6', url: '/galeria/PHOTO-2025-11-13-12-40-07 (2).jpg', title: 'Torneo 2025 - Acción', year: 2025 },
+      { id: 'g5', url: '/galeria/PHOTO-2025-11-13-12-40-07 (1).jpg', title: 'Torneo 2025 - Equipos', year: 2025 },
+      { id: 'g4', url: '/galeria/PHOTO-2025-11-13-12-40-06.jpg', title: 'Torneo 2025 - Jugada', year: 2025 },
+      { id: 'g3', url: '/galeria/PHOTO-2025-11-13-12-40-06 (2).jpg', title: 'Torneo 2025 - Ambiente', year: 2025 },
+      { id: 'g2', url: '/galeria/PHOTO-2025-11-13-12-40-06 (1).jpg', title: 'Torneo 2025 - Muskiz', year: 2025 },
+      { id: 'g1', url: '/galeria/PHOTO-2025-11-13-12-40-05.jpg', title: 'Torneo 2025 - Inicio', year: 2025 },
     ]
   });
 

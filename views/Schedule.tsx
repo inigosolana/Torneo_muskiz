@@ -121,23 +121,93 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, content }) =
                                 </div>
 
                                 {infoSubTab === 'general' ? (
-                                    <div className="animate-in slide-in-from-left-4 fade-in duration-300 space-y-8">
-                                        <div className="bg-primary/5 border-l-4 border-primary p-6 rounded-r-lg">
-                                            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Bienvenidos al Torneo Muskizko Udala 2026</h3>
-                                            <p className="text-slate-600 dark:text-slate-300">
-                                                La Arena de Muskiz acoge del 25 al 27 de Julio el mejor balonmano playa.
-                                            </p>
+                                    <div className="animate-in slide-in-from-left-4 fade-in duration-300 space-y-12">
+                                        {/* Tournament Details Section */}
+                                        <div className="grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-white/5 p-8 rounded-2xl border border-slate-200 dark:border-white/10">
+                                            <div className="space-y-6">
+                                                <h3 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                                                    <span className="material-symbols-outlined text-primary text-4xl">info</span>
+                                                    {content?.tournamentInfoTitle || 'Información del Torneo'}
+                                                </h3>
+                                                <div className="space-y-4 text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                                                    {content?.tournamentInfoText || 'Detalles del torneo no disponibles.'}
+                                                </div>
+                                            </div>
+                                            {content?.tournamentInfoImageUrl && (
+                                                <div className="relative group">
+                                                    <div className="absolute -inset-2 bg-gradient-to-r from-secondary to-primary rounded-2xl opacity-75 blur-lg group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
+                                                    <div className="relative aspect-video rounded-xl overflow-hidden shadow-2xl">
+                                                        <img
+                                                            src={content.tournamentInfoImageUrl}
+                                                            alt="Información del torneo"
+                                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="grid md:grid-cols-2 gap-6">
-                                            <div className="bg-slate-50 dark:bg-white/5 p-6 rounded-xl border border-slate-200 dark:border-white/10">
-                                                <h4 className="font-bold flex items-center gap-2 mb-4 text-slate-900 dark:text-white">
-                                                    <span className="material-symbols-outlined text-primary">schedule</span> Horarios
-                                                </h4>
-                                                <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-2">
-                                                    <li>Viernes: 16:00 - 21:00</li>
-                                                    <li>Sábado: 09:00 - 21:00</li>
-                                                    <li>Domingo: 09:00 - 15:00</li>
-                                                </ul>
+
+                                        {/* Horarios Section (Keep existing as it's useful here) */}
+                                        <div className="bg-primary/5 border-l-4 border-primary p-6 rounded-r-lg">
+                                            <h4 className="font-bold flex items-center gap-2 mb-2 text-slate-900 dark:text-white uppercase text-xs tracking-widest">
+                                                <span className="material-symbols-outlined text-primary">schedule</span> Horarios del Fin de Semana
+                                            </h4>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm font-bold text-slate-700 dark:text-slate-200">
+                                                <div className="flex items-center gap-2">Viernes: 16:00 - 21:00</div>
+                                                <div className="flex items-center gap-2">Sábado: 09:00 - 21:00</div>
+                                                <div className="flex items-center gap-2">Domingo: 09:00 - 15:00</div>
+                                            </div>
+                                        </div>
+
+                                        {/* Normativa Section */}
+                                        <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 shadow-xl border border-slate-200 dark:border-white/5">
+                                            <h3 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3 mb-6">
+                                                <span className="material-symbols-outlined text-primary text-4xl">groups</span>
+                                                Normativa de Jugadores
+                                            </h3>
+                                            <p className="text-slate-600 dark:text-slate-300 mb-8 text-sm">
+                                                Cada equipo deberá inscribir a sus jugadores antes del inicio del torneo. Límites por categoría:
+                                            </p>
+
+                                            <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-white/10">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="bg-slate-50 dark:bg-white/5">
+                                                            <th className="text-left px-6 py-3 font-bold text-xs uppercase text-slate-500">Categoría</th>
+                                                            <th className="text-center px-6 py-3 font-bold text-xs uppercase text-slate-500">Mínimo</th>
+                                                            <th className="text-center px-6 py-3 font-bold text-xs uppercase text-slate-500">Máximo</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                                                        {[
+                                                            { cat: 'Senior (M/F)', min: 6, max: 12 },
+                                                            { cat: 'Juvenil (M/F)', min: 6, max: 14 },
+                                                            { cat: 'Cadete (M/F)', min: 6, max: 14 },
+                                                            { cat: 'Infantil (M/F)', min: 6, max: 14 },
+                                                        ].map((row, i) => (
+                                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-white/5">
+                                                                <td className="px-6 py-4 font-medium">{row.cat}</td>
+                                                                <td className="px-6 py-4 text-center font-bold text-primary">{row.min}</td>
+                                                                <td className="px-6 py-4 text-center font-bold text-primary">{row.max}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+                                                <div className="bg-slate-100 dark:bg-white/5 rounded-xl p-4 text-center">
+                                                    <span className="material-symbols-outlined text-2xl text-primary mb-1">badge</span>
+                                                    <p className="text-xs text-slate-500 font-bold uppercase">DNI Obligatorio</p>
+                                                </div>
+                                                <div className="bg-slate-100 dark:bg-white/5 rounded-xl p-4 text-center">
+                                                    <span className="material-symbols-outlined text-2xl text-secondary mb-1">health_and_safety</span>
+                                                    <p className="text-xs text-slate-500 font-bold uppercase">Seguro Deportivo</p>
+                                                </div>
+                                                <div className="bg-slate-100 dark:bg-white/5 rounded-xl p-4 text-center">
+                                                    <span className="material-symbols-outlined text-2xl text-red-500 mb-1">timer</span>
+                                                    <p className="text-xs text-slate-500 font-bold uppercase">Plazo Inscripción</p>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
