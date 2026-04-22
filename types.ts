@@ -58,7 +58,15 @@ export interface SiteContent {
     website: SocialConfig;
   };
 
+  // Tournament Info (New section)
+  tournamentInfoTitle: string;
+  tournamentInfoText: string;
+  tournamentInfoImageUrl: string;
+
   contactEmail: string;
+
+  // App Settings
+  isScheduleActive?: boolean;
 
   // Lists
   sponsors: Sponsor[];

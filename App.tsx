@@ -24,13 +24,13 @@ const App: React.FC = () => {
 
   // --- Dynamic Site Content (CMS) ---
   const [siteContent, setSiteContent] = useState<SiteContent>({
-    heroTitle: "II Torneo Balonmano Playa Muskiz 2026",
+    heroTitle: "II Torneo Muskizko Udala",
     heroSubtitle: "El evento principal de balonmano playa en Muskiz. Vive la adrenalina, la arena y la gloria en nuestra costa.",
 
     // History
     aboutTitle: "Sobre el Torneo",
     aboutText: "Tras el éxito del I Torneo Muskizko Udala celebrado el año pasado, volvemos con más fuerza. Este torneo está organizado por Kolosaurios, un club creado en 2022 por jugadores apasionados del Muskiz Eskubaloia. Conjuntamente con el propio Muskiz Eskubaloia y el apoyo fundamental del Ayuntamiento de Muskiz, hemos hecho realidad esta segunda edición.\n\nNuestro objetivo sigue siendo el mismo: disfrutar del mejor balonmano en un entorno inmejorable. Contamos con equipos que vienen desde todos los rincones del norte de España, abarcando todas las categorías desde Benjamín hasta Senior, garantizando un fin de semana lleno de deporte, competición y buen ambiente.",
-    aboutImageUrl: "/kolosaurios.jpg",
+    aboutImageUrl: "/la_arena.jpg",
     aboutStats: [
       { value: "2022", label: "Fundación Kolosaurios" },
       { value: "Norte", label: "Equipos de toda la zona" },
@@ -41,7 +41,7 @@ const App: React.FC = () => {
     venue: {
       title: "La Sede: Playa de La Arena",
       description: "Situada en un entorno natural privilegiado, la Playa de La Arena ofrece las condiciones perfectas para la práctica del balonmano playa. Su arena fina y compacta permite un juego rápido y espectacular.",
-      imageUrl: "/la_arena.jpg",
+      imageUrl: "/kolosaurios.jpg",
       features: [
         "Orientación perfecta para el sol",
         "Más de 2000 plazas de aparcamiento",
@@ -58,7 +58,13 @@ const App: React.FC = () => {
       website: { handle: "balonmanomuskiz.com", url: "https://www.balonmanomuskiz.com/" }
     },
 
+    // Tournament Info
+    tournamentInfoTitle: "Información del Torneo",
+    tournamentInfoText: "Detalles de la competición por categorías:\n\n• CADETES: Viernes por la tarde, 5 de Junio.\n• SENIOR Y JUVENIL: Sábado, 6 de Junio.\n• INFANTIL: Domingo por la mañana, 7 de Junio.\n\nCada equipo puede inscribir un máximo de 12 jugadores. ¡Asegura tu plaza antes de que se completen las inscripciones!",
+    tournamentInfoImageUrl: "/la_arena_playa.jpg",
+
     contactEmail: "torneo@muskiz.com",
+    isScheduleActive: false,
 
     // Sponsors
     sponsors: [
@@ -212,7 +218,7 @@ const App: React.FC = () => {
     switch (currentView) {
       case View.HOME: return <Home onNavigate={setCurrentView} content={siteContent} teams={teams} />;
       case View.INFO: return <Information content={siteContent} />;
-      case View.SCHEDULE: return <Schedule matches={matches} teams={teams} />;
+      case View.SCHEDULE: return <Schedule matches={matches} teams={teams} content={siteContent} />;
       case View.ADMIN: return (
         <Admin
           teams={teams}

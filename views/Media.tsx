@@ -12,8 +12,7 @@ export const Media: React.FC<MediaProps> = ({ content }) => {
     const [selectedCategory, setSelectedCategory] = useState<'Todas' | 'Goles' | 'Ambiente' | 'Entrevistas'>('Todas');
 
     const galleryImages = content.gallery.filter(item =>
-        item.year === selectedYear &&
-        (selectedCategory === 'Todas' || item.category === selectedCategory)
+        item.year === selectedYear
     );
 
     return (
@@ -21,7 +20,7 @@ export const Media: React.FC<MediaProps> = ({ content }) => {
             <div className="max-w-7xl mx-auto">
                 <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
                     <div>
-                        <h2 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">Multimedia</h2>
+                        <h2 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">Galería de Fotos</h2>
                         <p className="text-slate-500">Revive los mejores momentos de ediciones anteriores.</p>
                     </div>
                     <div className="flex gap-2 bg-slate-100 dark:bg-white/5 p-1 rounded-lg">
@@ -43,12 +42,6 @@ export const Media: React.FC<MediaProps> = ({ content }) => {
                         <h3 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                             <span className="material-symbols-outlined text-secondary">movie</span> Videos {selectedYear}
                         </h3>
-                        <button
-                            onClick={() => setShowGenerator(true)}
-                            className="text-primary text-sm font-bold flex items-center gap-1 hover:underline"
-                        >
-                            <span className="material-symbols-outlined">auto_awesome</span> Crear Highlight IA
-                        </button>
                     </div>
                     
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -91,19 +84,8 @@ export const Media: React.FC<MediaProps> = ({ content }) => {
                 <div>
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                         <h3 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span className="material-symbols-outlined text-secondary">photo_library</span> Galería de Fotos
+                            <span className="material-symbols-outlined text-secondary">photo_library</span> Fotos {selectedYear}
                         </h3>
-                        <div className="flex flex-wrap gap-2">
-                            {['Todas', 'Goles', 'Ambiente', 'Entrevistas'].map(cat => (
-                                <button
-                                    key={cat}
-                                    onClick={() => setSelectedCategory(cat as any)}
-                                    className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${selectedCategory === cat ? 'bg-primary text-background-dark' : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-white/20'}`}
-                                >
-                                    {cat}
-                                </button>
-                            ))}
-                        </div>
                     </div>
                     {galleryImages.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">

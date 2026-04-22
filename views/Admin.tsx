@@ -582,6 +582,24 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                             </div>
 
                             <div className="grid gap-6">
+                                {/* Global Config / Status */}
+                                <div className="p-4 bg-primary/5 rounded-xl border border-primary/20">
+                                    <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-base">settings</span> Estado del Torneo
+                                    </h4>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-700">Activar Calendario y Competición</p>
+                                            <p className="text-xs text-slate-500">Muestra el calendario, resultados y clasificación al público.</p>
+                                        </div>
+                                        <button
+                                            onClick={() => onUpdateContent({ ...content, isScheduleActive: !content.isScheduleActive })}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${content.isScheduleActive ? 'bg-primary' : 'bg-slate-300'}`}
+                                        >
+                                            <span className={`${content.isScheduleActive ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
+                                        </button>
+                                    </div>
+                                </div>
                                 {/* Hero Section */}
                                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
                                     <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
@@ -637,6 +655,41 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                 type="text"
                                                 value={content.aboutImageUrl}
                                                 onChange={(e) => onUpdateContent({ ...content, aboutImageUrl: e.target.value })}
+                                                className="w-full border border-slate-300 rounded-lg px-3 py-2"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Tournament Info Section */}
+                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                    <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-base">sports_handball</span> Información del Torneo
+                                    </h4>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">Título Sección</label>
+                                            <input
+                                                type="text"
+                                                value={content.tournamentInfoTitle}
+                                                onChange={(e) => onUpdateContent({ ...content, tournamentInfoTitle: e.target.value })}
+                                                className="w-full border border-slate-300 rounded-lg px-3 py-2"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">Detalles (Categorías, Días, Límites)</label>
+                                            <textarea
+                                                value={content.tournamentInfoText}
+                                                onChange={(e) => onUpdateContent({ ...content, tournamentInfoText: e.target.value })}
+                                                className="w-full border border-slate-300 rounded-lg px-3 py-2 h-32"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">URL Imagen</label>
+                                            <input
+                                                type="text"
+                                                value={content.tournamentInfoImageUrl}
+                                                onChange={(e) => onUpdateContent({ ...content, tournamentInfoImageUrl: e.target.value })}
                                                 className="w-full border border-slate-300 rounded-lg px-3 py-2"
                                             />
                                         </div>
