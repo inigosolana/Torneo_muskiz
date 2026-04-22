@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Team, CategoryLimits } from '../types';
+import { StripeCheckout } from '../components/StripeCheckout';
 
 interface TeamEntry {
     id: string;
@@ -391,8 +392,8 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                 <h3 className="font-bold text-lg text-blue-900 dark:text-blue-100">Instrucciones de Pago ({totalFee}€)</h3>
                             </div>
 
-                            {/* Three payment options */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            {/* Payment options */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                                 {/* Transfer */}
                                 <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
                                     <div className="size-14 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
@@ -412,26 +413,17 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                         <span className="material-symbols-outlined text-3xl text-purple-600 dark:text-purple-400">credit_card</span>
                                     </div>
                                     <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago Seguro con Tarjeta</h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">Visa, Mastercard, Amex</p>
-                                    <a href="https://buy.stripe.com/PON_AQUI_TU_LINK" target="_blank" rel="noopener noreferrer"
-                                        className="mt-auto w-full inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold px-4 py-2.5 rounded-lg transition-colors">
-                                        <span className="material-symbols-outlined text-base">lock</span>
-                                        Pagar con Tarjeta
-                                    </a>
-                                </div>
-
-                                {/* PayPal */}
-                                <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
-                                    <div className="size-14 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center">
-                                        <span className="material-symbols-outlined text-3xl text-yellow-600 dark:text-yellow-400">account_balance_wallet</span>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 w-full mb-2">Stripe (Modo Prueba)</p>
+                                    <div className="w-full mt-auto">
+                                        <StripeCheckout 
+                                            amount={totalFee} 
+                                            onSuccess={() => {
+                                                const dummyReceipt = new File(["Stripe Payment Mock"], "stripe_payment_mock.pdf", { type: "application/pdf" });
+                                                setReceiptFile(dummyReceipt);
+                                                alert("¡Pago procesado en modo prueba! Ahora ya puedes completar la inscripción haciendo clic en el botón de abajo.");
+                                            }} 
+                                        />
                                     </div>
-                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago rápido</h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">PayPal</p>
-                                    <a href={`https://paypal.me/PON_AQUI_TU_USUARIO/${totalFee}`} target="_blank" rel="noopener noreferrer"
-                                        className="mt-auto w-full inline-flex items-center justify-center gap-2 bg-[#0070ba] hover:bg-[#005ea6] text-white text-sm font-bold px-4 py-2.5 rounded-lg transition-colors">
-                                        <span className="material-symbols-outlined text-base">send</span>
-                                        Pagar con PayPal
-                                    </a>
                                 </div>
                             </div>
 

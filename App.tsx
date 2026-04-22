@@ -61,13 +61,17 @@ const App: React.FC = () => {
 
     // Sponsors
     sponsors: [
-      { id: 's1', name: 'Ayuntamiento de Muskiz', logoUrl: 'apartment', tier: 'Platinum' },
-      { id: 's2', name: 'Petronor', logoUrl: 'energy_savings_leaf', tier: 'Platinum' },
-      { id: 's3', name: 'Caja Rural', logoUrl: 'account_balance', tier: 'Gold' },
-      { id: 's4', name: 'Euskaltel', logoUrl: 'wifi', tier: 'Gold' },
-      { id: 's5', name: 'Coca Cola', logoUrl: 'local_drink', tier: 'Gold' },
-      { id: 's6', name: 'Deportes Base', logoUrl: 'sports_soccer', tier: 'Silver' },
-      { id: 's7', name: 'Bar La Playa', logoUrl: 'restaurant', tier: 'Silver' },
+      { id: 's1', name: 'Ayuntamiento de Muskiz', logoUrl: '/patrocinadores/sanjuan.jpg', tier: 'Platinum' },
+      { id: 's2', name: 'Petronor', logoUrl: '/patrocinadores/petronor.jpg', tier: 'Platinum' },
+      { id: 's3', name: 'Lurpelan', logoUrl: '/patrocinadores/lurpelan.png', tier: 'Gold' },
+      { id: 's4', name: 'Artecarne', logoUrl: '/patrocinadores/artecarne.png', tier: 'Gold' },
+      { id: 's5', name: 'Garmendia', logoUrl: '/patrocinadores/garmendia.jpg', tier: 'Gold' },
+      { id: 's6', name: 'Sponsor 1', logoUrl: '/patrocinadores/sponsor1.jpg', tier: 'Silver' },
+      { id: 's7', name: 'Sponsor 2', logoUrl: '/patrocinadores/sponsor2.jpg', tier: 'Silver' },
+      { id: 's8', name: 'Sponsor 3', logoUrl: '/patrocinadores/sponsor3.jpg', tier: 'Silver' },
+      { id: 's9', name: 'Sponsor 4', logoUrl: '/patrocinadores/sponsor4.jpg', tier: 'Silver' },
+      { id: 's10', name: 'Sponsor 5', logoUrl: '/patrocinadores/sponsor5.png', tier: 'Silver' },
+      { id: 's11', name: 'Sponsor 6', logoUrl: '/patrocinadores/logo2.png', tier: 'Silver' },
     ],
 
     // Gallery
