@@ -55,7 +55,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
               </div>
               <div className="hidden sm:block">
                 <h1 className="text-xl font-bold tracking-tight uppercase leading-none text-white">II Torneo</h1>
-                <span className="text-xs font-medium text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors">Muskiz 2026</span>
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors">Muskizko Udala</span>
               </div>
             </div>
 
