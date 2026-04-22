@@ -11,18 +11,15 @@ export const Information: React.FC<InformationProps> = ({ content }) => {
             <div className="max-w-5xl mx-auto space-y-16">
 
                 {/* Header */}
-                <div className="text-center space-y-4">
-                    <h2 className="text-4xl md:text-6xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">
-                        Sobre El Torneo
+                <div className="text-center space-y-4 mb-12">
+                    <h2 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">
+                        Historia del Torneo y del Club
                     </h2>
                     <div className="h-1 w-24 bg-primary mx-auto rounded-full"></div>
-                    <p className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-                        Conoce la historia, la evolución y el espíritu que mueve el balonmano playa en Muskiz.
-                    </p>
                 </div>
 
                 {/* Section 1: History & Evolution */}
-                <div className="grid md:grid-cols-2 gap-12 items-center">
+                <div className="grid md:grid-cols-2 gap-12 items-center mb-16">
                     <div className="relative group">
                         <div className="absolute -inset-2 bg-gradient-to-r from-primary to-secondary rounded-2xl opacity-75 blur-lg group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
                         <div className="relative aspect-square rounded-xl overflow-hidden shadow-2xl">
@@ -59,8 +56,54 @@ export const Information: React.FC<InformationProps> = ({ content }) => {
                     </div>
                 </div>
 
-                {/* Section 2: The Venue (La Sede) */}
-                <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 md:p-12 shadow-xl border border-slate-200 dark:border-white/5 relative overflow-hidden">
+                {/* PART 2: INFORMACIÓN DEL TORNEO */}
+                <div className="text-center space-y-4 mt-24 mb-12">
+                    <h2 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">
+                        Información del Torneo
+                    </h2>
+                    <div className="h-1 w-24 bg-primary mx-auto rounded-full"></div>
+                </div>
+
+                {/* Section 2: Fechas y Categorías */}
+                <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 md:p-12 shadow-xl border border-slate-200 dark:border-white/5 mb-12">
+                    <h3 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3 mb-6">
+                        <span className="material-symbols-outlined text-primary text-4xl">calendar_month</span>
+                        Calendario y Categorías
+                    </h3>
+                    <p className="text-slate-600 dark:text-slate-300 mb-8 leading-relaxed">
+                        El torneo se disputará a lo largo del fin de semana. A continuación, el detalle de los días de juego y el límite de equipos por categoría:
+                    </p>
+
+                    <div className="grid md:grid-cols-3 gap-6">
+                        <div className="bg-slate-50 dark:bg-white/5 p-6 rounded-xl border border-slate-100 dark:border-white/10 hover:shadow-md transition-shadow">
+                            <h4 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Cadetes (M/F)</h4>
+                            <p className="text-primary font-bold mb-1">Viernes, 5 de Junio</p>
+                            <p className="text-sm text-slate-500 mb-4 flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">schedule</span> Por la tarde</p>
+                            <div className="inline-block bg-primary/10 text-primary px-3 py-1 rounded-full font-bold text-xs border border-primary/20">
+                                Max: 12 equipos
+                            </div>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-white/5 p-6 rounded-xl border border-slate-100 dark:border-white/10 hover:shadow-md transition-shadow">
+                            <h4 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Senior y Juvenil (M/F)</h4>
+                            <p className="text-primary font-bold mb-1">Sábado, 6 de Junio</p>
+                            <p className="text-sm text-slate-500 mb-4 flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">schedule</span> Todo el día</p>
+                            <div className="inline-block bg-primary/10 text-primary px-3 py-1 rounded-full font-bold text-xs border border-primary/20">
+                                Max: 8-12 equipos
+                            </div>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-white/5 p-6 rounded-xl border border-slate-100 dark:border-white/10 hover:shadow-md transition-shadow">
+                            <h4 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Infantil (M/F)</h4>
+                            <p className="text-primary font-bold mb-1">Domingo, 7 de Junio</p>
+                            <p className="text-sm text-slate-500 mb-4 flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">schedule</span> Por la mañana</p>
+                            <div className="inline-block bg-primary/10 text-primary px-3 py-1 rounded-full font-bold text-xs border border-primary/20">
+                                Max: 8 equipos
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Section 3: The Venue (La Sede) */}
+                <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 md:p-12 shadow-xl border border-slate-200 dark:border-white/5 relative overflow-hidden mb-12">
                     <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
                         <span className="material-symbols-outlined text-9xl">waves</span>
                     </div>
@@ -96,14 +139,14 @@ export const Information: React.FC<InformationProps> = ({ content }) => {
                     </div>
                 </div>
 
-                {/* Section 3: Player Rules */}
-                <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 md:p-12 shadow-xl border border-slate-200 dark:border-white/5">
+                {/* Section 4: Player Rules */}
+                <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 md:p-12 shadow-xl border border-slate-200 dark:border-white/5 mb-12">
                     <h3 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3 mb-6">
                         <span className="material-symbols-outlined text-primary text-4xl">groups</span>
                         Normativa de Jugadores
                     </h3>
                     <p className="text-slate-600 dark:text-slate-300 mb-8 leading-relaxed">
-                        Cada equipo deberá inscribir a sus jugadores antes del inicio del torneo. A continuación se detallan los límites por categoría:
+                        Cada equipo deberá inscribir a sus jugadores antes del inicio del torneo. A continuación se detallan los límites de jugadores que pueden participar por equipo en cada categoría:
                     </p>
 
                     <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-white/10">
@@ -111,8 +154,8 @@ export const Information: React.FC<InformationProps> = ({ content }) => {
                             <thead>
                                 <tr className="bg-slate-50 dark:bg-white/5">
                                     <th className="text-left px-6 py-3 font-bold text-xs uppercase text-slate-500">Categoría</th>
-                                    <th className="text-center px-6 py-3 font-bold text-xs uppercase text-slate-500">Mínimo</th>
-                                    <th className="text-center px-6 py-3 font-bold text-xs uppercase text-slate-500">Máximo</th>
+                                    <th className="text-center px-6 py-3 font-bold text-xs uppercase text-slate-500">Jugadores Mínimo</th>
+                                    <th className="text-center px-6 py-3 font-bold text-xs uppercase text-slate-500">Jugadores Máximo</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -141,17 +184,17 @@ export const Information: React.FC<InformationProps> = ({ content }) => {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
-                        <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 text-center">
+                        <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 text-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors">
                             <span className="material-symbols-outlined text-2xl text-primary mb-1">badge</span>
                             <p className="text-xs text-slate-500 font-bold uppercase">DNI obligatorio</p>
                             <p className="text-[10px] text-slate-400 mt-1">Cada jugador deberá presentar DNI o pasaporte</p>
                         </div>
-                        <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 text-center">
+                        <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 text-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors">
                             <span className="material-symbols-outlined text-2xl text-secondary mb-1">health_and_safety</span>
                             <p className="text-xs text-slate-500 font-bold uppercase">Seguro deportivo</p>
                             <p className="text-[10px] text-slate-400 mt-1">Licencia federativa o seguro privado vigente</p>
                         </div>
-                        <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 text-center">
+                        <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 text-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors">
                             <span className="material-symbols-outlined text-2xl text-red-500 mb-1">timer</span>
                             <p className="text-xs text-slate-500 font-bold uppercase">Plazo inscripción</p>
                             <p className="text-[10px] text-slate-400 mt-1">Hasta 48h antes del inicio del torneo</p>
