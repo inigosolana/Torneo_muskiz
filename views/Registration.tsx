@@ -26,33 +26,67 @@ const PRICES: Record<string, number> = {
 const RESERVATION_MINUTES = 15;
 
 export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, categoryLimits }) => {
+    const SESSION_KEY = 'reg_draft';
+
+    // Restore from sessionStorage on mount (if within 15 min window)
+    const loadDraft = () => {
+        try {
+            const raw = sessionStorage.getItem(SESSION_KEY);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch { return null; }
+    };
+    const draft = loadDraft();
+    const draftValid = draft?.reservationStart &&
+        (Date.now() - draft.reservationStart) < RESERVATION_MINUTES * 60 * 1000;
+
     // Manager info
-    const [managerName, setManagerName] = useState('');
-    const [managerEmail, setManagerEmail] = useState('');
-    const [password, setPassword] = useState('');
+    const [managerName, setManagerName] = useState(draftValid ? draft.managerName : '');
+    const [managerEmail, setManagerEmail] = useState(draftValid ? draft.managerEmail : '');
+    const [password, setPassword] = useState(draftValid ? draft.password : '');
 
     // Cart of teams to register
-    const [cart, setCart] = useState<TeamEntry[]>([]);
+    const [cart, setCart] = useState<TeamEntry[]>(draftValid ? draft.cart : []);
 
     // Form for adding a team to cart
-    const [newTeamName, setNewTeamName] = useState('');
-    const [newTeamCity, setNewTeamCity] = useState('');
-    const [selectedDivision, setSelectedDivision] = useState<string>('Senior Masculino');
+    const [newTeamName, setNewTeamName] = useState(draftValid ? draft.newTeamName : '');
+    const [newTeamCity, setNewTeamCity] = useState(draftValid ? draft.newTeamCity : '');
+    const [selectedDivision, setSelectedDivision] = useState<string>(draftValid ? draft.selectedDivision : 'Senior Masculino');
 
     // Payment method
-    const [selectedPayment, setSelectedPayment] = useState<'transfer' | 'stripe' | null>(null);
+    const [selectedPayment, setSelectedPayment] = useState<'transfer' | 'stripe' | null>(draftValid ? draft.selectedPayment : null);
 
-    // Receipt
+    // Receipt (files can't be serialized — cleared on reload)
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
     // Reservation timer
-    const [reservationStart, setReservationStart] = useState<number | null>(null);
-    const [timeLeft, setTimeLeft] = useState<number>(RESERVATION_MINUTES * 60);
+    const [reservationStart, setReservationStart] = useState<number | null>(draftValid ? draft.reservationStart : null);
+    const [timeLeft, setTimeLeft] = useState<number>(
+        draftValid
+            ? Math.max(0, RESERVATION_MINUTES * 60 - Math.floor((Date.now() - draft.reservationStart) / 1000))
+            : RESERVATION_MINUTES * 60
+    );
     const [expired, setExpired] = useState(false);
 
     // Completion state
     const [isCompleted, setIsCompleted] = useState(false);
     const [generatedCredentials, setGeneratedCredentials] = useState<{ email: string; password: string } | null>(null);
+
+    // Persist draft to sessionStorage whenever key fields change
+    useEffect(() => {
+        if (isCompleted || expired) {
+            sessionStorage.removeItem(SESSION_KEY);
+            return;
+        }
+        const data = {
+            managerName, managerEmail, password,
+            cart, newTeamName, newTeamCity,
+            selectedDivision, selectedPayment,
+            reservationStart,
+        };
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
+    }, [managerName, managerEmail, password, cart, newTeamName, newTeamCity,
+        selectedDivision, selectedPayment, reservationStart, isCompleted, expired]);
 
     // Timer effect
     useEffect(() => {
@@ -65,6 +99,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                 setCart([]);
                 setReservationStart(null);
                 setTimeLeft(0);
+                sessionStorage.removeItem(SESSION_KEY);
                 clearInterval(interval);
             } else {
                 setTimeLeft(remaining);
@@ -72,6 +107,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
         }, 1000);
         return () => clearInterval(interval);
     }, [reservationStart]);
+
 
     // Calculate occupied spots (registered teams + cart reservations)
     const getCounts = useCallback(() => {
@@ -168,6 +204,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
 
         const finalReceipt = receiptFile ?? new File(['stripe-payment'], 'stripe_payment.pdf', { type: 'application/pdf' });
         onRegister(newTeams, finalReceipt);
+        sessionStorage.removeItem('reg_draft');
         setIsCompleted(true);
         setGeneratedCredentials({ email: managerEmail, password: password });
     };
