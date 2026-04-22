@@ -20,13 +20,9 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
 
     // Manual Entry States
     const [showManualModal, setShowManualModal] = useState(false);
-    const [manualForm, setManualForm] = useState({
-        name: '',
-        surnames: '',
-        dniNumber: '',
-        birthDate: '',
         number: '',
-        position: 'Universal'
+        position: 'Universal',
+        role: 'PLAYER' as 'PLAYER' | 'COACH' | 'OFFICIAL'
     });
 
     const selectedTeam = teams.find(t => t.id === selectedTeamId);
@@ -81,14 +77,35 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
     const isSenior = selectedTeam.division.startsWith('Senior');
     const maxPlayers = isSenior ? 12 : 14;
     const minPlayers = 6;
-    const currentPlayerCount = selectedTeam.players.length;
+    const currentPlayerCount = selectedTeam.players.filter(p => p.role === 'PLAYER').length;
     const canAddPlayer = currentPlayerCount < maxPlayers;
+    const hasCoach = selectedTeam.players.some(p => p.role === 'COACH');
+    const hasOfficial = selectedTeam.players.some(p => p.role === 'OFFICIAL');
+    const canAddStaff = !hasCoach || !hasOfficial;
+    const canAddMore = canAddPlayer || canAddStaff;
 
     const handleAddPlayer = (newPlayer: Player) => {
-        if (!canAddPlayer) {
+        if (newPlayer.role === 'PLAYER' && !canAddPlayer) {
             toast.error(`Límite alcanzado: máximo ${maxPlayers} jugadores para ${selectedTeam.division}.`);
             return;
         }
+
+        if (newPlayer.role === 'COACH') {
+            const hasCoach = selectedTeam.players.some(p => p.role === 'COACH');
+            if (hasCoach) {
+                toast.error("Ya existe un entrenador registrado para este equipo.");
+                return;
+            }
+        }
+
+        if (newPlayer.role === 'OFFICIAL') {
+            const hasOfficial = selectedTeam.players.some(p => p.role === 'OFFICIAL');
+            if (hasOfficial) {
+                toast.error("Ya existe un oficial registrado para este equipo.");
+                return;
+            }
+        }
+
         onUpdateTeam({
             ...selectedTeam,
             players: [...selectedTeam.players, newPlayer]
@@ -105,8 +122,9 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
             surnames: manualForm.surnames,
             dniNumber: manualForm.dniNumber,
             birthDate: manualForm.birthDate,
-            number: parseInt(manualForm.number),
+            number: parseInt(manualForm.number) || 0,
             position: manualForm.position,
+            role: manualForm.role,
             verified: false,
             dniStatus: 'EMPTY',
             insuranceStatus: 'EMPTY'
@@ -118,7 +136,8 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
             dniNumber: '',
             birthDate: '',
             number: '',
-            position: 'Universal'
+            position: 'Universal',
+            role: 'PLAYER'
         });
         setShowManualModal(false);
     };
@@ -162,6 +181,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                             birthDate: dob?.trim(),
                             number: parseInt(numStr) || 0,
                             position: pos?.trim() || 'Universal',
+                            role: 'PLAYER',
                             verified: false,
                             dniStatus: 'EMPTY',
                             insuranceStatus: 'EMPTY'
@@ -197,6 +217,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                     id: Date.now().toString(),
                     name: data.name,
                     number: data.number || 0,
+                    role: 'PLAYER',
                     verified: false,
                     dniStatus: 'EMPTY',
                     insuranceStatus: 'EMPTY'
@@ -442,28 +463,34 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                                                         {player.avatarUrl ? <img src={player.avatarUrl} alt={player.name} /> : <div className="h-full w-full flex items-center justify-center"><span className="material-symbols-outlined text-slate-400">person</span></div>}
                                                     </div>
                                                     <div>
-                                                        <p className="font-bold text-slate-800 dark:text-white">{player.name}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-bold text-slate-800 dark:text-white">{player.name}</p>
+                                                            {player.role === 'COACH' && <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-black uppercase">Entrenador</span>}
+                                                            {player.role === 'OFFICIAL' && <span className="bg-purple-100 text-purple-700 text-[10px] px-2 py-0.5 rounded-full font-black uppercase">Oficial</span>}
+                                                        </div>
                                                         <div className="flex gap-2 text-xs text-slate-500 font-mono mt-1">
-                                                            <span className="bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">#{player.number}</span>
-                                                            <span className="bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">{player.position || 'Universal'}</span>
+                                                            {player.role === 'PLAYER' && <span className="bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">#{player.number}</span>}
+                                                            <span className="bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">{player.role === 'PLAYER' ? (player.position || 'Universal') : player.role}</span>
                                                         </div>
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-4 w-full sm:w-auto justify-end">
-                                                    <div className="flex flex-col items-center gap-1">
+                                                     <div className="flex flex-col items-center gap-1">
                                                         <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.dniStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
                                                             {getStatusBadge(player.dniStatus)}
                                                             <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'dni')} disabled={player.dniStatus === 'APPROVED' || player.dniStatus === 'PENDING'} />
                                                         </label>
                                                         <span className="text-[10px] font-bold text-slate-400 uppercase">DNI</span>
                                                     </div>
-                                                    <div className="flex flex-col items-center gap-1">
-                                                        <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.insuranceStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
-                                                            {getStatusBadge(player.insuranceStatus)}
-                                                            <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'insurance')} disabled={player.insuranceStatus === 'APPROVED' || player.insuranceStatus === 'PENDING'} />
-                                                        </label>
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Seguro</span>
-                                                    </div>
+                                                    {player.role === 'PLAYER' && (
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.insuranceStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
+                                                                {getStatusBadge(player.insuranceStatus)}
+                                                                <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'insurance')} disabled={player.insuranceStatus === 'APPROVED' || player.insuranceStatus === 'PENDING'} />
+                                                            </label>
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase">Seguro</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -471,7 +498,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                                 </div>
 
                                 {/* Add Player Actions Grid */}
-                                {canAddPlayer ? (
+                                {canAddMore ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                                         {/* AI Scan Option */}
                                         <div className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center transition-colors cursor-pointer relative ${isAnalyzing ? 'border-primary bg-primary/5' : 'border-slate-300 dark:border-slate-700 hover:border-primary hover:bg-slate-50 dark:hover:bg-white/5'}`}>
@@ -595,17 +622,32 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Dorsal</label>
-                                    <input
-                                        type="number"
-                                        required
-                                        value={manualForm.number}
-                                        onChange={e => setManualForm({ ...manualForm, number: e.target.value })}
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Rol / Función</label>
+                                    <select
+                                        value={manualForm.role}
+                                        onChange={e => setManualForm({ ...manualForm, role: e.target.value as any })}
                                         className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2"
-                                    />
+                                    >
+                                        <option value="PLAYER">Jugador</option>
+                                        <option value="COACH">Entrenador (Máx 1)</option>
+                                        <option value="OFFICIAL">Oficial (Máx 1)</option>
+                                    </select>
                                 </div>
+                                {manualForm.role === 'PLAYER' && (
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Dorsal</label>
+                                        <input
+                                            type="number"
+                                            required
+                                            value={manualForm.number}
+                                            onChange={e => setManualForm({ ...manualForm, number: e.target.value })}
+                                            className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2"
+                                        />
+                                    </div>
+                                )}
+                            </div>
                                 <div className="col-span-2">
                                     <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Posición</label>
                                     <select

@@ -52,6 +52,7 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
                 birthDate: form.birthDate,
                 number: parseInt(form.number),
                 position: form.position,
+                role: 'PLAYER',
                 signatureUrl: sigCanvas.current?.isEmpty() ? undefined : sigCanvas.current?.getTrimmedCanvas().toDataURL('image/png'),
                 verified: false,
                 dniUrl: form.dniUrl,

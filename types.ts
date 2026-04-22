@@ -109,6 +109,7 @@ export interface Player {
   number: number;
   verified: boolean;
   position?: string; // Playing position (Portero, etc.)
+  role: 'PLAYER' | 'COACH' | 'OFFICIAL';
   avatarUrl?: string;
   dniUrl?: string;
   signatureUrl?: string; // Evidence of electronic signature
