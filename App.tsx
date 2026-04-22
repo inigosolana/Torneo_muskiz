@@ -180,9 +180,15 @@ const App: React.FC = () => {
 
   // Functions to modify state
   const addTeams = async (newTeams: Team[], receiptFile?: File) => {
-    const savedTeams = await teamService.registerTeams(newTeams, receiptFile);
-    if (savedTeams.length > 0) {
-      setTeams(prev => [...prev, ...savedTeams]);
+    try {
+      const savedTeams = await teamService.registerTeams(newTeams, receiptFile);
+      if (savedTeams.length > 0) {
+        setTeams(prev => [...prev, ...savedTeams]);
+        toast.success('Equipos registrados correctamente');
+      }
+    } catch (error: any) {
+      console.error('Error registrando equipos:', error);
+      toast.error(error.message || 'Error al registrar los equipos. Revisa los permisos.');
     }
   };
 
