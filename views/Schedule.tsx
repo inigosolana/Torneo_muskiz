@@ -121,8 +121,9 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, content }) =
                                 </div>
 
                                 {infoSubTab === 'general' ? (
-                                    <div className="animate-in slide-in-from-left-4 fade-in duration-300 space-y-12">
-                                        {/* Horarios Section (Keep existing as it's useful here) */}
+                                    <div className="animate-in slide-in-from-left-4 fade-in duration-300 space-y-8">
+
+                                        {/* Horarios */}
                                         <div className="bg-primary/5 border-l-4 border-primary p-6 rounded-r-lg">
                                             <h4 className="font-bold flex items-center gap-2 mb-2 text-slate-900 dark:text-white uppercase text-xs tracking-widest">
                                                 <span className="material-symbols-outlined text-primary">schedule</span> Horarios del Fin de Semana
@@ -133,11 +134,129 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, content }) =
                                                 <div className="flex items-center gap-2">Domingo: 09:00 - 15:00</div>
                                             </div>
                                         </div>
+
+                                        {/* Normativa de Jugadores */}
+                                        <div>
+                                            <h3 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3 mb-6">
+                                                <span className="material-symbols-outlined text-primary text-3xl">groups</span>
+                                                Normativa de Jugadores
+                                            </h3>
+                                            <div className="grid lg:grid-cols-3 gap-8">
+                                                <div className="lg:col-span-2">
+                                                    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-white/10">
+                                                        <table className="w-full text-sm">
+                                                            <thead>
+                                                                <tr className="bg-slate-50 dark:bg-white/5">
+                                                                    <th className="text-left px-6 py-4 font-bold text-xs uppercase text-slate-500">Categoría</th>
+                                                                    <th className="text-center px-6 py-4 font-bold text-xs uppercase text-slate-500">Mínimo</th>
+                                                                    <th className="text-center px-6 py-4 font-bold text-xs uppercase text-slate-500">Máximo</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-700 dark:text-slate-200">
+                                                                {[
+                                                                    { cat: 'Senior (M/F)', min: 6, max: 12 },
+                                                                    { cat: 'Juvenil (M/F)', min: 6, max: 14 },
+                                                                    { cat: 'Cadete (M/F)', min: 6, max: 14 },
+                                                                    { cat: 'Infantil (M/F)', min: 6, max: 14 },
+                                                                ].map((row, i) => (
+                                                                    <tr key={i} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                                                        <td className="px-6 py-4 font-medium">{row.cat}</td>
+                                                                        <td className="px-6 py-4 text-center font-bold text-primary">{row.min}</td>
+                                                                        <td className="px-6 py-4 text-center font-bold text-primary">{row.max}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-4">
+                                                    <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-5 border border-slate-100 dark:border-white/5">
+                                                        <div className="flex items-center gap-3 mb-2">
+                                                            <span className="material-symbols-outlined text-primary">badge</span>
+                                                            <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">DNI Obligatorio</h4>
+                                                        </div>
+                                                        <p className="text-xs text-slate-500 leading-relaxed">Es imprescindible subir una copia del DNI de todos los participantes para el seguro deportivo.</p>
+                                                    </div>
+                                                    <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-5 border border-slate-100 dark:border-white/5">
+                                                        <div className="flex items-center gap-3 mb-2">
+                                                            <span className="material-symbols-outlined text-secondary">health_and_safety</span>
+                                                            <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">Seguro Deportivo</h4>
+                                                        </div>
+                                                        <p className="text-xs text-slate-500 leading-relaxed">Todos los jugadores inscritos están cubiertos por el seguro de accidentes del torneo.</p>
+                                                    </div>
+                                                    <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-5 border border-slate-100 dark:border-white/5">
+                                                        <div className="flex items-center gap-3 mb-2">
+                                                            <span className="material-symbols-outlined text-red-500">event_busy</span>
+                                                            <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">Límites de Inscripción</h4>
+                                                        </div>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-400"><span className="font-bold text-slate-900 dark:text-white">Equipos:</span> 31 de Mayo</p>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1"><span className="font-bold text-slate-900 dark:text-white">Jugadores:</span> 3 de Junio</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
+
                                 ) : (
-                                    <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
-                                        <h3 className="text-2xl font-black text-slate-900 dark:text-white">Reglamento</h3>
-                                        <p className="text-slate-600 dark:text-slate-300">Partidos al mejor de 2 sets de 10 minutos. Goles espectaculares valen doble.</p>
+                                    <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-right-4 fade-in duration-300">
+                                        <h3 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+                                            <span className="material-symbols-outlined text-primary text-3xl">rule</span>
+                                            Reglamento de Competición
+                                        </h3>
+
+                                        <div className="grid md:grid-cols-2 gap-6">
+                                            {/* Fase de Grupos */}
+                                            <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 space-y-3">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <div className="size-10 rounded-full bg-primary/20 flex items-center justify-center">
+                                                        <span className="material-symbols-outlined text-primary">groups</span>
+                                                    </div>
+                                                    <h4 className="font-bold text-slate-900 dark:text-white uppercase text-sm tracking-wider">Fase de Grupos</h4>
+                                                </div>
+                                                <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Todos los equipos juegan en grupos</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span><strong>Mínimo 3 partidos garantizados</strong> por equipo</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Los mejores de cada grupo pasan a eliminatorias</li>
+                                                </ul>
+                                            </div>
+
+                                            {/* Fase Eliminatoria */}
+                                            <div className="bg-secondary/5 border border-secondary/20 rounded-2xl p-6 space-y-3">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <div className="size-10 rounded-full bg-secondary/20 flex items-center justify-center">
+                                                        <span className="material-symbols-outlined text-secondary">emoji_events</span>
+                                                    </div>
+                                                    <h4 className="font-bold text-slate-900 dark:text-white uppercase text-sm tracking-wider">Fase Eliminatoria</h4>
+                                                </div>
+                                                <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-secondary text-base mt-0.5">check_circle</span>Sistema de eliminación directa</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-secondary text-base mt-0.5">check_circle</span>Cuartos, semifinales y final</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-secondary text-base mt-0.5">check_circle</span>Partido por el tercer y cuarto puesto</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        {/* Formato de partido */}
+                                        <div className="bg-white dark:bg-surface-dark rounded-2xl p-6 border border-slate-200 dark:border-white/10">
+                                            <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest mb-4 flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-primary">timer</span>
+                                                Formato de Partido
+                                            </h4>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                                                <div className="text-center bg-slate-50 dark:bg-white/5 rounded-xl p-4">
+                                                    <span className="block text-2xl font-black text-primary">2</span>
+                                                    <span className="text-xs text-slate-500 uppercase font-bold">Sets</span>
+                                                </div>
+                                                <div className="text-center bg-slate-50 dark:bg-white/5 rounded-xl p-4">
+                                                    <span className="block text-2xl font-black text-primary">10'</span>
+                                                    <span className="text-xs text-slate-500 uppercase font-bold">Por Set</span>
+                                                </div>
+                                                <div className="text-center bg-slate-50 dark:bg-white/5 rounded-xl p-4 col-span-2 sm:col-span-1">
+                                                    <span className="block text-2xl font-black text-secondary">×2</span>
+                                                    <span className="text-xs text-slate-500 uppercase font-bold">Goles Espectaculares</span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
