@@ -162,37 +162,45 @@ export const Information: React.FC<InformationProps> = ({ content }) => {
                 {/* Section 3: Social Media & Community */}
                 <div className="text-center space-y-8">
                     <h3 className="text-2xl font-bold text-slate-900 dark:text-white">Únete a la Comunidad</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {/* Instagram */}
-                        <a href={content.socials.instagram.url} className="group bg-[#E1306C]/10 hover:bg-[#E1306C] p-6 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 border border-[#E1306C]/20">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                        {/* Instagram Kolosaurios */}
+                        <a href={content.socials.instagramKolosaurios.url} target="_blank" rel="noopener noreferrer" className="group bg-[#E1306C]/10 hover:bg-[#E1306C] p-6 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 border border-[#E1306C]/20">
                             <span className="material-symbols-outlined text-4xl text-[#E1306C] group-hover:text-white transition-colors">photo_camera</span>
-                            <div className="text-[#E1306C] group-hover:text-white font-bold">
-                                <span className="block text-sm uppercase tracking-wider">Instagram</span>
-                                <span className="text-lg">{content.socials.instagram.handle}</span>
+                            <div className="text-[#E1306C] group-hover:text-white font-bold text-center">
+                                <span className="block text-sm uppercase tracking-wider">Ig Kolosaurios</span>
+                                <span className="text-sm">{content.socials.instagramKolosaurios.handle}</span>
                             </div>
                         </a>
-                        {/* Twitter */}
-                        <a href={content.socials.twitter.url} className="group bg-[#1DA1F2]/10 hover:bg-[#1DA1F2] p-6 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 border border-[#1DA1F2]/20">
-                            <span className="material-symbols-outlined text-4xl text-[#1DA1F2] group-hover:text-white transition-colors">alternate_email</span>
-                            <div className="text-[#1DA1F2] group-hover:text-white font-bold">
-                                <span className="block text-sm uppercase tracking-wider">Twitter</span>
-                                <span className="text-lg">{content.socials.twitter.handle}</span>
+                        {/* Instagram Muskiz */}
+                        <a href={content.socials.instagramMuskiz.url} target="_blank" rel="noopener noreferrer" className="group bg-[#E1306C]/10 hover:bg-[#E1306C] p-6 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 border border-[#E1306C]/20">
+                            <span className="material-symbols-outlined text-4xl text-[#E1306C] group-hover:text-white transition-colors">photo_camera</span>
+                            <div className="text-[#E1306C] group-hover:text-white font-bold text-center">
+                                <span className="block text-sm uppercase tracking-wider">Ig Muskiz</span>
+                                <span className="text-sm">{content.socials.instagramMuskiz.handle}</span>
                             </div>
                         </a>
-                        {/* TikTok */}
-                        <a href={content.socials.tiktok.url} className="group bg-[#000000]/10 hover:bg-[#000000] dark:bg-white/5 dark:hover:bg-white p-6 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 border border-slate-400/20">
+                        {/* TikTok Kolosaurios */}
+                        <a href={content.socials.tiktok.url} target="_blank" rel="noopener noreferrer" className="group bg-[#000000]/10 hover:bg-[#000000] dark:bg-white/5 dark:hover:bg-white p-6 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 border border-slate-400/20">
                             <span className="material-symbols-outlined text-4xl text-slate-900 dark:text-white group-hover:text-white dark:group-hover:text-black transition-colors">music_note</span>
-                            <div className="text-slate-900 dark:text-white group-hover:text-white dark:group-hover:text-black font-bold">
-                                <span className="block text-sm uppercase tracking-wider">TikTok</span>
-                                <span className="text-lg">{content.socials.tiktok.handle}</span>
+                            <div className="text-slate-900 dark:text-white group-hover:text-white dark:group-hover:text-black font-bold text-center">
+                                <span className="block text-sm uppercase tracking-wider">TikTok Kolos</span>
+                                <span className="text-sm">{content.socials.tiktok.handle}</span>
                             </div>
                         </a>
                         {/* YouTube */}
-                        <a href={content.socials.youtube.url} className="group bg-[#FF0000]/10 hover:bg-[#FF0000] p-6 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 border border-[#FF0000]/20">
+                        <a href={content.socials.youtube.url} target="_blank" rel="noopener noreferrer" className="group bg-[#FF0000]/10 hover:bg-[#FF0000] p-6 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 border border-[#FF0000]/20">
                             <span className="material-symbols-outlined text-4xl text-[#FF0000] group-hover:text-white transition-colors">smart_display</span>
-                            <div className="text-[#FF0000] group-hover:text-white font-bold">
+                            <div className="text-[#FF0000] group-hover:text-white font-bold text-center">
                                 <span className="block text-sm uppercase tracking-wider">YouTube</span>
-                                <span className="text-lg">{content.socials.youtube.handle}</span>
+                                <span className="text-sm">{content.socials.youtube.handle}</span>
+                            </div>
+                        </a>
+                        {/* Website Muskiz */}
+                        <a href={content.socials.website.url} target="_blank" rel="noopener noreferrer" className="group bg-primary/10 hover:bg-primary p-6 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 border border-primary/20">
+                            <span className="material-symbols-outlined text-4xl text-primary group-hover:text-background-dark transition-colors">language</span>
+                            <div className="text-primary group-hover:text-background-dark font-bold text-center">
+                                <span className="block text-sm uppercase tracking-wider">Web Muskiz</span>
+                                <span className="text-sm">{content.socials.website.handle}</span>
                             </div>
                         </a>
                     </div>

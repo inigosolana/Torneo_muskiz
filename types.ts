@@ -51,10 +51,11 @@ export interface SiteContent {
   // Information Page - Venue & Socials
   venue: VenueInfo;
   socials: {
-    instagram: SocialConfig;
-    twitter: SocialConfig;
+    instagramKolosaurios: SocialConfig;
+    instagramMuskiz: SocialConfig;
     tiktok: SocialConfig;
     youtube: SocialConfig;
+    website: SocialConfig;
   };
 
   contactEmail: string;

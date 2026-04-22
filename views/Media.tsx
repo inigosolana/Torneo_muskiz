@@ -25,7 +25,7 @@ export const Media: React.FC<MediaProps> = ({ content }) => {
                         <p className="text-slate-500">Revive los mejores momentos de ediciones anteriores.</p>
                     </div>
                     <div className="flex gap-2 bg-slate-100 dark:bg-white/5 p-1 rounded-lg">
-                        {[2025, 2024, 2023].map(year => (
+                        {[2025].map(year => (
                             <button
                                 key={year}
                                 onClick={() => setSelectedYear(year)}
@@ -41,7 +41,7 @@ export const Media: React.FC<MediaProps> = ({ content }) => {
                 <div className="mb-16">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span className="material-symbols-outlined text-secondary">movie</span> Video Resumen {selectedYear}
+                            <span className="material-symbols-outlined text-secondary">movie</span> Videos {selectedYear}
                         </h3>
                         <button
                             onClick={() => setShowGenerator(true)}
@@ -50,16 +50,39 @@ export const Media: React.FC<MediaProps> = ({ content }) => {
                             <span className="material-symbols-outlined">auto_awesome</span> Crear Highlight IA
                         </button>
                     </div>
-                    <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group cursor-pointer">
-                        <img src={`https://picsum.photos/1200/675?random=${selectedYear}`} className="w-full h-full object-cover opacity-80 group-hover:opacity-60 transition-opacity" alt="Video cover" />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="size-20 bg-primary/90 rounded-full flex items-center justify-center text-background-dark shadow-xl group-hover:scale-110 transition-transform">
-                                <span className="material-symbols-outlined text-4xl filled-icon">play_arrow</span>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Promo Video */}
+                        <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group cursor-pointer border border-slate-200 dark:border-white/10">
+                            <video
+                                autoPlay
+                                muted
+                                loop
+                                playsInline
+                                className="w-full h-full object-cover"
+                            >
+                                <source src="/promo.mp4" type="video/mp4" />
+                            </video>
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="size-16 bg-primary/90 rounded-full flex items-center justify-center text-background-dark shadow-xl scale-90 group-hover:scale-100 transition-transform">
+                                    <span className="material-symbols-outlined text-3xl filled-icon">play_arrow</span>
+                                </div>
+                            </div>
+                            <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
+                                <h4 className="text-white font-bold text-lg">Aftermovie Oficial {selectedYear}</h4>
+                                <p className="text-slate-300 text-xs">Los mejores momentos del torneo.</p>
                             </div>
                         </div>
-                        <div className="absolute bottom-0 left-0 w-full p-8 bg-gradient-to-t from-black/80 to-transparent">
-                            <h4 className="text-white font-bold text-xl">Aftermovie Oficial {selectedYear}</h4>
-                            <p className="text-slate-300 text-sm">Los mejores momentos del fin de semana en 2 minutos.</p>
+
+                        {/* YouTube Video */}
+                        <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-white/10">
+                            <iframe 
+                                className="w-full h-full" 
+                                src="https://www.youtube.com/embed/WYdXqvHMfSQ" 
+                                title="Torneo Video YouTube" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowFullScreen
+                            ></iframe>
                         </div>
                     </div>
                 </div>

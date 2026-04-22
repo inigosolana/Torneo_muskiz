@@ -24,13 +24,13 @@ const App: React.FC = () => {
 
   // --- Dynamic Site Content (CMS) ---
   const [siteContent, setSiteContent] = useState<SiteContent>({
-    heroTitle: "Torneo Muskizko Udala 2026",
+    heroTitle: "II Torneo Balonmano Playa Muskiz 2026",
     heroSubtitle: "El evento principal de balonmano playa en Muskiz. Vive la adrenalina, la arena y la gloria en nuestra costa.",
 
     // History
     aboutTitle: "Sobre el Torneo",
     aboutText: "Tras el éxito del I Torneo Muskizko Udala celebrado el año pasado, volvemos con más fuerza. Este torneo está organizado por Kolosaurios, un club creado en 2022 por jugadores apasionados del Muskiz Eskubaloia. Conjuntamente con el propio Muskiz Eskubaloia y el apoyo fundamental del Ayuntamiento de Muskiz, hemos hecho realidad esta segunda edición.\n\nNuestro objetivo sigue siendo el mismo: disfrutar del mejor balonmano en un entorno inmejorable. Contamos con equipos que vienen desde todos los rincones del norte de España, abarcando todas las categorías desde Benjamín hasta Senior, garantizando un fin de semana lleno de deporte, competición y buen ambiente.",
-    aboutImageUrl: "https://picsum.photos/800/800?grayscale",
+    aboutImageUrl: "/kolosaurios.jpg",
     aboutStats: [
       { value: "2022", label: "Fundación Kolosaurios" },
       { value: "Norte", label: "Equipos de toda la zona" },
@@ -41,7 +41,7 @@ const App: React.FC = () => {
     venue: {
       title: "La Sede: Playa de La Arena",
       description: "Situada en un entorno natural privilegiado, la Playa de La Arena ofrece las condiciones perfectas para la práctica del balonmano playa. Su arena fina y compacta permite un juego rápido y espectacular.",
-      imageUrl: "https://picsum.photos/800/600?nature",
+      imageUrl: "/la_arena.jpg",
       features: [
         "Orientación perfecta para el sol",
         "Más de 2000 plazas de aparcamiento",
@@ -51,17 +51,18 @@ const App: React.FC = () => {
 
     // Socials
     socials: {
-      instagram: { handle: "@muskizbeach", url: "#" },
-      twitter: { handle: "@MuskizTorneo", url: "#" },
-      tiktok: { handle: "@handball_muskiz", url: "#" },
-      youtube: { handle: "Canal Oficial", url: "#" }
+      instagramKolosaurios: { handle: "@kolosaurios_muskiz", url: "https://www.instagram.com/kolosaurios_muskiz/" },
+      instagramMuskiz: { handle: "@muskiz_eskubaloia", url: "https://www.instagram.com/muskiz_eskubaloia/" },
+      tiktok: { handle: "@kolosaurios_muskiz", url: "https://www.tiktok.com/@kolosaurios_muskiz?lang=es" },
+      youtube: { handle: "@KolosauriosMuskiz", url: "https://www.youtube.com/@KolosauriosMuskiz" },
+      website: { handle: "balonmanomuskiz.com", url: "https://www.balonmanomuskiz.com/" }
     },
 
     contactEmail: "torneo@muskiz.com",
 
     // Sponsors
     sponsors: [
-      { id: 's1', name: 'Ayuntamiento de Muskiz', logoUrl: '/patrocinadores/sanjuan.jpg', tier: 'Platinum' },
+      { id: 's1', name: 'Ayuntamiento de Muskiz', logoUrl: '/patrocinadores/muskizko_udala.png', tier: 'Platinum' },
       { id: 's2', name: 'Petronor', logoUrl: '/patrocinadores/petronor.jpg', tier: 'Platinum' },
       { id: 's3', name: 'Lurpelan', logoUrl: '/patrocinadores/lurpelan.png', tier: 'Gold' },
       { id: 's4', name: 'Artecarne', logoUrl: '/patrocinadores/artecarne.png', tier: 'Gold' },
@@ -72,6 +73,7 @@ const App: React.FC = () => {
       { id: 's9', name: 'Sponsor 4', logoUrl: '/patrocinadores/sponsor4.jpg', tier: 'Silver' },
       { id: 's10', name: 'Sponsor 5', logoUrl: '/patrocinadores/sponsor5.png', tier: 'Silver' },
       { id: 's11', name: 'Sponsor 6', logoUrl: '/patrocinadores/logo2.png', tier: 'Silver' },
+      { id: 's12', name: 'San Juan', logoUrl: '/patrocinadores/sanjuan.jpg', tier: 'Silver' },
     ],
 
     // Gallery

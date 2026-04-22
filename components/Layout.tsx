@@ -46,15 +46,16 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
           <div className="flex items-center justify-between h-20">
             {/* Logo */}
             <div
-              className="flex items-center gap-3 cursor-pointer group"
+              className="flex items-center gap-4 cursor-pointer group"
               onClick={() => onNavigate(View.HOME)}
             >
-              <div className="flex items-center justify-center size-10 rounded-lg bg-primary text-background-dark group-hover:bg-white transition-colors">
-                <span className="material-symbols-outlined text-2xl">sports_handball</span>
+              <div className="flex items-center gap-2">
+                <img src="/logo_muskiz.png" alt="Muskiz Eskubaloia" className="h-10 w-auto object-contain transition-transform group-hover:scale-105" />
+                <img src="/logo_kolosaurios.png" alt="Kolosaurios" className="h-10 w-auto object-contain transition-transform group-hover:scale-105" />
               </div>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight uppercase leading-none">Muskizko Udala</h1>
-                <span className="text-xs font-medium text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors">Torneo 2026</span>
+              <div className="hidden sm:block">
+                <h1 className="text-xl font-bold tracking-tight uppercase leading-none text-white">II Torneo</h1>
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors">Muskiz 2026</span>
               </div>
             </div>
 

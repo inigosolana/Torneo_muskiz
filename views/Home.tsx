@@ -84,102 +84,39 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
               </div>
             </div>
 
-            {/* Live Dashboard Widget */}
+            {/* Inscription Widget */}
             <div className="xl:col-span-5 w-full">
-              {/* Simplified or existing widget */}
-              <div className="bg-surface-dark/40 backdrop-blur-xl border border-white/10 rounded-2xl p-1 shadow-2xl">
-                {/* ... (keeping original widget content shortened for brevity in thought, but full in implementation) */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                  <h3 className="text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary text-lg">analytics</span>
-                    Estado del Torneo
-                  </h3>
-                  <span className="text-xs text-slate-400 font-mono">ACTUALIZADO: AHORA</span>
+              <div className="bg-surface-dark/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col items-center justify-center text-center h-full min-h-[300px]">
+                <div className="size-20 rounded-full bg-primary/20 flex items-center justify-center mb-6">
+                  <span className="material-symbols-outlined text-primary text-5xl">how_to_reg</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 p-1">
-                  <div className="col-span-1 sm:col-span-2 bg-surface-dark/60 rounded-xl p-4 border border-white/5 hover:border-primary/50 transition-colors group cursor-pointer" onClick={() => onNavigate(View.ADMIN)}>
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
-                      <span className="text-xs text-slate-400">Cuartos de Final (M)</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex flex-col items-center">
-                        <div className="size-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-bold border border-slate-500 mb-1">MU</div>
-                        <span className="text-xs font-bold text-slate-300">MUSKIZ</span>
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <span className="text-3xl font-black text-primary tracking-widest">18:14</span>
-                        <span className="text-[10px] text-slate-400 uppercase tracking-widest">2do Periodo</span>
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <div className="size-10 rounded-full bg-white flex items-center justify-center text-slate-900 font-bold border border-slate-300 mb-1">BI</div>
-                        <span className="text-xs font-bold text-slate-300">BILBAO</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-surface-dark/60 rounded-xl p-4 border border-white/5 flex flex-col justify-between">
-                    <div className="flex items-center gap-2 mb-2 text-primary">
-                      <span className="material-symbols-outlined text-lg">wb_sunny</span>
-                      <span className="text-xs font-bold uppercase">Playa</span>
-                    </div>
-                    <div>
-                      <p className="text-3xl font-bold text-white">24°C</p>
-                      <p className="text-slate-400 text-xs">Despejado</p>
-                    </div>
-                  </div>
-                  <div className="bg-surface-dark/60 rounded-xl p-4 border border-white/5 flex flex-col justify-between">
-                    <div className="flex items-center gap-2 mb-2 text-secondary">
-                      <span className="material-symbols-outlined text-lg">schedule</span>
-                      <span className="text-xs font-bold uppercase">Siguiente</span>
-                    </div>
-                    <div>
-                      <p className="text-white font-bold text-sm truncate">Semi-Finales: Femenino</p>
-                      <div className="mt-2 text-xl font-mono text-white font-bold">16:30</div>
-                    </div>
-                  </div>
-                </div>
+                <h3 className="text-3xl font-black text-white uppercase tracking-tight mb-2">
+                  Inscripciones Abiertas
+                </h3>
+                <p className="text-slate-400 mb-8 max-w-sm">
+                  Asegura la plaza de tu equipo para la segunda edición del torneo antes de que se agoten.
+                </p>
+                <button
+                  onClick={() => onNavigate(View.REGISTRATION)}
+                  className="bg-primary hover:bg-primary-dark text-background-dark px-10 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(13,242,242,0.3)] w-full sm:w-auto"
+                >
+                  ¡Inscribirse Ahora!
+                </button>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Past Memories Upload Section */}
+      {/* Campos Section */}
       <section className="py-12 bg-white dark:bg-surface-dark border-b border-slate-200 dark:border-white/5">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center gap-8 bg-slate-50 dark:bg-white/5 p-8 rounded-2xl border border-dashed border-slate-300 dark:border-white/10">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="material-symbols-outlined text-3xl text-secondary">history_edu</span>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">Muro de la Fama</h3>
-              </div>
-              <p className="text-slate-500 mb-4">
-                ¿Estuviste en la edición del año pasado? Sube tus mejores fotos y videos para aparecer en la pantalla gigante durante el torneo.
-              </p>
-              <div className="flex gap-2">
-                <div className="size-12 rounded-lg overflow-hidden"><img src="https://picsum.photos/100/100?random=10" alt="memory" className="w-full h-full object-cover" /></div>
-                <div className="size-12 rounded-lg overflow-hidden"><img src="https://picsum.photos/100/100?random=11" alt="memory" className="w-full h-full object-cover" /></div>
-                <div className="size-12 rounded-lg overflow-hidden"><img src="https://picsum.photos/100/100?random=12" alt="memory" className="w-full h-full object-cover" /></div>
-                <div className="size-12 rounded-lg bg-slate-200 dark:bg-white/10 flex items-center justify-center text-xs font-bold text-slate-500">+120</div>
-              </div>
-            </div>
-            <button
-              onClick={handleUploadClick}
-              disabled={isUploading}
-              className="bg-secondary hover:bg-yellow-400 text-slate-900 px-8 py-4 rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105"
-            >
-              {isUploading ? (
-                <>
-                  <span className="material-symbols-outlined animate-spin">sync</span>
-                  Subiendo...
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined">cloud_upload</span>
-                  Subir Recuerdo
-                </>
-              )}
-            </button>
+          <div className="rounded-2xl overflow-hidden shadow-xl border border-slate-200 dark:border-white/10">
+            <img 
+              src="/campos.jpg" 
+              alt="Campos del Torneo" 
+              className="w-full h-auto object-cover max-h-[600px]"
+            />
           </div>
         </div>
       </section>
@@ -198,7 +135,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
                 src="/promo.mp4" 
                 className="absolute inset-0 w-full h-full object-cover" 
                 controls
-                poster="https://picsum.photos/800/600?grayscale"
+                preload="metadata"
               />
               {/* Removed overlay to allow video controls to be clickable easily, but we can add a subtle gradient at the top if needed */}
             </div>
