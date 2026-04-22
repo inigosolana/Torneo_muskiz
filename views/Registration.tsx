@@ -39,6 +39,9 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
     const [newTeamCity, setNewTeamCity] = useState('');
     const [selectedDivision, setSelectedDivision] = useState<string>('Senior Masculino');
 
+    // Payment method
+    const [selectedPayment, setSelectedPayment] = useState<'transfer' | 'stripe' | null>(null);
+
     // Receipt
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
@@ -141,8 +144,12 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             alert('Añade al menos un equipo al carrito.');
             return;
         }
-        if (!receiptFile) {
-            alert('Adjunta el justificante de pago.');
+        if (!selectedPayment) {
+            alert('Selecciona un método de pago.');
+            return;
+        }
+        if (selectedPayment === 'transfer' && !receiptFile) {
+            alert('Adjunta el justificante de la transferencia.');
             return;
         }
 
@@ -159,7 +166,8 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             password: password,
         }));
 
-        onRegister(newTeams, receiptFile);
+        const finalReceipt = receiptFile ?? new File(['stripe-payment'], 'stripe_payment.pdf', { type: 'application/pdf' });
+        onRegister(newTeams, finalReceipt);
         setIsCompleted(true);
         setGeneratedCredentials({ email: managerEmail, password: password });
     };
@@ -174,9 +182,17 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                             <span className="material-symbols-outlined text-5xl text-green-600">check_circle</span>
                         </div>
                         <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">¡Inscripción Recibida!</h2>
-                        <p className="text-slate-500 text-sm mb-8">
-                            Tu inscripción ha sido enviada correctamente. Una vez validado el pago, podrás gestionar tus equipos y añadir jugadores.
+                        <p className="text-slate-500 text-sm mb-4">
+                            Tu inscripción ha sido enviada correctamente y está pendiente de validación por el administrador.
                         </p>
+                        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4 text-left mb-6">
+                            <div className="flex items-start gap-2">
+                                <span className="material-symbols-outlined text-amber-500 text-base mt-0.5">hourglass_top</span>
+                                <p className="text-xs text-amber-800 dark:text-amber-200">
+                                    <strong>Pendiente de validación.</strong> El administrador revisará tu {selectedPayment === 'transfer' ? 'justificante de transferencia' : 'pago con tarjeta'} y activará tu acceso en un máximo de 24h.
+                                </p>
+                            </div>
+                        </div>
 
                         <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-6 text-left space-y-3 mb-6">
                             <h3 className="font-bold text-blue-900 dark:text-blue-100 text-sm uppercase flex items-center gap-2">
@@ -403,14 +419,29 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                     {cart.length > 0 && (
                         <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-6 rounded-xl shadow-sm">
                             <div className="flex items-center gap-3 mb-6">
-                                <div className={`size-8 rounded-full flex items-center justify-center font-bold ${receiptFile ? 'bg-primary text-background-dark' : 'bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300'}`}>3</div>
-                                <h3 className="font-bold text-lg text-blue-900 dark:text-blue-100">Instrucciones de Pago ({totalFee}€)</h3>
+                                <div className={`size-8 rounded-full flex items-center justify-center font-bold ${
+                                    (selectedPayment === 'stripe') || (selectedPayment === 'transfer' && receiptFile)
+                                        ? 'bg-primary text-background-dark'
+                                        : 'bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300'
+                                }`}>3</div>
+                                <h3 className="font-bold text-lg text-blue-900 dark:text-blue-100">Método de Pago ({totalFee}€)</h3>
                             </div>
 
-                            {/* Payment options */}
+                            {/* Payment method selector */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                                 {/* Transfer */}
-                                <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => { setSelectedPayment('transfer'); setReceiptFile(null); }}
+                                    className={`bg-white dark:bg-surface-dark rounded-xl border-2 p-5 flex flex-col items-center text-center gap-3 transition-all ${
+                                        selectedPayment === 'transfer'
+                                            ? 'border-blue-500 ring-2 ring-blue-300 dark:ring-blue-700'
+                                            : 'border-blue-200 dark:border-blue-800/50 hover:border-blue-400'
+                                    }`}
+                                >
+                                    {selectedPayment === 'transfer' && (
+                                        <span className="absolute top-3 right-3 material-symbols-outlined text-blue-600 text-lg">check_circle</span>
+                                    )}
                                     <div className="size-14 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
                                         <span className="material-symbols-outlined text-3xl text-blue-600 dark:text-blue-400">account_balance</span>
                                     </div>
@@ -420,51 +451,84 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                         <p>Concepto: <strong>Torneo + {managerName || 'Nombre Responsable'}</strong></p>
                                         <p className="text-[10px] text-slate-400">Importe: {totalFee}€</p>
                                     </div>
-                                </div>
+                                </button>
 
-                                {/* Card */}
-                                <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800/50 p-5 flex flex-col items-center text-center gap-3">
+                                {/* Stripe */}
+                                <button
+                                    type="button"
+                                    onClick={() => { setSelectedPayment('stripe'); setReceiptFile(null); }}
+                                    className={`relative bg-white dark:bg-surface-dark rounded-xl border-2 p-5 flex flex-col items-center text-center gap-3 transition-all ${
+                                        selectedPayment === 'stripe'
+                                            ? 'border-purple-500 ring-2 ring-purple-300 dark:ring-purple-700'
+                                            : 'border-blue-200 dark:border-blue-800/50 hover:border-purple-400'
+                                    }`}
+                                >
+                                    {selectedPayment === 'stripe' && (
+                                        <span className="absolute top-3 right-3 material-symbols-outlined text-purple-600 text-lg">check_circle</span>
+                                    )}
                                     <div className="size-14 rounded-full bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center">
                                         <span className="material-symbols-outlined text-3xl text-purple-600 dark:text-purple-400">credit_card</span>
                                     </div>
-                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago Seguro con Tarjeta</h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 w-full mb-2">Stripe (Modo Prueba)</p>
-                                    <div className="w-full mt-auto">
-                                        <StripeCheckout 
-                                            amount={totalFee} 
-                                            onSuccess={() => {
-                                                const dummyReceipt = new File(["Stripe Payment Mock"], "stripe_payment_mock.pdf", { type: "application/pdf" });
-                                                setReceiptFile(dummyReceipt);
-                                                alert("¡Pago procesado en modo prueba! Ahora ya puedes completar la inscripción haciendo clic en el botón de abajo.");
-                                            }} 
-                                        />
-                                    </div>
-                                </div>
+                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago con Tarjeta</h4>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Pago seguro mediante Stripe</p>
+                                </button>
                             </div>
 
-                            {/* File upload */}
-                            <div>
-                                <label className="block text-xs font-bold uppercase text-blue-700 dark:text-blue-300 mb-2">Sube el justificante * (PDF del banco o Captura de pantalla del pago de Tarjeta/PayPal)</label>
-                                <div className={`relative border-2 border-dashed rounded-lg p-4 transition-all text-center ${receiptFile
-                                    ? 'border-green-400 bg-green-50 dark:bg-green-950/20'
-                                    : 'border-blue-300 dark:border-blue-700 hover:border-blue-400'
+                            {/* Transfer details + receipt upload */}
+                            {selectedPayment === 'transfer' && (
+                                <div className="animate-in fade-in duration-200">
+                                    <label className="block text-xs font-bold uppercase text-blue-700 dark:text-blue-300 mb-2">
+                                        Justificante de Transferencia *
+                                    </label>
+                                    <div className={`relative border-2 border-dashed rounded-lg p-4 transition-all text-center ${
+                                        receiptFile
+                                            ? 'border-green-400 bg-green-50 dark:bg-green-950/20'
+                                            : 'border-blue-300 dark:border-blue-700 hover:border-blue-400'
                                     }`}>
-                                    {receiptFile ? (
-                                        <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
-                                            <span className="material-symbols-outlined">check_circle</span>
-                                            <span className="text-sm font-medium">{receiptFile.name}</span>
-                                            <button onClick={() => setReceiptFile(null)} className="ml-2 text-xs text-red-500 hover:text-red-700 underline">Eliminar</button>
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            <span className="material-symbols-outlined text-3xl text-blue-400 dark:text-blue-500 mb-1">cloud_upload</span>
-                                            <p className="text-sm text-blue-600 dark:text-blue-400">Sube el comprobante de pago</p>
-                                            <p className="text-xs text-blue-400 dark:text-blue-500 mt-1">Formatos: imagen o PDF</p>
-                                        </div>
-                                    )}
-                                    <input type="file" accept="image/*,.pdf" onChange={e => setReceiptFile(e.target.files?.[0] || null)}
-                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                        {receiptFile ? (
+                                            <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
+                                                <span className="material-symbols-outlined">check_circle</span>
+                                                <span className="text-sm font-medium">{receiptFile.name}</span>
+                                                <button onClick={() => setReceiptFile(null)} className="ml-2 text-xs text-red-500 hover:text-red-700 underline">Eliminar</button>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <span className="material-symbols-outlined text-3xl text-blue-400 dark:text-blue-500 mb-1">cloud_upload</span>
+                                                <p className="text-sm text-blue-600 dark:text-blue-400">Sube el comprobante de transferencia</p>
+                                                <p className="text-xs text-blue-400 dark:text-blue-500 mt-1">Formatos: imagen o PDF</p>
+                                            </div>
+                                        )}
+                                        <input type="file" accept="image/*,.pdf" onChange={e => setReceiptFile(e.target.files?.[0] || null)}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                    </div>
                                 </div>
+                            )}
+
+                            {/* Stripe payment widget */}
+                            {selectedPayment === 'stripe' && (
+                                <div className="animate-in fade-in duration-200">
+                                    <StripeCheckout
+                                        amount={totalFee}
+                                        onSuccess={() => {
+                                            const mock = new File(['stripe'], 'stripe_payment.pdf', { type: 'application/pdf' });
+                                            setReceiptFile(mock);
+                                        }}
+                                    />
+                                    {receiptFile && (
+                                        <p className="text-xs text-green-600 dark:text-green-400 mt-2 flex items-center gap-1">
+                                            <span className="material-symbols-outlined text-sm">check_circle</span>
+                                            Pago procesado. Haz clic en "Completar Inscripción" para finalizar.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Admin validation note */}
+                            <div className="mt-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3 flex items-start gap-2">
+                                <span className="material-symbols-outlined text-amber-500 text-base mt-0.5">info</span>
+                                <p className="text-xs text-amber-800 dark:text-amber-200">
+                                    Tu inscripción quedará <strong>pendiente de validación</strong> por el administrador. Recibirás acceso al panel de gestión una vez confirmado el pago (máx. 24h).
+                                </p>
                             </div>
                         </div>
                     )}
