@@ -124,14 +124,52 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, content }) =
                                     <div className="animate-in slide-in-from-left-4 fade-in duration-300 space-y-8">
 
                                         {/* Horarios */}
-                                        <div className="bg-primary/5 border-l-4 border-primary p-6 rounded-r-lg">
-                                            <h4 className="font-bold flex items-center gap-2 mb-2 text-slate-900 dark:text-white uppercase text-xs tracking-widest">
-                                                <span className="material-symbols-outlined text-primary">schedule</span> Horarios del Fin de Semana
-                                            </h4>
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm font-bold text-slate-700 dark:text-slate-200">
-                                                <div className="flex items-center gap-2">Viernes: 16:00 - 21:00</div>
-                                                <div className="flex items-center gap-2">Sábado: 09:00 - 21:00</div>
-                                                <div className="flex items-center gap-2">Domingo: 09:00 - 15:00</div>
+                                        <div className="grid md:grid-cols-3 gap-4">
+                                            {/* Viernes */}
+                                            <div className="bg-primary/5 border border-primary/20 rounded-2xl p-5">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <span className="material-symbols-outlined text-primary text-lg">calendar_today</span>
+                                                    <div>
+                                                        <p className="font-black text-slate-900 dark:text-white text-sm uppercase tracking-wide">Viernes 5 Jun</p>
+                                                        <p className="text-xs text-primary font-bold">17:00 - 21:00</p>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-primary/10 rounded-lg px-3 py-2 text-center">
+                                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">🏐 Cadete (M/F)</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Sábado */}
+                                            <div className="bg-secondary/5 border border-secondary/20 rounded-2xl p-5">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <span className="material-symbols-outlined text-secondary text-lg">calendar_today</span>
+                                                    <div>
+                                                        <p className="font-black text-slate-900 dark:text-white text-sm uppercase tracking-wide">Sábado 6 Jun</p>
+                                                        <p className="text-xs text-secondary font-bold">09:00 - 21:00</p>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <div className="bg-secondary/10 rounded-lg px-3 py-2 text-center">
+                                                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200">🏐 Juvenil (M/F)</span>
+                                                    </div>
+                                                    <div className="bg-secondary/10 rounded-lg px-3 py-2 text-center">
+                                                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200">🏐 Senior (M/F)</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Domingo */}
+                                            <div className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-5">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <span className="material-symbols-outlined text-slate-500 text-lg">calendar_today</span>
+                                                    <div>
+                                                        <p className="font-black text-slate-900 dark:text-white text-sm uppercase tracking-wide">Domingo 7 Jun</p>
+                                                        <p className="text-xs text-slate-500 font-bold">09:00 - 15:00</p>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-slate-200 dark:bg-white/10 rounded-lg px-3 py-2 text-center">
+                                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">🏐 Infantil (M/F)</span>
+                                                </div>
                                             </div>
                                         </div>
 
