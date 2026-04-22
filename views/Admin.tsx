@@ -3,6 +3,7 @@ import { Team, Match, CategoryLimits, MatchReport, PlayerStat, SiteContent, Spon
 import { generateBracketAI, generateSocialMediaPost } from '../services/geminiService';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 interface AdminProps {
     teams: Team[];
@@ -16,7 +17,7 @@ interface AdminProps {
 }
 
 export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUpdateMatches, categoryLimits, onUpdateLimits, content, onUpdateContent }) => {
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(true);
     const [passwordInput, setPasswordInput] = useState('');
 
     // Generator State
@@ -41,6 +42,41 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         setSocialPostModal({ show: true, content: '', generating: true });
         const postContent = await generateSocialMediaPost(match);
         setSocialPostModal({ show: true, content: postContent, generating: false });
+    };
+
+    const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const bstr = evt.target?.result;
+                const wb = XLSX.read(bstr, { type: 'binary' });
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+                const data = XLSX.utils.sheet_to_json(ws);
+
+                const newMatches: Match[] = data.map((row: any, i) => ({
+                    id: `m-excel-${Date.now()}-${i}`,
+                    time: row['Hora'] || row['Time'] || '00:00',
+                    court: row['Pista'] || row['Court'] || 'Pista Central',
+                    teamA: row['Equipo A'] || row['Team A'] || 'TBD',
+                    teamB: row['Equipo B'] || row['Team B'] || 'TBD',
+                    scoreA: null,
+                    scoreB: null,
+                    status: 'SCHEDULED',
+                    round: row['Ronda'] || row['Fase'] || row['Round'] || ''
+                }));
+
+                onUpdateMatches([...matches, ...newMatches]);
+                toast.success(`${newMatches.length} partidos importados correctamente`);
+            } catch (error) {
+                console.error("Error importando Excel:", error);
+                toast.error("Error al procesar el archivo Excel. Verifica el formato.");
+            }
+        };
+        reader.readAsBinaryString(file);
     };
 
     // Main Navigation Tabs
@@ -868,10 +904,37 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                     <div className="space-y-8">
                                         {/* AI Generator Control Panel */}
                                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
-                                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                                <span className="material-symbols-outlined text-purple-600">psychology</span>
-                                                Configuración de Generación IA
-                                            </h4>
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-purple-600">psychology</span>
+                                                    Configuración de Generación IA
+                                                </h4>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="file"
+                                                        id="excel-upload"
+                                                        className="hidden"
+                                                        accept=".xlsx, .xls, .csv"
+                                                        onChange={handleExcelImport}
+                                                    />
+                                                    <label
+                                                        htmlFor="excel-upload"
+                                                        className="cursor-pointer bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">upload_file</span>
+                                                        Importar Excel
+                                                    </label>
+                                                    {matches.length > 0 && (
+                                                        <button
+                                                            onClick={() => onUpdateMatches([])}
+                                                            className="bg-red-50 text-red-500 hover:bg-red-100 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors border border-red-100"
+                                                        >
+                                                            <span className="material-symbols-outlined text-sm">delete_sweep</span>
+                                                            Limpiar Calendario
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
                                                 <div>
                                                     <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Horario</label>

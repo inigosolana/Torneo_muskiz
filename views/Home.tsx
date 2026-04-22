@@ -44,10 +44,6 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
           <div className="grid lg:grid-cols-12 gap-8 items-end">
             {/* Hero Text */}
             <div className="lg:col-span-12 xl:col-span-7 flex flex-col gap-6 mb-8 lg:mb-0">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 backdrop-blur-sm border border-primary/30 w-fit">
-                <span className="animate-pulse size-2 rounded-full bg-primary"></span>
-                <span className="text-primary text-xs font-bold uppercase tracking-wider">Torneo en Vivo</span>
-              </div>
               <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black text-white leading-[0.9] tracking-tighter uppercase drop-shadow-lg">
                 {content.heroTitle}
               </h1>
@@ -55,17 +51,6 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
                 <p className="text-lg sm:text-xl text-slate-300 max-w-xl font-light border-l-4 border-primary pl-4">
                   {content.heroSubtitle}
                 </p>
-
-                {/* Streaming embedded */}
-                <div className="w-full lg:w-[400px] aspect-video rounded-xl overflow-hidden shadow-2xl border border-white/20 group relative">
-                  <iframe
-                    className="w-full h-full"
-                    src="https://www.youtube.com/embed/live_stream?channel=UC4R8DWoMoI7CAwX8_LjQHig"
-                    title="Torneo Muskiz Live Stream"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  ></iframe>
-                </div>
               </div>
 
               <div className="flex flex-wrap gap-4 mt-4">
