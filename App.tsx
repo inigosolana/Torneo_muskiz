@@ -61,7 +61,7 @@ const App: React.FC = () => {
     // Tournament Info
     tournamentInfoTitle: "Información del Torneo",
     tournamentInfoText: "Detalles de la competición por categorías:\n\n• CADETES: Viernes por la tarde, 5 de Junio.\n• SENIOR Y JUVENIL: Sábado, 6 de Junio.\n• INFANTIL: Domingo por la mañana, 7 de Junio.\n\nCada equipo puede inscribir un máximo de 12 jugadores. ¡Asegura tu plaza antes de que se completen las inscripciones!",
-    tournamentInfoImageUrl: "/la_arena_playa.jpg",
+    tournamentInfoImageUrl: "/campos.jpg",
 
     contactEmail: "torneo@muskiz.com",
     isScheduleActive: false,

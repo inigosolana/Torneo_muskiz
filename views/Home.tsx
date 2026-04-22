@@ -47,10 +47,19 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
               <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black text-white leading-[0.9] tracking-tighter uppercase drop-shadow-lg">
                 {content.heroTitle}
               </h1>
-              <div className="flex flex-col lg:flex-row gap-8 items-start lg:items-center">
-                <p className="text-lg sm:text-xl text-slate-300 max-w-xl font-light border-l-4 border-primary pl-4">
-                  {content.heroSubtitle}
-                </p>
+              <div className="flex flex-col lg:flex-row gap-8 items-center lg:items-center">
+                <div className="flex-1">
+                  <p className="text-lg sm:text-xl text-slate-300 max-w-xl font-light border-l-4 border-primary pl-4">
+                    {content.heroSubtitle}
+                  </p>
+                </div>
+                <div className="w-48 h-48 flex items-center justify-center bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-4 shrink-0">
+                  <img 
+                    src="/logo_kolosaurios.png" 
+                    alt="Logo Kolosaurios" 
+                    className="max-w-full max-h-full object-contain animate-float"
+                  />
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-4 mt-4">
