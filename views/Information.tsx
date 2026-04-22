@@ -56,39 +56,6 @@ export const Information: React.FC<InformationProps> = ({ content }) => {
                     </div>
                 </div>
 
-                {/* PART 2: INFORMACIÓN DEL TORNEO */}
-                <div className="text-center space-y-4 mt-24 mb-12">
-                    <h2 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">
-                        {content.tournamentInfoTitle}
-                    </h2>
-                    <div className="h-1 w-24 bg-primary mx-auto rounded-full"></div>
-                </div>
-
-                {/* Section 2: Tournament Details */}
-                <div className="grid md:grid-cols-2 gap-12 items-center mb-16">
-                    <div className="space-y-6 order-2 md:order-1">
-                        <h3 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-                            <span className="material-symbols-outlined text-primary text-4xl">info</span>
-                            Detalles del Torneo
-                        </h3>
-                        <div className="space-y-4 text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
-                            {content.tournamentInfoText}
-                        </div>
-                    </div>
-                    {content.tournamentInfoImageUrl && (
-                        <div className="relative group order-1 md:order-2">
-                            <div className="absolute -inset-2 bg-gradient-to-r from-secondary to-primary rounded-2xl opacity-75 blur-lg group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
-                            <div className="relative aspect-video rounded-xl overflow-hidden shadow-2xl">
-                                <img
-                                    src={content.tournamentInfoImageUrl}
-                                    alt="Información del torneo"
-                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                />
-                            </div>
-                        </div>
-                    )}
-                </div>
-
                 {/* Section 3: The Venue (La Sede) */}
                 <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 md:p-12 shadow-xl border border-slate-200 dark:border-white/5 relative overflow-hidden mb-12">
                     <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
@@ -126,65 +93,86 @@ export const Information: React.FC<InformationProps> = ({ content }) => {
                     </div>
                 </div>
 
-                {/* Section 4: Player Rules */}
-                <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 md:p-12 shadow-xl border border-slate-200 dark:border-white/5 mb-12">
-                    <h3 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3 mb-6">
+                {/* Section 4: Tournament Details */}
+                <div className="grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-white/5 p-8 rounded-2xl border border-slate-200 dark:border-white/10">
+                    <div className="space-y-6">
+                        <h3 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                            <span className="material-symbols-outlined text-primary text-4xl">info</span>
+                            {content.tournamentInfoTitle}
+                        </h3>
+                        <div className="space-y-4 text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                            {content.tournamentInfoText}
+                        </div>
+                    </div>
+                    <div className="relative group">
+                        <div className="absolute -inset-2 bg-gradient-to-r from-secondary to-primary rounded-2xl opacity-75 blur-lg group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
+                        <div className="relative aspect-video rounded-xl overflow-hidden shadow-2xl">
+                            <img
+                                src={content.tournamentInfoImageUrl}
+                                alt="Información del torneo"
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Section 5: Normativa */}
+                <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 md:p-12 shadow-xl border border-slate-200 dark:border-white/5">
+                    <h3 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3 mb-8">
                         <span className="material-symbols-outlined text-primary text-4xl">groups</span>
                         Normativa de Jugadores
                     </h3>
-                    <p className="text-slate-600 dark:text-slate-300 mb-8 leading-relaxed">
-                        Cada equipo deberá inscribir a sus jugadores antes del inicio del torneo. A continuación se detallan los límites de jugadores que pueden participar por equipo en cada categoría:
-                    </p>
-
-                    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-white/10">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="bg-slate-50 dark:bg-white/5">
-                                    <th className="text-left px-6 py-3 font-bold text-xs uppercase text-slate-500">Categoría</th>
-                                    <th className="text-center px-6 py-3 font-bold text-xs uppercase text-slate-500">Jugadores Mínimo</th>
-                                    <th className="text-center px-6 py-3 font-bold text-xs uppercase text-slate-500">Jugadores Máximo</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                <tr className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">Senior (M/F)</td>
-                                    <td className="px-6 py-4 text-center"><span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full font-bold text-xs">6</span></td>
-                                    <td className="px-6 py-4 text-center"><span className="bg-primary/10 text-primary px-3 py-1 rounded-full font-bold text-xs">12</span></td>
-                                </tr>
-                                <tr className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">Juvenil (M/F)</td>
-                                    <td className="px-6 py-4 text-center"><span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full font-bold text-xs">6</span></td>
-                                    <td className="px-6 py-4 text-center"><span className="bg-primary/10 text-primary px-3 py-1 rounded-full font-bold text-xs">14</span></td>
-                                </tr>
-                                <tr className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">Cadete (M/F)</td>
-                                    <td className="px-6 py-4 text-center"><span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full font-bold text-xs">6</span></td>
-                                    <td className="px-6 py-4 text-center"><span className="bg-primary/10 text-primary px-3 py-1 rounded-full font-bold text-xs">14</span></td>
-                                </tr>
-                                <tr className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">Infantil (M/F)</td>
-                                    <td className="px-6 py-4 text-center"><span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full font-bold text-xs">6</span></td>
-                                    <td className="px-6 py-4 text-center"><span className="bg-primary/10 text-primary px-3 py-1 rounded-full font-bold text-xs">14</span></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
-                        <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 text-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors">
-                            <span className="material-symbols-outlined text-2xl text-primary mb-1">badge</span>
-                            <p className="text-xs text-slate-500 font-bold uppercase">DNI obligatorio</p>
-                            <p className="text-[10px] text-slate-400 mt-1">Cada jugador deberá presentar DNI o pasaporte</p>
+                    
+                    <div className="grid lg:grid-cols-3 gap-12">
+                        <div className="lg:col-span-2">
+                            <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-white/10">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="bg-slate-50 dark:bg-white/5">
+                                            <th className="text-left px-6 py-4 font-bold text-xs uppercase text-slate-500">Categoría</th>
+                                            <th className="text-center px-6 py-4 font-bold text-xs uppercase text-slate-500">Mínimo</th>
+                                            <th className="text-center px-6 py-4 font-bold text-xs uppercase text-slate-500">Máximo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-700 dark:text-slate-200">
+                                        {[
+                                            { cat: 'Senior (M/F)', min: 6, max: 12 },
+                                            { cat: 'Juvenil (M/F)', min: 6, max: 14 },
+                                            { cat: 'Cadete (M/F)', min: 6, max: 14 },
+                                            { cat: 'Infantil (M/F)', min: 6, max: 14 },
+                                        ].map((row, i) => (
+                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                                <td className="px-6 py-4 font-medium">{row.cat}</td>
+                                                <td className="px-6 py-4 text-center font-bold text-primary">{row.min}</td>
+                                                <td className="px-6 py-4 text-center font-bold text-primary">{row.max}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                        <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 text-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors">
-                            <span className="material-symbols-outlined text-2xl text-secondary mb-1">health_and_safety</span>
-                            <p className="text-xs text-slate-500 font-bold uppercase">Seguro deportivo</p>
-                            <p className="text-[10px] text-slate-400 mt-1">Licencia federativa o seguro privado vigente</p>
-                        </div>
-                        <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 text-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors">
-                            <span className="material-symbols-outlined text-2xl text-red-500 mb-1">timer</span>
-                            <p className="text-xs text-slate-500 font-bold uppercase">Plazo inscripción</p>
-                            <p className="text-[10px] text-slate-400 mt-1">Hasta 48h antes del inicio del torneo</p>
+                        <div className="space-y-6">
+                            <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-6 border border-slate-100 dark:border-white/5">
+                                <div className="flex items-center gap-4 mb-2">
+                                    <span className="material-symbols-outlined text-primary">badge</span>
+                                    <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">DNI Obligatorio</h4>
+                                </div>
+                                <p className="text-xs text-slate-500 leading-relaxed">Es imprescindible subir una copia del DNI de todos los participantes para el seguro deportivo.</p>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-6 border border-slate-100 dark:border-white/5">
+                                <div className="flex items-center gap-4 mb-2">
+                                    <span className="material-symbols-outlined text-secondary">health_and_safety</span>
+                                    <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">Seguro Deportivo</h4>
+                                </div>
+                                <p className="text-xs text-slate-500 leading-relaxed">Todos los jugadores inscritos están cubiertos por el seguro de accidentes del torneo.</p>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-6 border border-slate-100 dark:border-white/5">
+                                <div className="flex items-center gap-4 mb-2">
+                                    <span className="material-symbols-outlined text-red-500">timer</span>
+                                    <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">Cierre de Listas</h4>
+                                </div>
+                                <p className="text-xs text-slate-500 leading-relaxed">Las listas de jugadores deben estar completas 48h antes del inicio del torneo.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
