@@ -82,7 +82,8 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
     const hasCoach = selectedTeam.players.some(p => p.role === 'COACH');
     const hasOfficial = selectedTeam.players.some(p => p.role === 'OFFICIAL');
     const canAddStaff = !hasCoach || !hasOfficial;
-    const canAddMore = canAddPlayer || canAddStaff;
+    const isPlayerRegistrationClosed = Date.now() > new Date('2026-06-04T00:00:00').getTime();
+    const canAddMore = (canAddPlayer || canAddStaff) && !isPlayerRegistrationClosed;
 
     const handleAddPlayer = (newPlayer: Player) => {
         if (newPlayer.role === 'PLAYER' && !canAddPlayer) {

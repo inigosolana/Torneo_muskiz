@@ -168,10 +168,24 @@ export const Information: React.FC<InformationProps> = ({ content }) => {
                             </div>
                             <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-6 border border-slate-100 dark:border-white/5">
                                 <div className="flex items-center gap-4 mb-2">
+                                    <span className="material-symbols-outlined text-red-500">event_busy</span>
+                                    <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">Límites de Inscripción</h4>
+                                </div>
+                                <div className="space-y-2">
+                                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                                        <span className="font-bold text-slate-900 dark:text-white">Equipos:</span> 31 de Mayo
+                                    </p>
+                                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                                        <span className="font-bold text-slate-900 dark:text-white">Jugadores:</span> 3 de Junio
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-6 border border-slate-100 dark:border-white/5">
+                                <div className="flex items-center gap-4 mb-2">
                                     <span className="material-symbols-outlined text-red-500">timer</span>
                                     <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">Cierre de Listas</h4>
                                 </div>
-                                <p className="text-xs text-slate-500 leading-relaxed">Las listas de jugadores deben estar completas 48h antes del inicio del torneo.</p>
+                                <p className="text-xs text-slate-500 leading-relaxed">Las listas de jugadores deben estar completas antes del 3 de junio para la correcta gestión del seguro.</p>
                             </div>
                         </div>
                     </div>

@@ -100,6 +100,8 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
 
+    const isRegistrationClosed = Date.now() > new Date('2026-06-04T00:00:00').getTime();
+
     const handleAddToCart = () => {
         if (!newTeamName.trim() || !newTeamCity.trim()) {
             alert('Introduce el nombre y la ciudad del equipo.');
@@ -239,6 +241,21 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                             Reintentar Inscripción
                         </button>
                     </div>
+                </div>
+            </div>
+        );
+    }
+
+    const isRegistrationClosed = Date.now() > new Date('2026-06-01T00:00:00').getTime();
+
+    if (isRegistrationClosed) {
+        return (
+            <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 flex justify-center items-center animate-in fade-in">
+                <div className="w-full max-w-lg text-center bg-white dark:bg-surface-dark p-12 rounded-2xl shadow-2xl border border-red-200 dark:border-red-800">
+                    <span className="material-symbols-outlined text-6xl text-red-500 mb-4">event_busy</span>
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Inscripción de Equipos Cerrada</h2>
+                    <p className="text-slate-500 text-sm mb-6">El plazo para inscribir nuevos equipos finalizó el 31 de mayo.</p>
+                    <button onClick={() => onNavigate(View.HOME)} className="bg-primary text-background-dark px-8 py-3 rounded-xl font-bold">Volver al Inicio</button>
                 </div>
             </div>
         );

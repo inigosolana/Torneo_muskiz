@@ -29,6 +29,19 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
 
+    const isDeadlinePassed = Date.now() > new Date('2026-06-04T00:00:00').getTime();
+
+    if (isDeadlinePassed) {
+        return (
+            <div className="min-h-[80vh] flex flex-col items-center justify-center p-4">
+                <span className="material-symbols-outlined text-6xl text-red-500 mb-4">event_busy</span>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Plazo Finalizado</h2>
+                <p className="text-slate-500 mb-6 text-center">El plazo para la inscripción de jugadores finalizó el 3 de junio.</p>
+                <button onClick={() => { window.history.replaceState({}, '', window.location.pathname); onNavigate(View.HOME); }} className="px-6 py-2 bg-primary text-background-dark font-bold rounded-lg">Volver al Inicio</button>
+            </div>
+        );
+    }
+
     if (!team) {
         return (
             <div className="min-h-[80vh] flex flex-col items-center justify-center p-4">
