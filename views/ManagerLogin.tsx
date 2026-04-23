@@ -1,34 +1,33 @@
 import React, { useState } from 'react';
-import { Team, View } from '../types';
+import { View } from '../types';
+import { supabase } from '../services/supabaseClient';
 import { toast } from 'sonner';
 
 interface ManagerLoginProps {
-    teams: Team[];
     onLogin: (managerEmail: string) => void;
     onNavigate: (view: View) => void;
 }
 
-export const ManagerLogin: React.FC<ManagerLoginProps> = ({ teams, onLogin, onNavigate }) => {
+export const ManagerLogin: React.FC<ManagerLoginProps> = ({ onLogin, onNavigate }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
 
-        // Simulate login check against existing teams
-        setTimeout(() => {
-            const team = teams.find(t => t.managerEmail === email && (t.password === password || password === 'admin123')); // Allow a master bypass for testing if needed
-            
-            if (team) {
-                onLogin(email);
-                toast.success('Acceso concedido. Bienvenido a tu panel de gestión.');
-            } else {
-                toast.error('Email o contraseña incorrectos.');
-            }
-            setIsLoading(false);
-        }, 1000);
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+        if (error) {
+            toast.error('Email o contraseña incorrectos.');
+            console.error('Auth error:', error.message);
+        } else if (data.user) {
+            onLogin(data.user.email ?? email);
+            toast.success('Acceso concedido. Bienvenido a tu panel de gestión.');
+        }
+
+        setIsLoading(false);
     };
 
     return (
@@ -87,7 +86,7 @@ export const ManagerLogin: React.FC<ManagerLoginProps> = ({ teams, onLogin, onNa
                             </>
                         )}
                     </button>
-                    
+
                     <div className="text-center pt-2">
                         <p className="text-xs text-slate-400 mb-4">¿Todavía no has inscrito a tu equipo?</p>
                         <button
@@ -100,7 +99,7 @@ export const ManagerLogin: React.FC<ManagerLoginProps> = ({ teams, onLogin, onNa
                     </div>
                 </form>
             </div>
-            
+
             <p className="mt-8 text-xs text-slate-500 text-center max-w-xs">
                 Si has olvidado tu contraseña, contacta con la organización en <strong>torneo@muskiz.com</strong>
             </p>

@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Team, Match, CategoryLimits, MatchReport, PlayerStat, SiteContent, Sponsor, GalleryItem } from '../types';
 import { generateBracketAI, generateSocialMediaPost } from '../services/geminiService';
+import { supabase } from '../services/supabaseClient';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -17,8 +18,22 @@ interface AdminProps {
 }
 
 export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUpdateMatches, categoryLimits, onUpdateLimits, content, onUpdateContent }) => {
-    const [isAuthenticated, setIsAuthenticated] = useState(true);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [adminEmail, setAdminEmail] = useState('');
     const [passwordInput, setPasswordInput] = useState('');
+    const [authLoading, setAuthLoading] = useState(true);
+
+    // Restore session on mount
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setIsAuthenticated(!!session?.user);
+            setAuthLoading(false);
+        });
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+            setIsAuthenticated(!!session?.user);
+        });
+        return () => subscription.unsubscribe();
+    }, []);
 
     // Generator State
     const [generatingBracket, setGeneratingBracket] = useState(false);
@@ -129,13 +144,22 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     }, [matches, teams]);
 
     // --- Auth Logic ---
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (passwordInput === 'admin123') {
-            setIsAuthenticated(true);
+        setAuthLoading(true);
+        const { error } = await supabase.auth.signInWithPassword({ email: adminEmail, password: passwordInput });
+        if (error) {
+            toast.error('Credenciales incorrectas. Acceso denegado.');
         } else {
-            toast.error("Contraseña incorrecta");
+            setIsAuthenticated(true);
+            toast.success('Bienvenido al panel de administración.');
         }
+        setAuthLoading(false);
+    };
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        setIsAuthenticated(false);
     };
 
     const handleVerify = (teamId: string, playerId: string, type: 'dni' | 'insurance', status: 'APPROVED' | 'REJECTED') => {
@@ -348,6 +372,14 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     const pendingPaymentTeams = teams.filter(t => t.paymentStatus === 'PENDING').length;
     const totalRevenue = teams.filter(t => t.paymentStatus === 'PAID').reduce((sum, t) => sum + t.fee, 0);
 
+    if (authLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+            </div>
+        );
+    }
+
     if (!isAuthenticated) {
         return (
             <div className="min-h-screen bg-slate-50 dark:bg-background-dark flex items-center justify-center p-4 animate-in zoom-in duration-300">
@@ -362,23 +394,39 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                     </div>
                     <form onSubmit={handleLogin} className="space-y-4">
                         <div>
-                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña Maestra</label>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Email</label>
+                            <input
+                                type="email"
+                                value={adminEmail}
+                                onChange={(e) => setAdminEmail(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-background-dark dark:text-white focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                                placeholder="admin@torneo.com"
+                                autoFocus
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña</label>
                             <input
                                 type="password"
                                 value={passwordInput}
                                 onChange={(e) => setPasswordInput(e.target.value)}
                                 className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-background-dark dark:text-white focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                                 placeholder="••••••••"
-                                autoFocus
+                                required
                             />
                         </div>
-                        <button type="submit" className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-3.5 rounded-xl hover:opacity-90 transition-opacity shadow-lg">
-                            Entrar al Panel
+                        <button
+                            type="submit"
+                            disabled={authLoading}
+                            className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-3.5 rounded-xl hover:opacity-90 transition-opacity shadow-lg flex items-center justify-center gap-2"
+                        >
+                            {authLoading
+                                ? <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                                : 'Entrar al Panel'
+                            }
                         </button>
                     </form>
-                    <div className="mt-6 text-center">
-                        <p className="text-xs text-slate-400">Contraseña demo: <span className="font-mono font-bold">admin123</span></p>
-                    </div>
                 </div>
             </div>
         );
@@ -423,7 +471,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                         <span className="material-symbols-outlined text-lg">edit_note</span> Editor Web
                     </button>
                     <button
-                        onClick={() => setIsAuthenticated(false)}
+                        onClick={handleLogout}
                         className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium text-red-500 hover:bg-red-50 mt-12 transition-colors"
                     >
                         <span className="material-symbols-outlined text-lg">logout</span> Salir

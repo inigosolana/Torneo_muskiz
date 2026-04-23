@@ -1,19 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../services/supabaseClient';
 
 interface StripeCheckoutProps {
     amount: number;
     onSuccess: () => void;
 }
 
-// Mock Stripe checkout for test/demo mode.
-// In production, integrate with a real Stripe backend (PaymentIntent + confirmCardPayment).
+/**
+ * Checkout real con Stripe:
+ * 1. Al montar, llama a la Edge Function `create-payment-intent` para obtener el clientSecret.
+ * 2. Al hacer submit usa stripe.confirmCardPayment(clientSecret, ...) en lugar de simular.
+ *
+ * NOTA: Requiere que @stripe/stripe-js esté cargado y VITE_STRIPE_PUBLIC_KEY configurado.
+ */
 export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ amount, onSuccess }) => {
-    const [cardNumber, setCardNumber] = useState('4242 4242 4242 4242');
-    const [expiry, setExpiry] = useState('12/28');
-    const [cvc, setCvc] = useState('123');
+    const [cardNumber, setCardNumber] = useState('');
+    const [expiry, setExpiry] = useState('');
+    const [cvc, setCvc] = useState('');
     const [name, setName] = useState('');
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [clientSecret, setClientSecret] = useState<string | null>(null);
+    const [loadingIntent, setLoadingIntent] = useState(true);
+
+    // Step 1: Request a PaymentIntent from the Edge Function on mount
+    useEffect(() => {
+        const createIntent = async () => {
+            setLoadingIntent(true);
+            const { data, error: fnError } = await supabase.functions.invoke('create-payment-intent', {
+                body: { amount: Math.round(amount * 100) } // Stripe expects cents
+            });
+
+            if (fnError || !data?.clientSecret) {
+                setError('No se pudo inicializar el pago. Inténtalo de nuevo.');
+                console.error('PaymentIntent error:', fnError);
+            } else {
+                setClientSecret(data.clientSecret);
+            }
+            setLoadingIntent(false);
+        };
+
+        createIntent();
+    }, [amount]);
 
     const formatCard = (val: string) => {
         const digits = val.replace(/\D/g, '').slice(0, 16);
@@ -26,7 +54,7 @@ export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ amount, onSucces
         return digits;
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
@@ -36,21 +64,62 @@ export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ amount, onSucces
         if (!expiry.includes('/') || expiry.length < 5) { setError('Fecha de vencimiento inválida.'); return; }
         if (cvc.length < 3) { setError('CVC inválido.'); return; }
         if (!name.trim()) { setError('Introduce el nombre del titular.'); return; }
+        if (!clientSecret) { setError('Aún se está inicializando el pago. Espera un momento.'); return; }
 
         setProcessing(true);
-        // Simulate processing delay
-        setTimeout(() => {
-            setProcessing(false);
-            onSuccess();
-        }, 1500);
+
+        try {
+            // Step 2: Confirm payment via Stripe.js
+            const { loadStripe } = await import('@stripe/stripe-js');
+            const stripePublicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
+            const stripe = await loadStripe(stripePublicKey);
+
+            if (!stripe) throw new Error('No se pudo cargar Stripe.');
+
+            const [expMonth, expYear] = expiry.split('/');
+
+            const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+                payment_method: {
+                    card: {
+                        number: rawCard,
+                        exp_month: parseInt(expMonth),
+                        exp_year: parseInt(`20${expYear}`),
+                        cvc,
+                    },
+                    billing_details: { name },
+                },
+            });
+
+            if (stripeError) {
+                setError(stripeError.message ?? 'Error al procesar el pago.');
+            } else if (paymentIntent?.status === 'succeeded') {
+                onSuccess();
+            } else {
+                setError('El pago no se completó. Inténtalo de nuevo.');
+            }
+        } catch (err: any) {
+            setError(err.message ?? 'Error inesperado.');
+            console.error('Stripe error:', err);
+        }
+
+        setProcessing(false);
     };
+
+    if (loadingIntent) {
+        return (
+            <div className="w-full flex justify-center items-center py-8 gap-2 text-slate-500">
+                <span className="material-symbols-outlined animate-spin text-sm">sync</span>
+                <span className="text-sm">Inicializando pago seguro...</span>
+            </div>
+        );
+    }
 
     return (
         <form onSubmit={handleSubmit} className="w-full space-y-3 mt-2">
-            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700 rounded-lg px-3 py-2 flex items-center gap-2">
-                <span className="material-symbols-outlined text-amber-500 text-sm">science</span>
-                <p className="text-xs text-amber-700 dark:text-amber-300">
-                    <strong>Modo prueba.</strong> Usa la tarjeta <span className="font-mono font-bold">4242 4242 4242 4242</span>
+            <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-700 rounded-lg px-3 py-2 flex items-center gap-2">
+                <span className="material-symbols-outlined text-green-600 text-sm">verified_user</span>
+                <p className="text-xs text-green-700 dark:text-green-300">
+                    <strong>Pago seguro.</strong> Procesado con Stripe. Tus datos no se almacenan en nuestros servidores.
                 </p>
             </div>
 
@@ -114,7 +183,7 @@ export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ amount, onSucces
 
             <button
                 type="submit"
-                disabled={processing}
+                disabled={processing || loadingIntent}
                 className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-bold py-3 rounded-lg transition-colors flex justify-center items-center gap-2"
             >
                 {processing ? (

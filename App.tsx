@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Team, Match, Player, CategoryLimits, SiteContent } from './types';
 import { Layout } from './components/Layout';
 import { ChatBot } from './components/ChatBot';
@@ -17,6 +17,7 @@ import { PlayerSelfRegistration } from './views/PlayerSelfRegistration';
 import { ManagerLogin } from './views/ManagerLogin';
 import { supabase } from './services/supabaseClient';
 import { Toaster, toast } from 'sonner';
+import type { User } from '@supabase/supabase-js';
 
 
 const App: React.FC = () => {
@@ -113,20 +114,34 @@ const App: React.FC = () => {
   // Matches Data
   const [matches, setMatches] = useState<Match[]>([]);
 
-  // Auth Manager
-  const [managerEmail, setManagerEmail] = useState<string | null>(localStorage.getItem('managerEmail'));
+  // Auth Manager — backed by Supabase Auth
+  const [managerUser, setManagerUser] = useState<User | null>(null);
+
+  // Restore session on mount and subscribe to auth changes
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setManagerUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setManagerUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleManagerLogin = (email: string) => {
-    setManagerEmail(email);
-    localStorage.setItem('managerEmail', email);
+    // User state is set automatically via onAuthStateChange after signInWithPassword
     setCurrentView(View.TEAM);
   };
 
-  const handleManagerLogout = () => {
-    setManagerEmail(null);
-    localStorage.removeItem('managerEmail');
+  const handleManagerLogout = async () => {
+    await supabase.auth.signOut();
+    setManagerUser(null);
     setCurrentView(View.HOME);
   };
+
+  const managerEmail = managerUser?.email ?? null;
 
   // Load initial data
   React.useEffect(() => {
@@ -235,8 +250,8 @@ const App: React.FC = () => {
         />
       );
       case View.TEAM:
-        if (!managerEmail) {
-          return <ManagerLogin teams={teams} onLogin={handleManagerLogin} onNavigate={setCurrentView} />;
+        if (!managerUser) {
+          return <ManagerLogin onLogin={handleManagerLogin} onNavigate={setCurrentView} />;
         }
         return (
           <div className="relative">
@@ -252,8 +267,8 @@ const App: React.FC = () => {
             />
           </div>
         );
-      case View.MANAGER_LOGIN: return <ManagerLogin teams={teams} onLogin={handleManagerLogin} onNavigate={setCurrentView} />;
-      case View.REGISTRATION: return <Registration onRegister={(newTeams, receiptFile) => { addTeams(newTeams, receiptFile); if (newTeams.length > 0) { setManagerEmail(newTeams[0].managerEmail); localStorage.setItem('managerEmail', newTeams[0].managerEmail); } }} teams={teams} categoryLimits={categoryLimits} />;
+      case View.MANAGER_LOGIN: return <ManagerLogin onLogin={handleManagerLogin} onNavigate={setCurrentView} />;
+      case View.REGISTRATION: return <Registration onRegister={(newTeams, receiptFile) => { addTeams(newTeams, receiptFile); }} teams={teams} categoryLimits={categoryLimits} />;
       case View.SPONSORS: return <Sponsors content={siteContent} />;
       case View.MEDIA: return <Media content={siteContent} />;
       case View.PLAYER_SELF_REGISTRATION: return <PlayerSelfRegistration teams={teams} onUpdateTeam={updateTeam} onNavigate={setCurrentView} />;
