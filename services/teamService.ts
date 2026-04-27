@@ -109,8 +109,8 @@ export const teamService = {
         if (error) console.error('Error updating team:', error);
     },
 
-    async addPlayer(teamId: string, player: Partial<Player>): Promise<void> {
-        const { error } = await supabase
+    async addPlayer(teamId: string, player: Partial<Player>): Promise<Player> {
+        const { data, error } = await supabase
             .from('players')
             .insert([{
                 team_id: teamId,
@@ -122,12 +122,33 @@ export const teamService = {
                 position: player.position,
                 dni_status: player.dniStatus || 'EMPTY',
                 insurance_status: player.insuranceStatus || 'EMPTY'
-            }]);
+            }])
+            .select()
+            .single();
 
         if (error) {
             console.error('Error adding player:', error);
             throw new Error(error.message);
         }
+
+        // Map back to frontend model if necessary
+        return {
+            id: data.id,
+            teamId: data.team_id,
+            name: data.name,
+            surnames: data.surnames,
+            dniNumber: data.dni_number,
+            birthDate: data.birth_date,
+            number: data.number,
+            position: data.position,
+            dniStatus: data.dni_status,
+            insuranceStatus: data.insurance_status,
+            dniUrl: data.dni_url,
+            insuranceUrl: data.insurance_url,
+            avatarUrl: data.avatar_url,
+            role: data.role || 'PLAYER',
+            verified: data.verified
+        };
     },
 
     async updatePlayer(player: Player): Promise<void> {

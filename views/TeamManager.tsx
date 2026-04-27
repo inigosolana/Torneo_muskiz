@@ -95,46 +95,22 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     const isPlayerRegistrationClosed = Date.now() > new Date('2026-06-04T00:00:00').getTime();
     const canAddMore = (canAddPlayer || canAddStaff) && !isPlayerRegistrationClosed;
 
-    const handleAddPlayer = async (newPlayer: Player) => {
-        if (newPlayer.role === 'PLAYER' && !canAddPlayer) {
-            toast.error(`Límite alcanzado: máximo ${maxPlayers} jugadores para ${selectedTeam.division}.`);
-            return;
-        }
-
-        if (newPlayer.role === 'COACH') {
-            const hasCoach = selectedTeam.players.some(p => p.role === 'COACH');
-            if (hasCoach) {
-                toast.error("Ya existe un entrenador registrado para este equipo.");
-                return;
-            }
-        }
-
-        if (newPlayer.role === 'OFFICIAL') {
-            const hasOfficial = selectedTeam.players.some(p => p.role === 'OFFICIAL');
-            if (hasOfficial) {
-                toast.error("Ya existe un oficial registrado para este equipo.");
-                return;
-            }
-        }
-
-        // Optimistic update
-        const updatedPlayers = [...selectedTeam.players, newPlayer];
-        onUpdateTeam({
-            ...selectedTeam,
-            players: updatedPlayers
-        });
-
-        // Save to DB
+    const handleAddPlayer = async (playerData: Partial<Player>) => {
         try {
-            await teamService.addPlayer(selectedTeam.id, newPlayer);
+            const savedPlayer = await teamService.addPlayer(selectedTeam.id, playerData);
+            onUpdateTeam({
+                ...selectedTeam,
+                players: [...selectedTeam.players, savedPlayer]
+            });
+            return savedPlayer;
         } catch (error: any) {
             toast.error("Error al guardar el jugador en la base de datos.");
-            // Rollback if needed, but for now we just warn the user
             console.error(error);
+            throw error;
         }
     };
 
-    const handleManualSubmit = (e: React.FormEvent) => {
+    const handleManualSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!manualForm.name || !manualForm.surnames || !manualForm.number) return;
 
@@ -184,7 +160,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         document.body.removeChild(link);
     };
 
-    const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -196,45 +172,43 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
 
             toast.loading("Guardando jugadores del CSV...");
 
-            for (let i = 1; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (line) {
-                    const [name, surnames, dni, dob, numStr, pos] = line.split(',');
-                    if (name && numStr) {
-                        const playerObj: Player = {
-                            id: Date.now().toString() + i,
-                            name: name.trim(),
-                            surnames: surnames?.trim(),
-                            dniNumber: dni?.trim(),
-                            birthDate: dob?.trim() || undefined,
-                            number: parseInt(numStr) || 0,
-                            position: pos?.trim() || 'Universal',
-                            role: 'PLAYER',
-                            verified: false,
-                            dniStatus: 'EMPTY',
-                            insuranceStatus: 'EMPTY'
-                        };
-
-                        try {
-                            await teamService.addPlayer(selectedTeam.id, playerObj);
-                            newPlayers.push(playerObj);
-                        } catch (err) {
-                            console.error(`Error al guardar jugador ${name}:`, err);
+            try {
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (line) {
+                        const parts = line.split(',');
+                        const name = parts[0];
+                        const surnames = parts[1];
+                        const dni = parts[2];
+                        const dob = parts[3];
+                        const numStr = parts[4];
+                        const pos = parts[5];
+                        
+                        if (name && name.trim()) {
+                            const playerToSave: Partial<Player> = {
+                                name: name.trim(),
+                                surnames: surnames?.trim() || '',
+                                dniNumber: dni?.trim() || '',
+                                birthDate: dob?.trim() || undefined,
+                                number: parseInt(numStr?.trim()) || 0,
+                                position: (pos?.trim() || 'Universal') as any,
+                                role: 'PLAYER',
+                                dniStatus: 'EMPTY',
+                                insuranceStatus: 'EMPTY'
+                            };
+                            
+                            const saved = await handleAddPlayer(playerToSave);
+                            if (saved) newPlayers.push(saved);
                         }
                     }
                 }
-            }
-
-            if (newPlayers.length > 0) {
-                onUpdateTeam({
-                    ...selectedTeam,
-                    players: [...selectedTeam.players, ...newPlayers]
-                });
                 toast.dismiss();
-                toast.success(`Se han importado y guardado ${newPlayers.length} jugadores correctamente.`);
-            } else {
+                if (newPlayers.length > 0) {
+                    toast.success(`Se han añadido ${newPlayers.length} jugadores.`);
+                }
+            } catch (err) {
                 toast.dismiss();
-                toast.error("No se pudo guardar ningún jugador del CSV. Revisa el formato.");
+                toast.error('Error al importar algunos jugadores');
             }
         };
         reader.readAsText(file);
@@ -252,16 +226,14 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             const base64Data = base64String.split(',')[1];
             const data = await analyzePlayerId(base64Data, file.type);
             if (data.name) {
-                const newPlayer: Player = {
-                    id: Date.now().toString(),
+                const playerToSave: Partial<Player> = {
                     name: data.name,
                     number: data.number || 0,
                     role: 'PLAYER',
-                    verified: false,
                     dniStatus: 'EMPTY',
                     insuranceStatus: 'EMPTY'
                 };
-                handleAddPlayer(newPlayer);
+                await handleAddPlayer(playerToSave);
             }
             setIsAnalyzing(false);
         };
