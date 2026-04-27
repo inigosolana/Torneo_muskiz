@@ -4,6 +4,7 @@ import { generateBracketAI, generateSocialMediaPost } from '../services/geminiSe
 import { supabase } from '../services/supabaseClient';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
 import { toast } from 'sonner';
+import { teamService } from '../services/teamService';
 import * as XLSX from 'xlsx';
 
 interface AdminProps {

@@ -4,6 +4,7 @@ import { Team, Player } from '../types';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { teamService } from '../services/teamService';
 
 interface TeamManagerProps {
     teams: Team[];
