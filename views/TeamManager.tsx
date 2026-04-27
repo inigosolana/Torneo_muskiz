@@ -5,6 +5,7 @@ import { resizeAndCompressImage } from '../utils/imageProcessor';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { teamService } from '../services/teamService';
+import { supabase } from '../services/supabaseClient';
 
 interface TeamManagerProps {
     teams: Team[];
