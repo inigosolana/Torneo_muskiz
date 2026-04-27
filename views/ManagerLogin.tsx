@@ -134,10 +134,6 @@ export const ManagerLogin: React.FC = () => {
                     </div>
                 </form>
             </div>
-
-            <p className="mt-8 text-xs text-slate-500 text-center max-w-xs">
-                Si tienes problemas técnicos, contacta con la organización en <strong>torneo@muskiz.com</strong>
-            </p>
         </div>
     );
 };
