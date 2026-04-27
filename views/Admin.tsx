@@ -588,8 +588,8 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
                                                         {player.dniUrl && (
-                                                            <a href={player.dniUrl} target="_blank" rel="noopener noreferrer" className="size-6 bg-slate-100 rounded flex items-center justify-center text-slate-500 hover:bg-primary/20 hover:text-primary transition-all">
-                                                                <span className="material-symbols-outlined text-xs">visibility</span>
+                                                            <a href={player.dniUrl} target="_blank" rel="noopener noreferrer" className="size-8 bg-slate-100 rounded flex items-center justify-center text-primary hover:bg-primary/10 transition-all shadow-sm" title="Ver DNI">
+                                                                <span className="material-symbols-outlined text-lg">visibility</span>
                                                             </a>
                                                         )}
                                                         {player.dniStatus !== 'EMPTY' && player.dniStatus ? (
@@ -616,8 +616,8 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
                                                         {player.insuranceUrl && (
-                                                            <a href={player.insuranceUrl} target="_blank" rel="noopener noreferrer" className="size-6 bg-slate-100 rounded flex items-center justify-center text-slate-500 hover:bg-primary/20 hover:text-primary transition-all">
-                                                                <span className="material-symbols-outlined text-xs">visibility</span>
+                                                            <a href={player.insuranceUrl} target="_blank" rel="noopener noreferrer" className="size-8 bg-slate-100 rounded flex items-center justify-center text-primary hover:bg-primary/10 transition-all shadow-sm" title="Ver Seguro">
+                                                                <span className="material-symbols-outlined text-lg">visibility</span>
                                                             </a>
                                                         )}
                                                         {player.insuranceStatus !== 'EMPTY' && player.insuranceStatus ? (
