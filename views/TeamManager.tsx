@@ -576,63 +576,65 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                 <div className="space-y-4">
                                     {selectedTeam.players.map(player => (
                                         <div key={player.id} className="bg-white dark:bg-surface-dark p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm relative group">
-                                            <div className="flex flex-col sm:flex-row gap-4 items-center">
-                                                <div className="flex items-center gap-4 flex-1 w-full">
-                                                    <div className="size-12 sm:size-14 rounded-full bg-slate-100 flex-shrink-0 overflow-hidden border-2 border-slate-200 dark:border-slate-700">
-                                                        {player.avatarUrl ? <img src={player.avatarUrl} alt={player.name} /> : <div className="h-full w-full flex items-center justify-center"><span className="material-symbols-outlined text-slate-400">person</span></div>}
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <p className="font-bold text-slate-800 dark:text-white">{player.name}</p>
-                                                            {player.role === 'COACH' && <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-black uppercase">Entrenador</span>}
-                                                            {player.role === 'OFFICIAL' && <span className="bg-purple-100 text-purple-700 text-[10px] px-2 py-0.5 rounded-full font-black uppercase">Oficial</span>}
+                                                <div className="flex flex-col sm:flex-row gap-4 items-center w-full">
+                                                    <div className="flex items-center gap-4 flex-1">
+                                                        <div className="size-12 sm:size-14 rounded-full bg-slate-100 flex-shrink-0 overflow-hidden border-2 border-slate-200 dark:border-slate-700">
+                                                            {player.avatarUrl ? <img src={player.avatarUrl} alt={player.name} className="w-full h-full object-cover" /> : <div className="h-full w-full flex items-center justify-center"><span className="material-symbols-outlined text-slate-400">person</span></div>}
                                                         </div>
-                                                        <div className="flex gap-2 text-xs text-slate-500 font-mono mt-1">
-                                                            {player.role === 'PLAYER' && <span className="bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">#{player.number}</span>}
-                                                            <span className="bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">{player.role === 'PLAYER' ? (player.position || 'Universal') : player.role}</span>
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="font-bold text-slate-800 dark:text-white">{player.name}</p>
+                                                                {player.role === 'COACH' && <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-black uppercase">Entrenador</span>}
+                                                                {player.role === 'OFFICIAL' && <span className="bg-purple-100 text-purple-700 text-[10px] px-2 py-0.5 rounded-full font-black uppercase">Oficial</span>}
+                                                            </div>
+                                                            <div className="flex gap-2 text-xs text-slate-500 font-mono mt-1">
+                                                                {player.role === 'PLAYER' && <span className="bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">#{player.number}</span>}
+                                                                <span className="bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">{player.role === 'PLAYER' ? (player.position || 'Universal') : player.role}</span>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                                         <div className="flex gap-4 w-full sm:w-auto justify-end items-center">
-                                                     <div className="flex flex-col items-center gap-1">
-                                                        <div className="flex items-center gap-1">
-                                                            <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.dniStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
-                                                                {getStatusBadge(player.dniStatus)}
-                                                                <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'dni')} />
-                                                            </label>
-                                                            {player.dniUrl && (
-                                                                <a href={player.dniUrl} target="_blank" rel="noopener noreferrer" className="size-6 text-slate-400 hover:text-primary transition-colors">
-                                                                    <span className="material-symbols-outlined text-sm">visibility</span>
-                                                                </a>
-                                                            )}
-                                                        </div>
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase">DNI</span>
-                                                    </div>
-                                                    {player.role === 'PLAYER' && (
+
+                                                    <div className="flex gap-4 w-full sm:w-auto justify-end items-center">
                                                         <div className="flex flex-col items-center gap-1">
                                                             <div className="flex items-center gap-1">
-                                                                <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.insuranceStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
-                                                                    {getStatusBadge(player.insuranceStatus)}
-                                                                    <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'insurance')} />
+                                                                <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.dniStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
+                                                                    {getStatusBadge(player.dniStatus)}
+                                                                    <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'dni')} />
                                                                 </label>
-                                                                {player.insuranceUrl && (
-                                                                    <a href={player.insuranceUrl} target="_blank" rel="noopener noreferrer" className="size-6 text-slate-400 hover:text-primary transition-colors">
+                                                                {player.dniUrl && (
+                                                                    <a href={player.dniUrl} target="_blank" rel="noopener noreferrer" className="size-6 text-slate-400 hover:text-primary transition-colors">
                                                                         <span className="material-symbols-outlined text-sm">visibility</span>
                                                                     </a>
                                                                 )}
                                                             </div>
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase">Seguro</span>
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase">DNI</span>
                                                         </div>
-                                                    )}
-                                                    
-                                                    <button 
-                                                        onClick={() => handleDeletePlayer(player.id)}
-                                                        className="size-10 flex items-center justify-center rounded-lg border border-red-100 dark:border-red-500/20 text-red-500 hover:bg-red-50 hover:text-white transition-all ml-2"
-                                                        title="Eliminar jugador"
-                                                    >
-                                                        <span className="material-symbols-outlined text-xl">delete</span>
-                                                    </button>
+                                                        {player.role === 'PLAYER' && (
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <div className="flex items-center gap-1">
+                                                                    <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.insuranceStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
+                                                                        {getStatusBadge(player.insuranceStatus)}
+                                                                        <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'insurance')} />
+                                                                    </label>
+                                                                    {player.insuranceUrl && (
+                                                                        <a href={player.insuranceUrl} target="_blank" rel="noopener noreferrer" className="size-6 text-slate-400 hover:text-primary transition-colors">
+                                                                            <span className="material-symbols-outlined text-sm">visibility</span>
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                                <span className="text-[10px] font-bold text-slate-400 uppercase">Seguro</span>
+                                                            </div>
+                                                        )}
+                                                        
+                                                        <button 
+                                                            onClick={() => handleDeletePlayer(player.id)}
+                                                            className="size-10 flex items-center justify-center rounded-lg border border-red-100 dark:border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all ml-2"
+                                                            title="Eliminar jugador"
+                                                        >
+                                                            <span className="material-symbols-outlined text-xl">delete</span>
+                                                        </button>
+                                                    </div>
                                                 </div>
-                       </div>
                                             </div>
                                         </div>
                                     ))}
