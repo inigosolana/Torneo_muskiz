@@ -6,9 +6,11 @@ WORKDIR /app
 # Definir ARGs para que Vite las inyecte en tiempo de compilación
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_STRIPE_PUBLIC_KEY
 
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+ENV VITE_STRIPE_PUBLIC_KEY=$VITE_STRIPE_PUBLIC_KEY
 
 # Copiar manifiestos e instalar dependencias
 COPY package.json package-lock.json ./
