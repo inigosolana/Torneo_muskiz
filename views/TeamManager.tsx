@@ -189,30 +189,38 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (evt) => {
+        reader.onload = async (evt) => {
             const text = evt.target?.result as string;
             const lines = text.split('\n');
-            // Skip header
             const newPlayers: Player[] = [];
+
+            toast.loading("Guardando jugadores del CSV...");
 
             for (let i = 1; i < lines.length; i++) {
                 const line = lines[i].trim();
                 if (line) {
                     const [name, surnames, dni, dob, numStr, pos] = line.split(',');
                     if (name && numStr) {
-                        newPlayers.push({
+                        const playerObj: Player = {
                             id: Date.now().toString() + i,
-                            name: `${name.trim()} ${surnames?.trim() || ''}`,
+                            name: name.trim(),
                             surnames: surnames?.trim(),
                             dniNumber: dni?.trim(),
-                            birthDate: dob?.trim(),
+                            birthDate: dob?.trim() || undefined,
                             number: parseInt(numStr) || 0,
                             position: pos?.trim() || 'Universal',
                             role: 'PLAYER',
                             verified: false,
                             dniStatus: 'EMPTY',
                             insuranceStatus: 'EMPTY'
-                        });
+                        };
+
+                        try {
+                            await teamService.addPlayer(selectedTeam.id, playerObj);
+                            newPlayers.push(playerObj);
+                        } catch (err) {
+                            console.error(`Error al guardar jugador ${name}:`, err);
+                        }
                     }
                 }
             }
@@ -222,7 +230,11 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                     ...selectedTeam,
                     players: [...selectedTeam.players, ...newPlayers]
                 });
-                toast.success(`Se han importado ${newPlayers.length} jugadores. Recuerda subir sus fotos de DNI y Seguro.`);
+                toast.dismiss();
+                toast.success(`Se han importado y guardado ${newPlayers.length} jugadores correctamente.`);
+            } else {
+                toast.dismiss();
+                toast.error("No se pudo guardar ningún jugador del CSV. Revisa el formato.");
             }
         };
         reader.readAsText(file);
@@ -531,42 +543,6 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <button
-                                            onClick={() => {
-                                                const link = `${window.location.origin}${window.location.pathname}?view=slfreg&teamId=${selectedTeam.id}`;
-                                                
-                                                if (navigator.clipboard && navigator.clipboard.writeText) {
-                                                    navigator.clipboard.writeText(link)
-                                                        .then(() => toast.success('Enlace de invitación copiado al portapapeles.'))
-                                                        .catch(() => {
-                                                            // Fallback for failed clipboard access
-                                                            const textArea = document.createElement("textarea");
-                                                            textArea.value = link;
-                                                            document.body.appendChild(textArea);
-                                                            textArea.select();
-                                                            document.execCommand("copy");
-                                                            document.body.removeChild(textArea);
-                                                            toast.success('Enlace de invitación copiado al portapapeles.');
-                                                        });
-                                                } else {
-                                                    // Classic fallback for HTTP/old browsers
-                                                    const textArea = document.createElement("textarea");
-                                                    textArea.value = link;
-                                                    document.body.appendChild(textArea);
-                                                    textArea.select();
-                                                    try {
-                                                        document.execCommand("copy");
-                                                        toast.success('Enlace de invitación copiado al portapapeles.');
-                                                    } catch (err) {
-                                                        toast.error('No se pudo copiar automáticamente. Copia este enlace: ' + link);
-                                                    }
-                                                    document.body.removeChild(textArea);
-                                                }
-                                            }}
-                                            className="text-primary hover:text-primary-dark text-xs font-bold flex items-center gap-1 px-3 py-2 bg-primary/10 rounded-lg border border-primary/20"
-                                        >
-                                            <span className="material-symbols-outlined text-sm">link</span> Enlace Invitación
-                                        </button>
                                         <button
                                             onClick={downloadCsvTemplate}
                                             className="text-slate-500 hover:text-primary text-xs font-bold flex items-center gap-1 px-3 py-2 bg-white dark:bg-surface-dark rounded-lg border border-slate-200 dark:border-white/10"
