@@ -150,6 +150,18 @@ export const teamService = {
             .eq('id', player.id);
 
         if (error) console.error('Error updating player:', error);
+    },
+
+    async deletePlayer(playerId: string): Promise<void> {
+        const { error } = await supabase
+            .from('players')
+            .delete()
+            .eq('id', playerId);
+
+        if (error) {
+            console.error('Error deleting player:', error);
+            throw new Error(error.message);
+        }
     }
 };
 

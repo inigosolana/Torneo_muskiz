@@ -268,6 +268,19 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         reader.readAsDataURL(file);
     };
 
+    const handleDeletePlayer = async (playerId: string) => {
+        if (!confirm('¿Estás seguro de que quieres eliminar a este jugador?')) return;
+        
+        try {
+            await teamService.deletePlayer(playerId);
+            const updatedPlayers = selectedTeam.players.filter(p => p.id !== playerId);
+            onUpdateTeam({ ...selectedTeam, players: updatedPlayers });
+            toast.success('Jugador eliminado correctamente');
+        } catch (error) {
+            toast.error('Error al eliminar el jugador');
+        }
+    };
+
     const handleDocumentUpload = (playerId: string, type: 'dni' | 'insurance') => {
         // Real upload simulation
         const input = document.createElement('input');
@@ -576,11 +589,11 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="flex gap-4 w-full sm:w-auto justify-end">
+                                                <div className="flex gap-4 w-full sm:w-auto justify-end items-center">
                                                      <div className="flex flex-col items-center gap-1">
                                                         <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.dniStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
                                                             {getStatusBadge(player.dniStatus)}
-                                                            <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'dni')} disabled={player.dniStatus === 'APPROVED' || player.dniStatus === 'PENDING'} />
+                                                            <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'dni')} />
                                                         </label>
                                                         <span className="text-[10px] font-bold text-slate-400 uppercase">DNI</span>
                                                     </div>
@@ -588,11 +601,19 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                         <div className="flex flex-col items-center gap-1">
                                                             <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.insuranceStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
                                                                 {getStatusBadge(player.insuranceStatus)}
-                                                                <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'insurance')} disabled={player.insuranceStatus === 'APPROVED' || player.insuranceStatus === 'PENDING'} />
+                                                                <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'insurance')} />
                                                             </label>
                                                             <span className="text-[10px] font-bold text-slate-400 uppercase">Seguro</span>
                                                         </div>
                                                     )}
+                                                    
+                                                    <button 
+                                                        onClick={() => handleDeletePlayer(player.id)}
+                                                        className="size-10 flex items-center justify-center rounded-lg border border-red-100 dark:border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all ml-2"
+                                                        title="Eliminar jugador"
+                                                    >
+                                                        <span className="material-symbols-outlined text-xl">delete</span>
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
