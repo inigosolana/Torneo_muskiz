@@ -42,7 +42,7 @@ export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ items, totalAmou
         };
 
         createIntent();
-    }, [items]);
+    }, [JSON.stringify(items)]);
 
     const formatCard = (val: string) => {
         const digits = val.replace(/\D/g, '').slice(0, 16);
