@@ -116,15 +116,18 @@ export const teamService = {
                 team_id: teamId,
                 name: player.name,
                 surnames: player.surnames,
-                dni_number: player.dniNumber,
-                birth_date: player.birthDate,
+                dni_number: player.dniNumber || null,
+                birth_date: player.birthDate || null,
                 number: player.number,
                 position: player.position,
                 dni_status: player.dniStatus || 'EMPTY',
                 insurance_status: player.insuranceStatus || 'EMPTY'
             }]);
 
-        if (error) console.error('Error adding player:', error);
+        if (error) {
+            console.error('Error adding player:', error);
+            throw new Error(error.message);
+        }
     },
 
     async updatePlayer(player: Player): Promise<void> {

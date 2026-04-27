@@ -116,13 +116,21 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             }
         }
 
-        // Save to DB
-        await teamService.addPlayer(selectedTeam.id, newPlayer);
-        
+        // Optimistic update
+        const updatedPlayers = [...selectedTeam.players, newPlayer];
         onUpdateTeam({
             ...selectedTeam,
-            players: [...selectedTeam.players, newPlayer]
+            players: updatedPlayers
         });
+
+        // Save to DB
+        try {
+            await teamService.addPlayer(selectedTeam.id, newPlayer);
+        } catch (error: any) {
+            toast.error("Error al guardar el jugador en la base de datos.");
+            // Rollback if needed, but for now we just warn the user
+            console.error(error);
+        }
     };
 
     const handleManualSubmit = (e: React.FormEvent) => {
@@ -131,7 +139,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
 
         const newPlayer: Player = {
             id: Date.now().toString(),
-            name: `${manualForm.name} ${manualForm.surnames}`, // Display Name
+            name: manualForm.name,
             surnames: manualForm.surnames,
             dniNumber: manualForm.dniNumber,
             birthDate: manualForm.birthDate,
