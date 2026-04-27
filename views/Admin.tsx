@@ -103,6 +103,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     const [filterSex, setFilterSex] = useState<string>('all');
     const [filterPayment, setFilterPayment] = useState<string>('all');
     const [filterStatus, setFilterStatus] = useState<string>('all');
+    const [filterTeam, setFilterTeam] = useState<string>('');
 
     const filteredTeams = useMemo(() => {
         return teams.filter(team => {
@@ -366,7 +367,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         }
     };
 
-    const allPlayers = teams.flatMap(t => t.players.map(p => ({ ...p, teamName: t.name, teamId: t.id })));
+    const allPlayers = teams.flatMap(t => t.players.map(p => ({ ...p, teamName: t.name, teamId: t.id, division: t.division })));
     const pendingCount = allPlayers.filter(p => p.dniStatus === 'PENDING' || p.insuranceStatus === 'PENDING').length;
     const totalTeams = teams.length;
     const paidTeams = teams.filter(t => t.paymentStatus === 'PAID').length;
@@ -479,9 +480,54 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                     {/* --- VERIFICATION TAB --- */}
                     {activeTab === 'verification' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                                <h3 className="font-bold text-lg text-slate-800">Verificación de Documentos</h3>
-                                <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-1 rounded-full">Pendientes: {pendingCount}</span>
+                            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div>
+                                    <h3 className="font-bold text-lg text-slate-800">Verificación de Documentos</h3>
+                                    <p className="text-xs text-slate-500 mt-1">Valida la identidad y el seguro de los jugadores.</p>
+                                </div>
+                                
+                                {/* Filter Bar for Verification */}
+                                <div className="flex flex-wrap gap-2">
+                                    <input 
+                                        type="text"
+                                        placeholder="Buscar equipo..."
+                                        value={filterTeam}
+                                        onChange={(e) => setFilterTeam(e.target.value)}
+                                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 outline-none focus:ring-1 focus:ring-primary min-w-[120px]"
+                                    />
+                                    <select 
+                                        value={filterCategory} 
+                                        onChange={(e) => setFilterCategory(e.target.value)}
+                                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                    >
+                                        <option value="all">Categorías</option>
+                                        <option value="Senior">Senior</option>
+                                        <option value="Juvenil">Juvenil</option>
+                                        <option value="Cadete">Cadete</option>
+                                        <option value="Infantil">Infantil</option>
+                                    </select>
+
+                                    <select 
+                                        value={filterSex} 
+                                        onChange={(e) => setFilterSex(e.target.value)}
+                                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                    >
+                                        <option value="all">Sexos</option>
+                                        <option value="Masculino">Masculino</option>
+                                        <option value="Femenino">Femenino</option>
+                                    </select>
+
+                                    <select 
+                                        value={filterStatus} 
+                                        onChange={(e) => setFilterStatus(e.target.value)}
+                                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                    >
+                                        <option value="all">Estado (Todos)</option>
+                                        <option value="empty">Falta subir</option>
+                                        <option value="pending">Solo Pendientes</option>
+                                        <option value="approved">Solo Aprobados</option>
+                                    </select>
+                                </div>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm text-left">
@@ -491,11 +537,21 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                             <th className="px-6 py-4">Equipo</th>
                                             <th className="px-6 py-4">DNI</th>
                                             <th className="px-6 py-4">Seguro</th>
-                                            <th className="px-6 py-4 text-right">Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {allPlayers.map(player => (
+                                        {allPlayers
+                                            .filter(p => {
+                                                const matchTeam = filterTeam === '' || p.teamName.toLowerCase().includes(filterTeam.toLowerCase());
+                                                const matchCat = filterCategory === 'all' || p.division?.includes(filterCategory);
+                                                const matchSex = filterSex === 'all' || p.division?.includes(filterSex);
+                                                const matchStat = filterStatus === 'all' || 
+                                                    (filterStatus === 'empty' && (p.dniStatus === 'EMPTY' || p.insuranceStatus === 'EMPTY')) ||
+                                                    (filterStatus === 'pending' && (p.dniStatus === 'PENDING' || p.insuranceStatus === 'PENDING')) ||
+                                                    (filterStatus === 'approved' && (p.dniStatus === 'APPROVED' && p.insuranceStatus === 'APPROVED'));
+                                                return matchTeam && matchCat && matchSex && matchStat;
+                                            })
+                                            .map(player => (
                                             <tr key={player.id} className="hover:bg-slate-50/50">
                                                 <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-3">
                                                     <div className="size-8 rounded-full bg-slate-200 overflow-hidden">
@@ -519,8 +575,13 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                                 <button onClick={() => handleVerify(player.teamId, player.id, 'dni', 'REJECTED')} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><span className="material-symbols-outlined text-xs">close</span></button>
                                                             </div>
                                                         ) : (
-                                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${player.dniStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : player.dniStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400'}`}>
-                                                                {player.dniStatus}
+                                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                                                player.dniStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : 
+                                                                player.dniStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 
+                                                                player.dniStatus === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                                                                'bg-slate-100 text-slate-400'
+                                                            }`}>
+                                                                {player.dniStatus === 'EMPTY' || !player.dniStatus ? 'Falta subir' : player.dniStatus}
                                                             </span>
                                                         )}
                                                     </div>
@@ -538,8 +599,13 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                                 <button onClick={() => handleVerify(player.teamId, player.id, 'insurance', 'REJECTED')} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><span className="material-symbols-outlined text-xs">close</span></button>
                                                             </div>
                                                         ) : (
-                                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${player.insuranceStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : player.insuranceStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400'}`}>
-                                                                {player.insuranceStatus}
+                                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                                                player.insuranceStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : 
+                                                                player.insuranceStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 
+                                                                player.insuranceStatus === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                                                                'bg-slate-100 text-slate-400'
+                                                            }`}>
+                                                                {player.insuranceStatus === 'EMPTY' || !player.insuranceStatus ? 'Falta subir' : player.insuranceStatus}
                                                             </span>
                                                         )}
                                                     </div>
