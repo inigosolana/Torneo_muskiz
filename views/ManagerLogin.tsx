@@ -38,6 +38,23 @@ export const ManagerLogin: React.FC = () => {
         setIsLoading(false);
     };
 
+    const handleForgotPassword = async () => {
+        if (!email) {
+            toast.error('Introduce tu email para restablecer la contraseña.');
+            return;
+        }
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/manager-login`,
+        });
+
+        if (error) {
+            toast.error('Error: ' + error.message);
+        } else {
+            toast.success('Se ha enviado un email de recuperación a tu correo.');
+        }
+    };
+
     return (
         <div className="min-h-[80vh] flex flex-col items-center justify-center bg-background-light dark:bg-background-dark p-4">
             <div className="w-full max-w-md bg-white dark:bg-surface-dark p-8 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/5">
@@ -95,21 +112,31 @@ export const ManagerLogin: React.FC = () => {
                         )}
                     </button>
 
-                    <div className="text-center pt-2">
-                        <p className="text-xs text-slate-400 mb-4">¿Todavía no has inscrito a tu equipo?</p>
+                    <div className="flex flex-col gap-4 text-center pt-2">
                         <button
                             type="button"
-                            onClick={() => navigate('/registration')}
-                            className="text-primary font-bold text-sm hover:underline"
+                            onClick={handleForgotPassword}
+                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs transition-colors"
                         >
-                            Inscribir equipo ahora
+                            ¿Has olvidado tu contraseña?
                         </button>
+                        
+                        <div className="space-y-1">
+                            <p className="text-xs text-slate-400">¿Todavía no has inscrito a tu equipo?</p>
+                            <button
+                                type="button"
+                                onClick={() => navigate('/registration')}
+                                className="text-primary font-bold text-sm hover:underline"
+                            >
+                                Inscribir equipo ahora
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
 
             <p className="mt-8 text-xs text-slate-500 text-center max-w-xs">
-                Si has olvidado tu contraseña, contacta con la organización en <strong>torneo@muskiz.com</strong>
+                Si tienes problemas técnicos, contacta con la organización en <strong>torneo@muskiz.com</strong>
             </p>
         </div>
     );
