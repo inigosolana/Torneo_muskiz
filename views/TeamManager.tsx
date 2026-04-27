@@ -275,6 +275,11 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         switch (status) {
             case 'APPROVED': return <span className="text-green-500 material-symbols-outlined">check_circle</span>;
             case 'REJECTED': return <span className="text-red-500 material-symbols-outlined">cancel</span>;
+            case 'PENDING': return <span className="text-amber-500 material-symbols-outlined">hourglass_top</span>;
+            default: return <span className="text-slate-300 material-symbols-outlined">upload_file</span>;
+        }
+    };
+
     return (
         <div className="min-h-screen bg-background-light dark:bg-background-dark p-6 lg:p-12 animate-in fade-in">
             <div className="max-w-6xl mx-auto space-y-6">
