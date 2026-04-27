@@ -191,16 +191,22 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         toast.success('Sesión cerrada correctamente');
     };
 
-    const handleVerify = (teamId: string, playerId: string, type: 'dni' | 'insurance', status: 'APPROVED' | 'REJECTED') => {
+    const handleVerify = async (teamId: string, playerId: string, type: 'dni' | 'insurance', status: 'APPROVED' | 'REJECTED') => {
         const team = teams.find(t => t.id === teamId);
         if (team) {
-            const updatedPlayers = team.players.map(p => {
-                if (p.id === playerId) {
-                    return { ...p, [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: status };
-                }
-                return p;
-            });
-            onUpdateTeam({ ...team, players: updatedPlayers });
+            const playerToUpdate = team.players.find(p => p.id === playerId);
+            if (playerToUpdate) {
+                const updatedPlayer = { 
+                    ...playerToUpdate, 
+                    [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: status 
+                };
+                
+                // Save to DB
+                await teamService.updatePlayer(updatedPlayer);
+
+                const updatedPlayers = team.players.map(p => p.id === playerId ? updatedPlayer : p);
+                onUpdateTeam({ ...team, players: updatedPlayers });
+            }
         }
     };
 

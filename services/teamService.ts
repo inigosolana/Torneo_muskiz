@@ -120,11 +120,33 @@ export const teamService = {
                 birth_date: player.birthDate,
                 number: player.number,
                 position: player.position,
-                dni_status: 'EMPTY',
-                insurance_status: 'EMPTY'
+                dni_status: player.dniStatus || 'EMPTY',
+                insurance_status: player.insuranceStatus || 'EMPTY'
             }]);
 
         if (error) console.error('Error adding player:', error);
+    },
+
+    async updatePlayer(player: Player): Promise<void> {
+        const { error } = await supabase
+            .from('players')
+            .update({
+                name: player.name,
+                surnames: player.surnames,
+                dni_number: player.dniNumber,
+                birth_date: player.birthDate,
+                number: player.number,
+                position: player.position,
+                verified: player.verified,
+                dni_status: player.dniStatus,
+                insurance_status: player.insuranceStatus,
+                dni_url: player.dniUrl,
+                insurance_url: player.insuranceUrl,
+                avatar_url: player.avatarUrl
+            })
+            .eq('id', player.id);
+
+        if (error) console.error('Error updating player:', error);
     }
 };
 

@@ -116,6 +116,9 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             }
         }
 
+        // Save to DB
+        await teamService.addPlayer(selectedTeam.id, newPlayer);
+        
         onUpdateTeam({
             ...selectedTeam,
             players: [...selectedTeam.players, newPlayer]
@@ -251,17 +254,24 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             if (file) {
                 toast.loading(`Subiendo ${type.toUpperCase()}...`);
                 // Simulate network delay
-                setTimeout(() => {
+                setTimeout(async () => {
+                    let updatedPlayerObj: any = null;
                     const updatedPlayers = selectedTeam.players.map(p => {
                         if (p.id === playerId) {
-                            return {
+                            updatedPlayerObj = {
                                 ...p,
                                 [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'PENDING' as const,
                                 [type === 'dni' ? 'dniUrl' : 'insuranceUrl']: 'https://fake-supabase-storage.com/uploaded-file.jpg'
                             };
+                            return updatedPlayerObj;
                         }
                         return p;
                     });
+                    
+                    if (updatedPlayerObj) {
+                        await teamService.updatePlayer(updatedPlayerObj);
+                    }
+                    
                     onUpdateTeam({ ...selectedTeam, players: updatedPlayers });
                     toast.dismiss();
                     toast.success(`${type.toUpperCase()} subido correctamente.`);
