@@ -282,7 +282,6 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     };
 
     const handleDocumentUpload = (playerId: string, type: 'dni' | 'insurance') => {
-        // Real upload simulation
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*,application/pdf';
@@ -290,29 +289,34 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             const file = e.target.files?.[0];
             if (file) {
                 toast.loading(`Subiendo ${type.toUpperCase()}...`);
-                // Simulate network delay
-                setTimeout(async () => {
-                    let updatedPlayerObj: any = null;
-                    const updatedPlayers = selectedTeam.players.map(p => {
-                        if (p.id === playerId) {
-                            updatedPlayerObj = {
-                                ...p,
-                                [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'PENDING' as const,
-                                [type === 'dni' ? 'dniUrl' : 'insuranceUrl']: 'https://fake-supabase-storage.com/uploaded-file.jpg'
-                            };
-                            return updatedPlayerObj;
-                        }
-                        return p;
-                    });
-                    
-                    if (updatedPlayerObj) {
+                
+                // In a real app, you'd upload to Supabase Storage here.
+                // For now, we update the DB with a placeholder and PENDING status.
+                const fakeUrl = 'https://fake-supabase-storage.com/uploaded-file.jpg';
+                
+                const playerToUpdate = selectedTeam.players.find(p => p.id === playerId);
+                if (playerToUpdate) {
+                    const updatedPlayerObj = {
+                        ...playerToUpdate,
+                        [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'PENDING' as const,
+                        [type === 'dni' ? 'dniUrl' : 'insuranceUrl']: fakeUrl
+                    };
+
+                    try {
                         await teamService.updatePlayer(updatedPlayerObj);
+                        
+                        const updatedPlayers = selectedTeam.players.map(p => 
+                            p.id === playerId ? updatedPlayerObj : p
+                        );
+                        
+                        onUpdateTeam({ ...selectedTeam, players: updatedPlayers });
+                        toast.dismiss();
+                        toast.success(`${type.toUpperCase()} subido y enviado a revisión.`);
+                    } catch (err) {
+                        toast.dismiss();
+                        toast.error(`Error al guardar el documento: ${err}`);
                     }
-                    
-                    onUpdateTeam({ ...selectedTeam, players: updatedPlayers });
-                    toast.dismiss();
-                    toast.success(`${type.toUpperCase()} subido correctamente.`);
-                }, 2000);
+                }
             }
         };
         input.click();
@@ -588,33 +592,47 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                             <span className="bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">{player.role === 'PLAYER' ? (player.position || 'Universal') : player.role}</span>
                                                         </div>
                                                     </div>
-                                                </div>
-                                                <div className="flex gap-4 w-full sm:w-auto justify-end items-center">
+                                                                         <div className="flex gap-4 w-full sm:w-auto justify-end items-center">
                                                      <div className="flex flex-col items-center gap-1">
-                                                        <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.dniStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
-                                                            {getStatusBadge(player.dniStatus)}
-                                                            <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'dni')} />
-                                                        </label>
+                                                        <div className="flex items-center gap-1">
+                                                            <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.dniStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
+                                                                {getStatusBadge(player.dniStatus)}
+                                                                <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'dni')} />
+                                                            </label>
+                                                            {player.dniUrl && (
+                                                                <a href={player.dniUrl} target="_blank" rel="noopener noreferrer" className="size-6 text-slate-400 hover:text-primary transition-colors">
+                                                                    <span className="material-symbols-outlined text-sm">visibility</span>
+                                                                </a>
+                                                            )}
+                                                        </div>
                                                         <span className="text-[10px] font-bold text-slate-400 uppercase">DNI</span>
                                                     </div>
                                                     {player.role === 'PLAYER' && (
                                                         <div className="flex flex-col items-center gap-1">
-                                                            <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.insuranceStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
-                                                                {getStatusBadge(player.insuranceStatus)}
-                                                                <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'insurance')} />
-                                                            </label>
+                                                            <div className="flex items-center gap-1">
+                                                                <label className={`relative flex items-center justify-center size-10 rounded-lg border-2 cursor-pointer transition-colors ${player.insuranceStatus === 'APPROVED' ? 'border-green-500 bg-green-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary'}`}>
+                                                                    {getStatusBadge(player.insuranceStatus)}
+                                                                    <input type="file" className="hidden" onChange={() => handleDocumentUpload(player.id, 'insurance')} />
+                                                                </label>
+                                                                {player.insuranceUrl && (
+                                                                    <a href={player.insuranceUrl} target="_blank" rel="noopener noreferrer" className="size-6 text-slate-400 hover:text-primary transition-colors">
+                                                                        <span className="material-symbols-outlined text-sm">visibility</span>
+                                                                    </a>
+                                                                )}
+                                                            </div>
                                                             <span className="text-[10px] font-bold text-slate-400 uppercase">Seguro</span>
                                                         </div>
                                                     )}
                                                     
                                                     <button 
                                                         onClick={() => handleDeletePlayer(player.id)}
-                                                        className="size-10 flex items-center justify-center rounded-lg border border-red-100 dark:border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all ml-2"
+                                                        className="size-10 flex items-center justify-center rounded-lg border border-red-100 dark:border-red-500/20 text-red-500 hover:bg-red-50 hover:text-white transition-all ml-2"
                                                         title="Eliminar jugador"
                                                     >
                                                         <span className="material-symbols-outlined text-xl">delete</span>
                                                     </button>
                                                 </div>
+                       </div>
                                             </div>
                                         </div>
                                     ))}
