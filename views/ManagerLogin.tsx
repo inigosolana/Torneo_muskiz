@@ -14,12 +14,25 @@ export const ManagerLogin: React.FC = () => {
         setIsLoading(true);
 
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
+        
         if (error) {
             toast.error('Email o contraseña incorrectos.');
             console.error('Auth error:', error.message);
         } else if (data.user) {
-            toast.success('Acceso concedido. Bienvenido a tu panel de gestión.');
+            // Role Validation
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', data.user.id)
+                .single();
+
+            if (profile?.role !== 'manager') {
+                await supabase.auth.signOut();
+                toast.error('Acceso denegado: Esta cuenta es de Staff y debe entrar por el panel de administración.');
+            } else {
+                toast.success('Acceso concedido. Bienvenido a tu panel de gestión.');
+                navigate('/manage');
+            }
         }
 
         setIsLoading(false);

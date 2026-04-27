@@ -142,19 +142,36 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setAuthLoading(true);
-        const { error } = await supabase.auth.signInWithPassword({ email: adminEmail, password: passwordInput });
+        const { data: authData, error } = await supabase.auth.signInWithPassword({ email: adminEmail, password: passwordInput });
+        
         if (error) {
             toast.error('Credenciales incorrectas. Acceso denegado.');
-        } else {
-            setIsAuthenticated(true);
-            toast.success('Bienvenido al panel de administración.');
+        } else if (authData.user) {
+            // Role Validation
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', authData.user.id)
+                .single();
+
+            if (profile?.role !== 'staff') {
+                await supabase.auth.signOut();
+                toast.error('Acceso denegado: Esta cuenta no tiene permisos de Staff.');
+                setIsAuthenticated(false);
+            } else {
+                setIsAuthenticated(true);
+                toast.success('Bienvenido al panel de administración.');
+            }
         }
         setAuthLoading(false);
     };
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
+        localStorage.clear();
+        sessionStorage.clear();
         setIsAuthenticated(false);
+        toast.success('Sesión cerrada correctamente');
     };
 
     const handleVerify = (teamId: string, playerId: string, type: 'dni' | 'insurance', status: 'APPROVED' | 'REJECTED') => {

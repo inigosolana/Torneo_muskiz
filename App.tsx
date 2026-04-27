@@ -39,16 +39,32 @@ const App: React.FC = () => {
   const [matches, setMatches] = useState<Match[]>([]);
 
   // Auth Manager
-  const [managerUser, setManagerUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
 
-  // Restore session
+  // Restore session & Role
   useEffect(() => {
+    const fetchRole = async (userId: string) => {
+      setRoleLoading(true);
+      const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
+      setUserRole(data?.role || null);
+      setRoleLoading(false);
+    };
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setManagerUser(session?.user ?? null);
+      setUser(session?.user ?? null);
+      if (session?.user) fetchRole(session.user.id);
+      else setRoleLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setManagerUser(session?.user ?? null);
+      setUser(session?.user ?? null);
+      if (session?.user) fetchRole(session.user.id);
+      else {
+        setUserRole(null);
+        setRoleLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -85,6 +101,15 @@ const App: React.FC = () => {
       supabase.removeChannel(matchSubscription);
     };
   }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.clear();
+    sessionStorage.clear();
+    setUser(null);
+    setUserRole(null);
+    toast.success('Sesión cerrada correctamente');
+  };
 
   const addTeams = async (newTeams: Team[], receiptFile?: File) => {
     try {
@@ -130,6 +155,44 @@ const App: React.FC = () => {
     }
   };
 
+  // Protected Route Component
+  const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRole: 'staff' | 'manager' }> = ({ children, allowedRole }) => {
+    useEffect(() => {
+      if (user && !roleLoading && userRole && userRole !== allowedRole) {
+        toast.error(`Acceso denegado: Tu cuenta no tiene permisos de ${allowedRole}. Cerrando sesión por seguridad.`);
+        handleLogout();
+      }
+    }, [user, userRole, roleLoading, allowedRole]);
+
+    if (roleLoading) return (
+      <div className="min-h-screen flex items-center justify-center">
+        <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+      </div>
+    );
+
+    if (!user) {
+      return allowedRole === 'staff' ? (
+        <Admin
+          teams={teams}
+          onUpdateTeam={updateTeam}
+          matches={matches}
+          onUpdateMatches={updateMatches}
+          categoryLimits={categoryLimits}
+          onUpdateLimits={setCategoryLimits}
+          onGenerateBrackets={handleGenerateBrackets}
+        />
+      ) : (
+        <ManagerLogin />
+      );
+    }
+
+    if (userRole !== allowedRole) {
+      return <Navigate to="/" replace />;
+    }
+
+    return <>{children}</>;
+  };
+
   return (
     <Router>
       <Layout>
@@ -144,33 +207,33 @@ const App: React.FC = () => {
           <Route path="/self-registration" element={<PlayerSelfRegistration teams={teams} onUpdateTeam={updateTeam} />} />
           
           <Route path="/admin" element={
-            <Admin
-              teams={teams}
-              onUpdateTeam={updateTeam}
-              matches={matches}
-              onUpdateMatches={updateMatches}
-              categoryLimits={categoryLimits}
-              onUpdateLimits={setCategoryLimits}
-              onGenerateBrackets={handleGenerateBrackets}
-            />
+            <ProtectedRoute allowedRole="staff">
+              <Admin
+                teams={teams}
+                onUpdateTeam={updateTeam}
+                matches={matches}
+                onUpdateMatches={updateMatches}
+                categoryLimits={categoryLimits}
+                onUpdateLimits={setCategoryLimits}
+                onGenerateBrackets={handleGenerateBrackets}
+              />
+            </ProtectedRoute>
           } />
 
           <Route path="/team-manager" element={
-            !managerUser ? (
-              <ManagerLogin />
-            ) : (
+            <ProtectedRoute allowedRole="manager">
               <div className="relative">
                 <div className="absolute top-4 right-4 z-50">
-                  <button onClick={async () => { await supabase.auth.signOut(); }} className="bg-red-500/10 text-red-500 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2">
+                  <button onClick={handleLogout} className="bg-red-500/10 text-red-500 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2">
                     <span className="material-symbols-outlined text-sm">logout</span> Cerrar Sesión
                   </button>
                 </div>
                 <TeamManager
-                  teams={teams.filter(t => t.managerEmail === managerUser.email)}
+                  teams={teams.filter(t => t.managerEmail === user?.email)}
                   onUpdateTeam={updateTeam}
                 />
               </div>
-            )
+            </ProtectedRoute>
           } />
 
           <Route path="*" element={<Navigate to="/" replace />} />
