@@ -98,6 +98,22 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     // Competition Sub-tabs
     const [compSubTab, setCompSubTab] = useState<'calendar' | 'results' | 'standings'>('calendar');
 
+    // --- Team Filters ---
+    const [filterCategory, setFilterCategory] = useState<string>('all');
+    const [filterSex, setFilterSex] = useState<string>('all');
+    const [filterPayment, setFilterPayment] = useState<string>('all');
+    const [filterStatus, setFilterStatus] = useState<string>('all');
+
+    const filteredTeams = useMemo(() => {
+        return teams.filter(team => {
+            const matchCategory = filterCategory === 'all' || team.division.includes(filterCategory);
+            const matchSex = filterSex === 'all' || team.division.includes(filterSex);
+            const matchPayment = filterPayment === 'all' || team.paymentStatus === filterPayment;
+            const matchStatus = filterStatus === 'all' || team.status === filterStatus;
+            return matchCategory && matchSex && matchPayment && matchStatus;
+        });
+    }, [teams, filterCategory, filterSex, filterPayment, filterStatus]);
+
     // --- Standings Calculation (Moved up) ---
     const standings = useMemo(() => {
         const stats: Record<string, { name: string, played: number, won: number, lost: number, gf: number, ga: number, points: number }> = {};
@@ -570,8 +586,53 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
 
                             {/* Payments Table */}
                             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                                <div className="p-6 border-b border-slate-100">
+                                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <h3 className="font-bold text-lg text-slate-800">Estado de Pagos e Inscripciones</h3>
+                                    
+                                    {/* Filter Bar */}
+                                    <div className="flex flex-wrap gap-2">
+                                        <select 
+                                            value={filterCategory} 
+                                            onChange={(e) => setFilterCategory(e.target.value)}
+                                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                        >
+                                            <option value="all">Todas las Categorías</option>
+                                            <option value="Senior">Senior</option>
+                                            <option value="Juvenil">Juvenil</option>
+                                            <option value="Cadete">Cadete</option>
+                                            <option value="Infantil">Infantil</option>
+                                        </select>
+
+                                        <select 
+                                            value={filterSex} 
+                                            onChange={(e) => setFilterSex(e.target.value)}
+                                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                        >
+                                            <option value="all">Todos los Sexos</option>
+                                            <option value="Masculino">Masculino</option>
+                                            <option value="Femenino">Femenino</option>
+                                        </select>
+
+                                        <select 
+                                            value={filterPayment} 
+                                            onChange={(e) => setFilterPayment(e.target.value)}
+                                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                        >
+                                            <option value="all">Estado Pago (Todos)</option>
+                                            <option value="PAID">Pagado</option>
+                                            <option value="PENDING">Pendiente</option>
+                                        </select>
+
+                                        <select 
+                                            value={filterStatus} 
+                                            onChange={(e) => setFilterStatus(e.target.value)}
+                                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                        >
+                                            <option value="all">Estado Registro (Todos)</option>
+                                            <option value="approved">Aprobado</option>
+                                            <option value="pending">Pendiente</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <table className="w-full text-sm text-left">
                                     <thead className="bg-slate-50 text-slate-500 font-medium uppercase text-xs">
@@ -584,7 +645,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {teams.map(team => (
+                                        {filteredTeams.map(team => (
                                             <tr key={team.id} className="hover:bg-slate-50/50">
                                                 <td className="px-6 py-4 font-bold text-slate-800">
                                                     <div className="flex items-center gap-2">
