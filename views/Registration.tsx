@@ -218,6 +218,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                 players: [],
                 managerName: managerName,
                 managerEmail: managerEmail,
+                status: 'pending' as const
             }));
 
             const finalReceipt = receiptFile ?? new File(['stripe-payment'], 'stripe_payment.pdf', { type: 'application/pdf' });

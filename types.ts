@@ -102,6 +102,7 @@ export interface Match {
 
 export interface Player {
   id: string;
+  teamId: string;
   name: string; // Used as display name (Nombre + Apellidos)
   surnames?: string;
   dniNumber?: string;
@@ -136,6 +137,7 @@ export interface Team {
 }
 
 export interface CategoryLimits {
+  [key: string]: number;
   'Infantil Femenino': number;
   'Infantil Masculino': number;
   'Cadete Femenino': number;

@@ -605,7 +605,6 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                         >
                                                             <span className="material-symbols-outlined text-xl">delete</span>
                                                         </button>
-                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
