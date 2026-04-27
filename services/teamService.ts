@@ -28,6 +28,7 @@ export const teamService = {
             receiptUrl: t.receipt_url,
             managerName: t.manager_name,
             managerEmail: t.manager_email,
+            status: t.status || 'pending',
             players: t.players.map((p: any) => ({
                 id: p.id,
                 name: p.name,
@@ -99,7 +100,9 @@ export const teamService = {
                 division: team.division,
                 payment_status: team.paymentStatus,
                 payment_method: team.paymentMethod,
-                logo_url: team.logoUrl
+                logo_url: team.logoUrl,
+                status: team.status,
+                payment_feedback: team.paymentFeedback
             })
             .eq('id', team.id);
 

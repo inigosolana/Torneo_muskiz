@@ -197,8 +197,15 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     const handleRejectPayment = (team: Team) => {
         const reason = window.prompt(`Motivo del rechazo para ${team.name}:`, 'El justificante no es válido o no se ve bien.');
         if (reason) {
-            onUpdateTeam({ ...team, paymentStatus: 'PENDING', paymentFeedback: reason });
+            onUpdateTeam({ ...team, paymentStatus: 'PENDING', paymentFeedback: reason, status: 'rejected' });
             toast.info('Pago rechazado con feedback enviado al responsable.');
+        }
+    };
+
+    const handleApproveTeam = (team: Team) => {
+        if (confirm(`¿Aprobar definitivamente al equipo ${team.name}? Esto creará su cuenta de acceso y enviará el email de bienvenida.`)) {
+            onUpdateTeam({ ...team, status: 'approved', paymentStatus: 'PAID', paymentFeedback: '' });
+            toast.success('Equipo aprobado. Iniciando alta de usuario y envío de email.');
         }
     };
 
@@ -609,6 +616,11 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                         <span className="text-[10px] text-slate-500 font-medium">
                                                             {team.paymentMethod === 'TRANSFER' ? 'Transferencia' : (team.paymentMethod === 'CARD' ? 'Tarjeta (Stripe)' : (team.paymentMethod || 'Manual'))}
                                                         </span>
+                                                        <div className="mt-1">
+                                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${team.status === 'approved' ? 'bg-blue-100 text-blue-700' : team.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'}`}>
+                                                                {team.status || 'pendiente'}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
@@ -644,10 +656,19 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                                     onClick={() => handleManualPayment(team)}
                                                                     className="bg-green-50 text-green-600 hover:bg-green-100 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
                                                                 >
-                                                                    <span className="material-symbols-outlined text-xs">check</span>
-                                                                    VALIDAR
+                                                                    <span className="material-symbols-outlined text-xs">payments</span>
+                                                                    PAGADO
                                                                 </button>
                                                             </div>
+                                                        )}
+                                                        {team.status !== 'approved' && team.paymentStatus === 'PAID' && (
+                                                            <button
+                                                                onClick={() => handleApproveTeam(team)}
+                                                                className="bg-blue-600 text-white hover:bg-blue-700 text-[10px] font-black px-4 py-1.5 rounded-lg transition-all shadow-lg flex items-center gap-1 animate-pulse-subtle"
+                                                            >
+                                                                <span className="material-symbols-outlined text-xs">how_to_reg</span>
+                                                                APROBAR
+                                                            </button>
                                                         )}
                                                     </div>
                                                 </td>

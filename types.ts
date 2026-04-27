@@ -132,6 +132,7 @@ export interface Team {
   managerName: string;
   managerEmail: string;
   paymentFeedback?: string;
+  status: 'pending' | 'approved' | 'rejected';
 }
 
 export interface CategoryLimits {
