@@ -37,7 +37,7 @@ export const siteContent: SiteContent = {
 
   // Tournament Info
   tournamentInfoTitle: "Información y Reglamento",
-  tournamentInfoText: "El torneo se desarrollará en dos fases: una Fase de Grupos seguida de Eliminatorias. Garantizamos que cada equipo juegue un mínimo de 3 partidos.\n\nHorarios por categorías:\n• CADETE: Viernes 5 de Junio, desde las 17:00h.\n• JUVENIL Y SENIOR: Sábado 6 de Junio (todo el día).\n• INFANTIL: Domingo 7 de Junio.\n\nCada equipo puede inscribir un máximo de 12 jugadores. ¡Asegura tu plaza antes de que se completen las inscripciones!",
+  tournamentInfoText: "El torneo se desarrollará en dos fases: una Fase de Grupos seguida de Eliminatorias. Garantizamos que cada equipo juegue un mínimo de 3 partidos.\n\nHorarios por categorías:\n• CADETE: Viernes 5 de Junio, desde las 17:00h.\n• JUVENIL Y SENIOR: Sábado 6 de Junio (todo el día).\n• INFANTIL: Domingo 7 de Junio.\n\nNormativa de Jugadores:\n• SENIOR: Mínimo 6 / Máximo 12 jugadores.\n• JUVENIL, CADETE E INFANTIL: Mínimo 6 / Máximo 14 jugadores.\n\n¡Asegura la plaza de tu equipo antes de que se completen las inscripciones!",
   tournamentInfoImageUrl: "/campos.jpg",
 
   contactEmail: "torneo@muskiz.com",
