@@ -131,7 +131,6 @@ export interface Team {
   fee: number;
   managerName: string;
   managerEmail: string;
-  password?: string;
 }
 
 export interface CategoryLimits {

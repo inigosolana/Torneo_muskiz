@@ -1,0 +1,17 @@
+
+<!DOCTYPE html>
+<html>
+<body>
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+    const supabase = createClient('https://jwixdjmbwfnfwmtsmsau.supabase.co', 'sb_publishable_lrCyCW40bebkxjUVekMtoQ_Cn_KIIrV');
+    async function test() {
+      const { data, error } = await supabase.from('teams').select('*').limit(1);
+      console.log('Data:', data);
+      console.log('Error:', error);
+      document.body.innerHTML = JSON.stringify({data, error}, null, 2);
+    }
+    test();
+  </script>
+</body>
+</html>

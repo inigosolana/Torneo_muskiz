@@ -53,6 +53,10 @@ export const teamService = {
         // Upload receipt file once if provided
         let receiptUrl: string | undefined;
         if (receiptFile) {
+            if (receiptFile.size > 5 * 1024 * 1024) throw new Error('El archivo es demasiado grande (máx 5MB)');
+            const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+            if (!allowedTypes.includes(receiptFile.type)) throw new Error('Formato de archivo no permitido');
+
             const fileExt = receiptFile.name.split('.').pop();
             const fileName = `${Date.now()}.${fileExt}`;
             const { error: uploadError } = await supabase.storage.from('receipts').upload(fileName, receiptFile);
@@ -73,8 +77,7 @@ export const teamService = {
             fee: team.fee,
             receipt_url: receiptUrl || null,
             manager_name: team.managerName,
-            manager_email: team.managerEmail,
-            password: team.password
+            manager_email: team.managerEmail
         }));
 
         const { data, error } = await supabase.from('teams').insert(insertData).select();

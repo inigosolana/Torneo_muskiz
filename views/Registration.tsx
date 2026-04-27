@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Team, CategoryLimits } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { StripeCheckout } from '../components/StripeCheckout';
+import { supabase } from '../services/supabaseClient';
 
 interface TeamEntry {
     id: string;
@@ -45,7 +46,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
     // Manager info
     const [managerName, setManagerName] = useState(draftValid ? draft.managerName : '');
     const [managerEmail, setManagerEmail] = useState(draftValid ? draft.managerEmail : '');
-    const [password, setPassword] = useState(draftValid ? draft.password : '');
+    const [password, setPassword] = useState('');
 
     // Cart of teams to register
     const [cart, setCart] = useState<TeamEntry[]>(draftValid ? draft.cart : []);
@@ -81,13 +82,13 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             return;
         }
         const data = {
-            managerName, managerEmail, password,
+            managerName, managerEmail,
             cart, newTeamName, newTeamCity,
             selectedDivision, selectedPayment,
             reservationStart,
         };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
-    }, [managerName, managerEmail, password, cart, newTeamName, newTeamCity,
+    }, [managerName, managerEmail, cart, newTeamName, newTeamCity,
         selectedDivision, selectedPayment, reservationStart, isCompleted, expired]);
 
     // Timer effect
@@ -173,7 +174,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
         setCart(cart.filter(t => t.id !== id));
     };
 
-    const handleComplete = () => {
+    const handleComplete = async () => {
         if (!managerName || !managerEmail || !password) {
             alert('Por favor, completa los datos del responsable.');
             return;
@@ -191,25 +192,42 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             return;
         }
 
-        const newTeams: Team[] = cart.map(entry => ({
-            id: `team-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            name: entry.name,
-            city: entry.city,
-            division: entry.division,
-            paymentStatus: 'PENDING' as const,
-            paymentMethod: selectedPayment === 'transfer' ? 'TRANSFER' : 'CARD',
-            fee: entry.fee,
-            players: [],
-            managerName: managerName,
-            managerEmail: managerEmail,
-            password: password,
-        }));
+        try {
+            // 1. Sign up the manager in Supabase Auth
+            const { error: authError } = await supabase.auth.signUp({
+                email: managerEmail,
+                password: password,
+                options: {
+                    data: {
+                        full_name: managerName
+                    }
+                }
+            });
 
-        const finalReceipt = receiptFile ?? new File(['stripe-payment'], 'stripe_payment.pdf', { type: 'application/pdf' });
-        onRegister(newTeams, finalReceipt);
-        sessionStorage.removeItem('reg_draft');
-        setIsCompleted(true);
-        setGeneratedCredentials({ email: managerEmail, password: password });
+            if (authError) throw authError;
+
+            // 2. Prepare teams without password
+            const newTeams: Team[] = cart.map(entry => ({
+                id: `team-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                name: entry.name,
+                city: entry.city,
+                division: entry.division,
+                paymentStatus: 'PENDING' as const,
+                paymentMethod: selectedPayment === 'transfer' ? 'TRANSFER' : 'CARD',
+                fee: entry.fee,
+                players: [],
+                managerName: managerName,
+                managerEmail: managerEmail,
+            }));
+
+            const finalReceipt = receiptFile ?? new File(['stripe-payment'], 'stripe_payment.pdf', { type: 'application/pdf' });
+            await onRegister(newTeams, finalReceipt);
+            sessionStorage.removeItem('reg_draft');
+            setIsCompleted(true);
+            setGeneratedCredentials({ email: managerEmail, password: password });
+        } catch (error: any) {
+            alert('Error en el registro: ' + error.message);
+        }
     };
 
     // --- Completed state ---
@@ -545,10 +563,24 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                             <div>
                                                 <span className="material-symbols-outlined text-3xl text-blue-400 dark:text-blue-500 mb-1">cloud_upload</span>
                                                 <p className="text-sm text-blue-600 dark:text-blue-400">Sube el comprobante de transferencia</p>
-                                                <p className="text-xs text-blue-400 dark:text-blue-500 mt-1">Formatos: imagen o PDF</p>
+                                                <p className="text-xs text-blue-400 dark:text-blue-500 mt-1">PNG, JPG o PDF (Máx. 5MB)</p>
                                             </div>
                                         )}
-                                        <input type="file" accept="image/*,.pdf" onChange={e => setReceiptFile(e.target.files?.[0] || null)}
+                                        <input type="file" accept="image/jpeg,image/png,application/pdf" onChange={e => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                if (file.size > 5 * 1024 * 1024) {
+                                                    alert('El archivo es demasiado grande (máx. 5MB)');
+                                                    return;
+                                                }
+                                                const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+                                                if (!allowedTypes.includes(file.type)) {
+                                                    alert('Formato de archivo no permitido (solo JPG, PNG o PDF)');
+                                                    return;
+                                                }
+                                                setReceiptFile(file);
+                                            }
+                                        }}
                                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                                     </div>
                                 </div>
@@ -558,7 +590,8 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                             {selectedPayment === 'stripe' && (
                                 <div className="animate-in fade-in duration-200">
                                     <StripeCheckout
-                                        amount={totalFee}
+                                        items={cart.map(t => t.division)}
+                                        totalAmount={totalFee}
                                         onSuccess={() => {
                                             const mock = new File(['stripe'], 'stripe_payment.pdf', { type: 'application/pdf' });
                                             setReceiptFile(mock);

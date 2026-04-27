@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 
 interface StripeCheckoutProps {
-    amount: number;
+    items: string[];
+    totalAmount: number;
     onSuccess: () => void;
 }
 
@@ -13,7 +14,7 @@ interface StripeCheckoutProps {
  *
  * NOTA: Requiere que @stripe/stripe-js esté cargado y VITE_STRIPE_PUBLIC_KEY configurado.
  */
-export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ amount, onSuccess }) => {
+export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ items, totalAmount, onSuccess }) => {
     const [cardNumber, setCardNumber] = useState('');
     const [expiry, setExpiry] = useState('');
     const [cvc, setCvc] = useState('');
@@ -28,7 +29,7 @@ export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ amount, onSucces
         const createIntent = async () => {
             setLoadingIntent(true);
             const { data, error: fnError } = await supabase.functions.invoke('create-payment-intent', {
-                body: { amount: Math.round(amount * 100) } // Stripe expects cents
+                body: { items } // Send divisions, let server calculate amount
             });
 
             if (fnError || !data?.clientSecret) {
@@ -41,7 +42,7 @@ export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ amount, onSucces
         };
 
         createIntent();
-    }, [amount]);
+    }, [items]);
 
     const formatCard = (val: string) => {
         const digits = val.replace(/\D/g, '').slice(0, 16);
@@ -194,7 +195,7 @@ export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ amount, onSucces
                 ) : (
                     <>
                         <span className="material-symbols-outlined text-sm">lock</span>
-                        Pagar {amount}€ Seguro
+                        Pagar {totalAmount}€ Seguro
                     </>
                 )}
             </button>
