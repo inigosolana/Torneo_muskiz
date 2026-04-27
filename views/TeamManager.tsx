@@ -262,19 +262,31 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             if (file) {
                 toast.loading(`Subiendo ${type.toUpperCase()}...`);
                 
-                // In a real app, you'd upload to Supabase Storage here.
-                // For now, we update the DB with a placeholder and PENDING status.
-                const fakeUrl = 'https://fake-supabase-storage.com/uploaded-file.jpg';
-                
-                const playerToUpdate = selectedTeam.players.find(p => p.id === playerId);
-                if (playerToUpdate) {
-                    const updatedPlayerObj = {
-                        ...playerToUpdate,
-                        [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'PENDING' as const,
-                        [type === 'dni' ? 'dniUrl' : 'insuranceUrl']: fakeUrl
-                    };
+                try {
+                    // 1. Upload to Supabase Storage
+                    const fileExt = file.name.split('.').pop();
+                    const filePath = `${selectedTeam.id}/${playerId}/${type}_${Date.now()}.${fileExt}`;
+                    
+                    const { error: uploadError } = await supabase.storage
+                        .from('player-documents')
+                        .upload(filePath, file);
 
-                    try {
+                    if (uploadError) throw uploadError;
+
+                    // 2. Get Public URL
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('player-documents')
+                        .getPublicUrl(filePath);
+
+                    // 3. Update Database
+                    const playerToUpdate = selectedTeam.players.find(p => p.id === playerId);
+                    if (playerToUpdate) {
+                        const updatedPlayerObj = {
+                            ...playerToUpdate,
+                            [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'PENDING' as const,
+                            [type === 'dni' ? 'dniUrl' : 'insuranceUrl']: publicUrl
+                        };
+
                         await teamService.updatePlayer(updatedPlayerObj);
                         
                         const updatedPlayers = selectedTeam.players.map(p => 
@@ -283,11 +295,12 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                         
                         onUpdateTeam({ ...selectedTeam, players: updatedPlayers });
                         toast.dismiss();
-                        toast.success(`${type.toUpperCase()} subido y enviado a revisión.`);
-                    } catch (err) {
-                        toast.dismiss();
-                        toast.error(`Error al guardar el documento: ${err}`);
+                        toast.success(`${type.toUpperCase()} subido correctamente.`);
                     }
+                } catch (err: any) {
+                    toast.dismiss();
+                    toast.error(`Error al subir el archivo: ${err.message || err}`);
+                    console.error(err);
                 }
             }
         };
