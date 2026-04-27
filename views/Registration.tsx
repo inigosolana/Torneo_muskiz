@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Team, CategoryLimits } from '../types';
+import { Team, CategoryLimits } from '../types';
+import { useNavigate } from 'react-router-dom';
 import { StripeCheckout } from '../components/StripeCheckout';
 
 interface TeamEntry {
@@ -26,6 +27,7 @@ const PRICES: Record<string, number> = {
 const RESERVATION_MINUTES = 15;
 
 export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, categoryLimits }) => {
+    const navigate = useNavigate();
     const SESSION_KEY = 'reg_draft';
 
     // Restore from sessionStorage on mount (if within 15 min window)
@@ -307,7 +309,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                     <span className="material-symbols-outlined text-6xl text-red-500 mb-4">event_busy</span>
                     <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Inscripción de Equipos Cerrada</h2>
                     <p className="text-slate-500 text-sm mb-6">El plazo para inscribir nuevos equipos finalizó el 31 de mayo.</p>
-                    <button onClick={() => onNavigate(View.HOME)} className="bg-primary text-background-dark px-8 py-3 rounded-xl font-bold">Volver al Inicio</button>
+                    <button onClick={() => navigate('/')} className="bg-primary text-background-dark px-8 py-3 rounded-xl font-bold">Volver al Inicio</button>
                 </div>
             </div>
         );

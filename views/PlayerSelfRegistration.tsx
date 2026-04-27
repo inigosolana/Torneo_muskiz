@@ -1,14 +1,15 @@
 import React, { useRef, useState } from 'react';
-import { Team, Player, View } from '../types';
+import { Team, Player } from '../types';
 import SignatureCanvas from 'react-signature-canvas';
+import { useNavigate } from 'react-router-dom';
 
 interface PlayerSelfRegistrationProps {
     teams: Team[];
     onUpdateTeam: (team: Team) => void;
-    onNavigate: (view: View) => void;
 }
 
-export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ teams, onUpdateTeam, onNavigate }) => {
+export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ teams, onUpdateTeam }) => {
+    const navigate = useNavigate();
     const params = new URLSearchParams(window.location.search);
     const teamId = params.get('teamId');
 
@@ -37,7 +38,7 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
                 <span className="material-symbols-outlined text-6xl text-red-500 mb-4">event_busy</span>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Plazo Finalizado</h2>
                 <p className="text-slate-500 mb-6 text-center">El plazo para la inscripción de jugadores finalizó el 3 de junio.</p>
-                <button onClick={() => { window.history.replaceState({}, '', window.location.pathname); onNavigate(View.HOME); }} className="px-6 py-2 bg-primary text-background-dark font-bold rounded-lg">Volver al Inicio</button>
+                <button onClick={() => navigate('/')} className="px-6 py-2 bg-primary text-background-dark font-bold rounded-lg">Volver al Inicio</button>
             </div>
         );
     }
@@ -48,7 +49,7 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
                 <span className="material-symbols-outlined text-6xl text-slate-300 mb-4">error</span>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Equipo no encontrado</h2>
                 <p className="text-slate-500 mb-6">El enlace de invitación no es válido o ha caducado.</p>
-                <button onClick={() => { window.history.replaceState({}, '', window.location.pathname); onNavigate(View.HOME); }} className="px-6 py-2 bg-primary text-background-dark font-bold rounded-lg">Volver al Inicio</button>
+                <button onClick={() => navigate('/')} className="px-6 py-2 bg-primary text-background-dark font-bold rounded-lg">Volver al Inicio</button>
             </div>
         );
     }
@@ -89,7 +90,7 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
                 <span className="material-symbols-outlined text-6xl text-green-500 mb-4">check_circle</span>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">¡Inscripción Completada!</h2>
                 <p className="text-slate-500 mb-6">Ya formas parte del equipo <span className="font-bold text-primary">{team.name}</span>.</p>
-                <button onClick={() => { window.history.replaceState({}, '', window.location.pathname); onNavigate(View.HOME); }} className="px-6 py-2 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-white/5">Ir al Inicio</button>
+                <button onClick={() => navigate('/')} className="px-6 py-2 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-white/5">Ir al Inicio</button>
             </div>
         );
     }

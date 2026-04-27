@@ -1,11 +1,7 @@
 import React from 'react';
-import { SiteContent } from '../types';
+import { siteContent as content } from '../constants/siteContent';
 
-interface InformationProps {
-    content: SiteContent;
-}
-
-export const Information: React.FC<InformationProps> = ({ content }) => {
+export const Information: React.FC = () => {
     return (
         <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 sm:px-6 lg:px-8 animate-in fade-in">
             <div className="max-w-5xl mx-auto space-y-16">

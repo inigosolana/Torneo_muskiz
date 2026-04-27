@@ -1,11 +1,7 @@
 import React from 'react';
-import { SiteContent } from '../types';
+import { siteContent as content } from '../constants/siteContent';
 
-interface SponsorsProps {
-    content: SiteContent;
-}
-
-export const Sponsors: React.FC<SponsorsProps> = ({ content }) => {
+export const Sponsors: React.FC = () => {
   const platinumSponsors = content.sponsors.filter(s => s.tier === 'Platinum');
   const goldSponsors = content.sponsors.filter(s => s.tier === 'Gold');
   const silverSponsors = content.sponsors.filter(s => s.tier === 'Silver');

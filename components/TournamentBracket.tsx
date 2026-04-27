@@ -49,7 +49,7 @@ const MatchCard = ({ match }: { match?: Match }) => {
                 <span className="font-bold text-sm truncate dark:text-white">{match.teamB}</span>
                 <span className={`font-bold text-lg px-3 py-1 rounded-lg ${match.scoreA && match.scoreB && match.scoreB > match.scoreA ? 'bg-primary text-background-dark' : 'bg-slate-100 dark:bg-white/10 dark:text-white'}`}>{match.scoreB ?? '-'}</span>
             </div>
-            <div className="absolute top-1 left-1 text-[8px] text-slate-400 font-bold uppercase tracking-widest">{match.category}</div>
+            <div className="absolute top-1 left-1 text-[8px] text-slate-400 font-bold uppercase tracking-widest">{match.round}</div>
         </div>
     )
 } 

@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View } from '../types';
+import { Link, useLocation } from 'react-router-dom';
 
 interface LayoutProps {
-  currentView: View;
-  onNavigate: (view: View) => void;
   children: React.ReactNode;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, children }) => {
+export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const location = useLocation();
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -28,15 +27,14 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
     document.documentElement.classList.toggle('dark', newTheme === 'dark');
   };
 
-  // Added Info right after Home
   const navItems = [
-    { label: 'Inicio', view: View.HOME },
-    { label: 'Información', view: View.INFO },
-    { label: 'Registro', view: View.REGISTRATION },
-    { label: 'Mi Equipo', view: View.TEAM },
-    { label: 'Competición', view: View.SCHEDULE },
-    { label: 'Multimedia', view: View.MEDIA },
-    { label: 'Patrocinadores', view: View.SPONSORS },
+    { label: 'Inicio', path: '/' },
+    { label: 'Información', path: '/info' },
+    { label: 'Registro', path: '/registration' },
+    { label: 'Mi Equipo', path: '/team-manager' },
+    { label: 'Competición', path: '/schedule' },
+    { label: 'Multimedia', path: '/media' },
+    { label: 'Patrocinadores', path: '/sponsors' },
   ];
 
   return (
@@ -45,9 +43,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             {/* Logo */}
-            <div
+            <Link
+              to="/"
               className="flex items-center gap-4 cursor-pointer group"
-              onClick={() => onNavigate(View.HOME)}
             >
               <div className="flex items-center gap-2">
                 <img src="/logo_muskiz.png" alt="Muskiz Eskubaloia" className="h-10 w-auto object-contain transition-transform group-hover:scale-105" />
@@ -57,21 +55,21 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                 <h1 className="text-xl font-bold tracking-tight uppercase leading-none text-white">II Torneo</h1>
                 <span className="text-xs font-medium text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors">Muskizko Udala</span>
               </div>
-            </div>
+            </Link>
 
             {/* Desktop Nav */}
             <nav className="hidden lg:flex items-center gap-6">
               {navItems.map((item) => (
-                <button
-                  key={item.view}
-                  onClick={() => onNavigate(item.view)}
-                  className={`text-sm font-medium transition-colors uppercase tracking-wide ${currentView === item.view
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`text-sm font-medium transition-colors uppercase tracking-wide ${location.pathname === item.path
                       ? 'text-primary border-b-2 border-primary'
                       : 'text-slate-300 hover:text-white'
                     }`}
                 >
                   {item.label}
-                </button>
+                </Link>
               ))}
             </nav>
 
@@ -85,13 +83,13 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                 <span className="material-symbols-outlined">{theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
               </button>
 
-              <button
-                onClick={() => onNavigate(View.REGISTRATION)}
+              <Link
+                to="/registration"
                 className="hidden sm:flex items-center gap-2 bg-primary hover:bg-primary-dark text-background-dark px-5 py-2.5 rounded-lg font-bold text-sm transition-all transform active:scale-95 shadow-[0_0_15px_rgba(13,242,242,0.3)] hover:shadow-[0_0_20px_rgba(13,242,242,0.5)]"
               >
                 <span>Inscribirse</span>
                 <span className="material-symbols-outlined text-lg">arrow_forward</span>
-              </button>
+              </Link>
 
               <button
                 className="lg:hidden p-2 text-slate-300 hover:text-primary"
@@ -108,19 +106,17 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
           <div className="lg:hidden bg-background-dark border-t border-white/10">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
               {navItems.map((item) => (
-                <button
-                  key={item.view}
-                  onClick={() => {
-                    onNavigate(item.view);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${currentView === item.view
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${location.pathname === item.path
                       ? 'bg-primary/10 text-primary'
                       : 'text-slate-300 hover:text-white hover:bg-white/5'
                     }`}
                 >
                   {item.label}
-                </button>
+                </Link>
               ))}
             </div>
           </div>
@@ -169,9 +165,9 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
             <div>
               <h4 className="font-bold text-white uppercase tracking-wider mb-6 text-sm">Competición</h4>
               <ul className="space-y-3 text-sm">
-                <li><button onClick={() => onNavigate(View.SCHEDULE)} className="hover:text-primary text-left">Calendario y Resultados</button></li>
-                <li><button onClick={() => onNavigate(View.TEAM)} className="hover:text-primary text-left">Inscripción Equipos</button></li>
-                <li><button onClick={() => onNavigate(View.MEDIA)} className="hover:text-primary text-left">Galería Multimedia</button></li>
+                <li><Link to="/schedule" className="hover:text-primary text-left">Calendario y Resultados</Link></li>
+                <li><Link to="/team-manager" className="hover:text-primary text-left">Inscripción Equipos</Link></li>
+                <li><Link to="/media" className="hover:text-primary text-left">Galería Multimedia</Link></li>
               </ul>
             </div>
 
@@ -188,8 +184,8 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
             {/* Column 4: Admin Access (Prominent) */}
             <div>
               <h4 className="font-bold text-white uppercase tracking-wider mb-6 text-sm">Organización</h4>
-              <button
-                onClick={() => onNavigate(View.ADMIN)}
+              <Link
+                to="/admin"
                 className="w-full group flex items-center gap-3 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white px-4 py-4 rounded-xl border border-white/10 hover:border-primary/50 transition-all text-left"
               >
                 <div className="size-10 rounded-lg bg-black/40 flex items-center justify-center group-hover:bg-primary group-hover:text-background-dark transition-colors border border-white/5">
@@ -199,18 +195,18 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                   <span className="block text-xs font-bold uppercase text-white group-hover:text-primary">Acceso Staff</span>
                   <span className="block text-[10px] text-slate-500">Solo personal autorizado</span>
                 </div>
-              </button>
+              </Link>
             </div>
           </div>
 
           <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs">
             <span>&copy; 2026 Torneo Muskizko Udala. Todos los derechos reservados.</span>
             <div className="flex items-center gap-6">
-              <button onClick={() => onNavigate(View.SPONSORS)} className="hover:text-primary">Patrocinadores</button>
+              <Link to="/sponsors" className="hover:text-primary">Patrocinadores</Link>
               <span className="text-slate-700">|</span>
-              <button onClick={() => onNavigate(View.ADMIN)} className="text-slate-600 hover:text-primary flex items-center gap-1">
+              <Link to="/admin" className="text-slate-600 hover:text-primary flex items-center gap-1">
                 <span className="material-symbols-outlined text-xs">lock</span> Admin
-              </button>
+              </Link>
             </div>
           </div>
         </div>

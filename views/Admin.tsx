@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Team, Match, CategoryLimits, MatchReport, PlayerStat, SiteContent, Sponsor, GalleryItem } from '../types';
+import { Team, Match, CategoryLimits, MatchReport, PlayerStat } from '../types';
 import { generateBracketAI, generateSocialMediaPost } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
@@ -13,11 +13,10 @@ interface AdminProps {
     onUpdateMatches: (matches: Match[]) => void;
     categoryLimits: CategoryLimits;
     onUpdateLimits: (limits: CategoryLimits) => void;
-    content: SiteContent;
-    onUpdateContent: (content: SiteContent) => void;
+    onGenerateBrackets: () => void;
 }
 
-export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUpdateMatches, categoryLimits, onUpdateLimits, content, onUpdateContent }) => {
+export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUpdateMatches, categoryLimits, onUpdateLimits, onGenerateBrackets }) => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [adminEmail, setAdminEmail] = useState('');
     const [passwordInput, setPasswordInput] = useState('');
@@ -95,13 +94,9 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     };
 
     // Main Navigation Tabs
-    const [activeTab, setActiveTab] = useState<'verification' | 'competition' | 'teams' | 'cms'>('verification');
+    const [activeTab, setActiveTab] = useState<'verification' | 'competition' | 'teams'>('verification');
     // Competition Sub-tabs
     const [compSubTab, setCompSubTab] = useState<'calendar' | 'results' | 'standings'>('calendar');
-
-    // CMS Helper State
-    const [newSponsor, setNewSponsor] = useState<Partial<Sponsor>>({ name: '', tier: 'Silver', logoUrl: 'star' });
-    const [newGalleryItem, setNewGalleryItem] = useState<Partial<GalleryItem>>({ title: '', url: 'https://picsum.photos/600/400', year: 2026 });
 
     // --- Standings Calculation (Moved up) ---
     const standings = useMemo(() => {
@@ -191,49 +186,6 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
             reader.readAsDataURL(file);
         }
     };
-
-    // --- CMS Logic Helpers ---
-    const handleAddSponsor = () => {
-        if (!newSponsor.name) return;
-        onUpdateContent({
-            ...content,
-            sponsors: [...content.sponsors, { ...newSponsor, id: Date.now().toString() } as Sponsor]
-        });
-        setNewSponsor({ name: '', tier: 'Silver', logoUrl: 'star' });
-    };
-
-    const handleDeleteSponsor = (id: string) => {
-        onUpdateContent({
-            ...content,
-            sponsors: content.sponsors.filter(s => s.id !== id)
-        });
-    };
-
-    const handleAddGalleryItem = () => {
-        if (!newGalleryItem.title) return;
-        onUpdateContent({
-            ...content,
-            gallery: [...content.gallery, { ...newGalleryItem, id: Date.now().toString() } as GalleryItem]
-        });
-        setNewGalleryItem({ title: '', url: 'https://picsum.photos/600/400', year: 2026 });
-    };
-
-    const handleDeleteGalleryItem = (id: string) => {
-        onUpdateContent({
-            ...content,
-            gallery: content.gallery.filter(g => g.id !== id)
-        });
-    };
-
-    const handleVenueFeatureChange = (idx: number, val: string) => {
-        const newFeatures = [...content.venue.features];
-        newFeatures[idx] = val;
-        onUpdateContent({
-            ...content,
-            venue: { ...content.venue, features: newFeatures }
-        });
-    };
-
     // --- Generator Logic ---
     const handleGenerateBracket = async () => {
         setGeneratingBracket(true);
@@ -465,12 +417,6 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                         <span className="material-symbols-outlined text-lg">trophy</span> Competición
                     </button>
                     <button
-                        onClick={() => setActiveTab('cms')}
-                        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'cms' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
-                    >
-                        <span className="material-symbols-outlined text-lg">edit_note</span> Editor Web
-                    </button>
-                    <button
                         onClick={handleLogout}
                         className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium text-red-500 hover:bg-red-50 mt-12 transition-colors"
                     >
@@ -667,269 +613,6 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                         ))}
                                     </tbody>
                                 </table>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* --- CMS TAB (NEW) --- */}
-                    {activeTab === 'cms' && (
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-6">
-                            <div className="border-b border-slate-100 pb-4">
-                                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-primary">edit_note</span> Editor de Contenido Web
-                                </h3>
-                                <p className="text-slate-500 text-sm">Gestiona todos los textos, imágenes, patrocinadores y multimedia de la web.</p>
-                            </div>
-
-                            <div className="grid gap-6">
-                                {/* Global Config / Status */}
-                                <div className="p-4 bg-primary/5 rounded-xl border border-primary/20">
-                                    <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-base">settings</span> Estado del Torneo
-                                    </h4>
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm font-bold text-slate-700">Activar Calendario y Competición</p>
-                                            <p className="text-xs text-slate-500">Muestra el calendario, resultados y clasificación al público.</p>
-                                        </div>
-                                        <button
-                                            onClick={() => onUpdateContent({ ...content, isScheduleActive: !content.isScheduleActive })}
-                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${content.isScheduleActive ? 'bg-primary' : 'bg-slate-300'}`}
-                                        >
-                                            <span className={`${content.isScheduleActive ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
-                                        </button>
-                                    </div>
-                                </div>
-                                {/* Hero Section */}
-                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                    <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-base">home</span> Página de Inicio (Hero)
-                                    </h4>
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Título Principal</label>
-                                            <input
-                                                type="text"
-                                                value={content.heroTitle}
-                                                onChange={(e) => onUpdateContent({ ...content, heroTitle: e.target.value })}
-                                                className="w-full border border-slate-300 rounded-lg px-3 py-2"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Subtítulo</label>
-                                            <textarea
-                                                value={content.heroSubtitle}
-                                                onChange={(e) => onUpdateContent({ ...content, heroSubtitle: e.target.value })}
-                                                className="w-full border border-slate-300 rounded-lg px-3 py-2 h-20"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Info Section */}
-                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                    <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-base">info</span> Información e Historia
-                                    </h4>
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Título Sección</label>
-                                            <input
-                                                type="text"
-                                                value={content.aboutTitle}
-                                                onChange={(e) => onUpdateContent({ ...content, aboutTitle: e.target.value })}
-                                                className="w-full border border-slate-300 rounded-lg px-3 py-2"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Texto Historia</label>
-                                            <textarea
-                                                value={content.aboutText}
-                                                onChange={(e) => onUpdateContent({ ...content, aboutText: e.target.value })}
-                                                className="w-full border border-slate-300 rounded-lg px-3 py-2 h-32"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">URL Imagen</label>
-                                            <input
-                                                type="text"
-                                                value={content.aboutImageUrl}
-                                                onChange={(e) => onUpdateContent({ ...content, aboutImageUrl: e.target.value })}
-                                                className="w-full border border-slate-300 rounded-lg px-3 py-2"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Tournament Info Section */}
-                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                    <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-base">sports_handball</span> Información del Torneo
-                                    </h4>
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Título Sección</label>
-                                            <input
-                                                type="text"
-                                                value={content.tournamentInfoTitle}
-                                                onChange={(e) => onUpdateContent({ ...content, tournamentInfoTitle: e.target.value })}
-                                                className="w-full border border-slate-300 rounded-lg px-3 py-2"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Detalles (Categorías, Días, Límites)</label>
-                                            <textarea
-                                                value={content.tournamentInfoText}
-                                                onChange={(e) => onUpdateContent({ ...content, tournamentInfoText: e.target.value })}
-                                                className="w-full border border-slate-300 rounded-lg px-3 py-2 h-32"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">URL Imagen</label>
-                                            <input
-                                                type="text"
-                                                value={content.tournamentInfoImageUrl}
-                                                onChange={(e) => onUpdateContent({ ...content, tournamentInfoImageUrl: e.target.value })}
-                                                className="w-full border border-slate-300 rounded-lg px-3 py-2"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Venue Section */}
-                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                    <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-base">location_on</span> La Sede
-                                    </h4>
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Título Sede</label>
-                                            <input
-                                                type="text"
-                                                value={content.venue.title}
-                                                onChange={(e) => onUpdateContent({ ...content, venue: { ...content.venue, title: e.target.value } })}
-                                                className="w-full border border-slate-300 rounded-lg px-3 py-2"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Descripción</label>
-                                            <textarea
-                                                value={content.venue.description}
-                                                onChange={(e) => onUpdateContent({ ...content, venue: { ...content.venue, description: e.target.value } })}
-                                                className="w-full border border-slate-300 rounded-lg px-3 py-2 h-20"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Características (Puntos clave)</label>
-                                            {content.venue.features.map((feature, i) => (
-                                                <input
-                                                    key={i}
-                                                    type="text"
-                                                    value={feature}
-                                                    onChange={(e) => handleVenueFeatureChange(i, e.target.value)}
-                                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 mb-2"
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Socials Section */}
-                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                    <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-base">share</span> Redes Sociales
-                                    </h4>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Instagram Handle</label>
-                                            <input type="text" value={content.socials.instagram.handle} onChange={(e) => onUpdateContent({ ...content, socials: { ...content.socials, instagram: { ...content.socials.instagram, handle: e.target.value } } })} className="w-full border border-slate-300 rounded-lg px-3 py-2" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Twitter Handle</label>
-                                            <input type="text" value={content.socials.twitter.handle} onChange={(e) => onUpdateContent({ ...content, socials: { ...content.socials, twitter: { ...content.socials.twitter, handle: e.target.value } } })} className="w-full border border-slate-300 rounded-lg px-3 py-2" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">TikTok Handle</label>
-                                            <input type="text" value={content.socials.tiktok.handle} onChange={(e) => onUpdateContent({ ...content, socials: { ...content.socials, tiktok: { ...content.socials.tiktok, handle: e.target.value } } })} className="w-full border border-slate-300 rounded-lg px-3 py-2" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">YouTube Name</label>
-                                            <input type="text" value={content.socials.youtube.handle} onChange={(e) => onUpdateContent({ ...content, socials: { ...content.socials, youtube: { ...content.socials.youtube, handle: e.target.value } } })} className="w-full border border-slate-300 rounded-lg px-3 py-2" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Sponsors Management */}
-                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                    <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-base">handshake</span> Patrocinadores
-                                    </h4>
-                                    <div className="mb-4 flex gap-2 items-end">
-                                        <div className="flex-1">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Nombre</label>
-                                            <input type="text" value={newSponsor.name} onChange={(e) => setNewSponsor({ ...newSponsor, name: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" placeholder="Nuevo Patrocinador" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Logo URL / Icono</label>
-                                            <input type="text" value={newSponsor.logoUrl} onChange={(e) => setNewSponsor({ ...newSponsor, logoUrl: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" placeholder="https://... o 'star'" />
-                                        </div>
-                                        <div className="w-32">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Nivel</label>
-                                            <select value={newSponsor.tier} onChange={(e) => setNewSponsor({ ...newSponsor, tier: e.target.value as any })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                                                <option value="Platinum">Platinum</option>
-                                                <option value="Gold">Gold</option>
-                                                <option value="Silver">Silver</option>
-                                                <option value="Collaborator">Colab</option>
-                                            </select>
-                                        </div>
-                                        <button onClick={handleAddSponsor} className="bg-primary text-background-dark px-4 py-2 rounded-lg font-bold hover:opacity-90">Añadir</button>
-                                    </div>
-                                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                                        {content.sponsors.map(sponsor => (
-                                            <div key={sponsor.id} className="flex items-center justify-between bg-white p-3 rounded border border-slate-100">
-                                                <div className="flex items-center gap-3">
-                                                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${sponsor.tier === 'Platinum' ? 'bg-purple-100 text-purple-700' : sponsor.tier === 'Gold' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'}`}>{sponsor.tier}</span>
-                                                    <span className="text-sm font-medium">{sponsor.name}</span>
-                                                </div>
-                                                <button onClick={() => handleDeleteSponsor(sponsor.id)} className="text-red-400 hover:text-red-600"><span className="material-symbols-outlined text-sm">delete</span></button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Gallery Management */}
-                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                    <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-base">photo_library</span> Galería Multimedia
-                                    </h4>
-                                    <div className="mb-4 flex gap-2 items-end">
-                                        <div className="flex-1">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Título Foto</label>
-                                            <input type="text" value={newGalleryItem.title} onChange={(e) => setNewGalleryItem({ ...newGalleryItem, title: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" placeholder="Título" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">URL Imagen</label>
-                                            <input type="text" value={newGalleryItem.url} onChange={(e) => setNewGalleryItem({ ...newGalleryItem, url: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" placeholder="https://..." />
-                                        </div>
-                                        <div className="w-24">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Año</label>
-                                            <input type="number" value={newGalleryItem.year} onChange={(e) => setNewGalleryItem({ ...newGalleryItem, year: parseInt(e.target.value) })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
-                                        </div>
-                                        <button onClick={handleAddGalleryItem} className="bg-primary text-background-dark px-4 py-2 rounded-lg font-bold hover:opacity-90">Añadir</button>
-                                    </div>
-                                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                                        {content.gallery.map(item => (
-                                            <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded border border-slate-100">
-                                                <div className="flex items-center gap-3">
-                                                    <img src={item.url} alt="" className="size-8 rounded object-cover bg-slate-100" />
-                                                    <span className="text-sm font-medium">{item.title}</span>
-                                                    <span className="text-xs text-slate-400">({item.year})</span>
-                                                </div>
-                                                <button onClick={() => handleDeleteGalleryItem(item.id)} className="text-red-400 hover:text-red-600"><span className="material-symbols-outlined text-sm">delete</span></button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     )}

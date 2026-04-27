@@ -1,14 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { searchRules } from '../services/geminiService';
-import { Match, Team, SiteContent } from '../types';
+import { Match, Team } from '../types';
+import { siteContent } from '../constants/siteContent';
 
 interface ScheduleProps {
     matches: Match[];
     teams: Team[];
-    content?: SiteContent;
 }
 
-export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, content }) => {
+export const Schedule: React.FC<ScheduleProps> = ({ matches, teams }) => {
     const [activeTab, setActiveTab] = useState<'info' | 'calendar' | 'results' | 'standings'>('info');
     const [infoSubTab, setInfoSubTab] = useState<'general' | 'rules'>('general');
 
@@ -88,7 +88,7 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, content }) =
                 <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-sm border border-slate-200 dark:border-white/5 overflow-hidden">
                     <div className="flex border-b border-slate-200 dark:border-white/10 overflow-x-auto no-scrollbar">
                         {(['info', 'calendar', 'results', 'standings'] as const)
-                            .filter(tab => tab === 'info' || content?.isScheduleActive)
+                            .filter(tab => tab === 'info' || siteContent.isScheduleActive)
                             .map((tab) => (
                             <button
                                 key={tab}

@@ -1,12 +1,8 @@
 import React, { useState } from 'react';
 import { VideoGenerator } from '../components/VideoGenerator';
-import { SiteContent } from '../types';
+import { siteContent as content } from '../constants/siteContent';
 
-interface MediaProps {
-    content: SiteContent;
-}
-
-export const Media: React.FC<MediaProps> = ({ content }) => {
+export const Media: React.FC = () => {
     const [showGenerator, setShowGenerator] = useState(false);
     const [selectedYear, setSelectedYear] = useState(2025);
     const [selectedCategory, setSelectedCategory] = useState<'Todas' | 'Goles' | 'Ambiente' | 'Entrevistas'>('Todas');

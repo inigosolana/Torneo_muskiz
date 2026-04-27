@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { View, SiteContent, Team } from '../types';
+import { useNavigate } from 'react-router-dom';
+import { Team } from '../types';
+import { siteContent } from '../constants/siteContent';
 
 interface HomeProps {
-  onNavigate: (view: View) => void;
-  content: SiteContent;
   teams: Team[];
 }
 
-export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
+export const Home: React.FC<HomeProps> = ({ teams }) => {
+  const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
 
   const handleUploadClick = () => {
@@ -18,7 +19,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
     }, 1500);
   };
 
-  const topSponsors = content.sponsors.filter(s => s.tier === 'Platinum' || s.tier === 'Gold').slice(0, 5);
+  const topSponsors = siteContent.sponsors.filter(s => s.tier === 'Platinum' || s.tier === 'Gold').slice(0, 5);
 
   return (
     <div className="animate-in fade-in duration-500">
@@ -45,12 +46,12 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
             {/* Hero Text */}
             <div className="lg:col-span-12 xl:col-span-7 flex flex-col gap-6 mb-8 lg:mb-0">
               <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black text-white leading-[0.9] tracking-tighter uppercase drop-shadow-lg">
-                {content.heroTitle}
+                {siteContent.heroTitle}
               </h1>
               <div className="flex flex-col lg:flex-row gap-8 items-center lg:items-center">
                 <div className="flex-1">
                   <p className="text-lg sm:text-xl text-slate-300 max-w-xl font-light border-l-4 border-primary pl-4">
-                    {content.heroSubtitle}
+                    {siteContent.heroSubtitle}
                   </p>
                 </div>
                 <div className="w-48 h-48 flex items-center justify-center bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-4 shrink-0">
@@ -64,13 +65,13 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
 
               <div className="flex flex-wrap gap-4 mt-4">
                 <button
-                  onClick={() => onNavigate(View.SCHEDULE)}
+                  onClick={() => navigate('/schedule')}
                   className="flex items-center justify-center gap-2 bg-white text-slate-900 hover:bg-slate-100 px-8 py-3 rounded-lg font-bold text-base transition-colors min-w-[160px]"
                 >
                   Ver Calendario
                 </button>
                 <button
-                  onClick={() => onNavigate(View.REGISTRATION)}
+                  onClick={() => navigate('/registration')}
                   className="flex items-center justify-center gap-2 bg-primary text-background-dark hover:bg-primary/90 px-8 py-3 rounded-lg font-bold text-base transition-colors min-w-[160px]"
                 >
                   Inscribir Equipo
@@ -91,7 +92,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
                   Asegura la plaza de tu equipo para la segunda edición del torneo antes de que se agoten.
                 </p>
                 <button
-                  onClick={() => onNavigate(View.REGISTRATION)}
+                  onClick={() => navigate('/registration')}
                   className="bg-primary hover:bg-primary-dark text-background-dark px-10 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(13,242,242,0.3)] w-full sm:w-auto"
                 >
                   ¡Inscribirse Ahora!
@@ -163,7 +164,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, content, teams }) => {
             ))}
           </div>
           <div className="text-center mt-8">
-            <button onClick={() => onNavigate(View.SPONSORS)} className="text-primary text-sm font-bold hover:underline">Ver todos los patrocinadores</button>
+            <button onClick={() => navigate('/sponsors')} className="text-primary text-sm font-bold hover:underline">Ver todos los patrocinadores</button>
           </div>
         </div>
       </section>

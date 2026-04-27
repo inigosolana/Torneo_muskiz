@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { analyzePlayerId } from '../services/geminiService';
-import { Team, Player, View } from '../types';
+import { Team, Player } from '../types';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface TeamManagerProps {
     teams: Team[];
     onUpdateTeam: (team: Team) => void;
-    onNavigate: (view: View) => void;
 }
 
-export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, onNavigate }) => {
+export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam }) => {
+    const navigate = useNavigate();
     const [selectedTeamId, setSelectedTeamId] = useState<string>(teams.length > 0 ? teams[0].id : '');
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -42,7 +43,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">No tienes equipos registrados</h2>
                 <p className="text-slate-500 mb-6">Registra tu primer equipo para comenzar a gestionar la plantilla.</p>
                 <button
-                    onClick={() => onNavigate(View.REGISTRATION)}
+                    onClick={() => navigate('/registration')}
                     className="bg-primary text-background-dark px-6 py-3 rounded-xl font-bold"
                 >
                     Registrar Equipo
@@ -145,7 +146,9 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
             birthDate: '',
             number: '',
             position: 'Universal',
-            role: 'PLAYER'
+            role: 'PLAYER',
+            dniUrl: '',
+            insuranceUrl: ''
         });
         setShowManualModal(false);
     };
@@ -291,7 +294,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam, o
                             >
                                 {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
-                            <button onClick={() => onNavigate(View.REGISTRATION)} className="text-primary text-sm font-bold hover:underline">+ Nuevo Equipo</button>
+                            <button onClick={() => navigate('/registration')} className="text-primary text-sm font-bold hover:underline">+ Nuevo Equipo</button>
                         </div>
                         <div className="flex items-center gap-4">
                             <div className="h-2 w-48 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">

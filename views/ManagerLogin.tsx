@@ -1,14 +1,10 @@
 import React, { useState } from 'react';
-import { View } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
-interface ManagerLoginProps {
-    onLogin: (managerEmail: string) => void;
-    onNavigate: (view: View) => void;
-}
-
-export const ManagerLogin: React.FC<ManagerLoginProps> = ({ onLogin, onNavigate }) => {
+export const ManagerLogin: React.FC = () => {
+    const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -23,7 +19,6 @@ export const ManagerLogin: React.FC<ManagerLoginProps> = ({ onLogin, onNavigate 
             toast.error('Email o contraseña incorrectos.');
             console.error('Auth error:', error.message);
         } else if (data.user) {
-            onLogin(data.user.email ?? email);
             toast.success('Acceso concedido. Bienvenido a tu panel de gestión.');
         }
 
@@ -91,7 +86,7 @@ export const ManagerLogin: React.FC<ManagerLoginProps> = ({ onLogin, onNavigate 
                         <p className="text-xs text-slate-400 mb-4">¿Todavía no has inscrito a tu equipo?</p>
                         <button
                             type="button"
-                            onClick={() => onNavigate(View.REGISTRATION)}
+                            onClick={() => navigate('/registration')}
                             className="text-primary font-bold text-sm hover:underline"
                         >
                             Inscribir equipo ahora

@@ -85,7 +85,7 @@ export const StripeCheckout: React.FC<StripeCheckoutProps> = ({ amount, onSucces
                         exp_month: parseInt(expMonth),
                         exp_year: parseInt(`20${expYear}`),
                         cvc,
-                    },
+                    } as any,
                     billing_details: { name },
                 },
             });
