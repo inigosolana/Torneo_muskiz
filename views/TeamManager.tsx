@@ -171,11 +171,14 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     const downloadCsvTemplate = () => {
         const headers = "Nombre,Apellidos,DNI,FechaNacimiento,Numero,Posicion";
         const example = "Juan,Perez Garcia,12345678Z,1995-05-20,10,Portero";
-        const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + example;
-        const encodedUri = encodeURI(csvContent);
+        const csvContent = headers + "\n" + example;
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
+        link.setAttribute("href", url);
         link.setAttribute("download", "plantilla_jugadores_muskiz.csv");
+        link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -531,8 +534,34 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                         <button
                                             onClick={() => {
                                                 const link = `${window.location.origin}${window.location.pathname}?view=slfreg&teamId=${selectedTeam.id}`;
-                                                navigator.clipboard.writeText(link);
-                                                toast.success('Enlace de invitación copiado al portapapeles.');
+                                                
+                                                if (navigator.clipboard && navigator.clipboard.writeText) {
+                                                    navigator.clipboard.writeText(link)
+                                                        .then(() => toast.success('Enlace de invitación copiado al portapapeles.'))
+                                                        .catch(() => {
+                                                            // Fallback for failed clipboard access
+                                                            const textArea = document.createElement("textarea");
+                                                            textArea.value = link;
+                                                            document.body.appendChild(textArea);
+                                                            textArea.select();
+                                                            document.execCommand("copy");
+                                                            document.body.removeChild(textArea);
+                                                            toast.success('Enlace de invitación copiado al portapapeles.');
+                                                        });
+                                                } else {
+                                                    // Classic fallback for HTTP/old browsers
+                                                    const textArea = document.createElement("textarea");
+                                                    textArea.value = link;
+                                                    document.body.appendChild(textArea);
+                                                    textArea.select();
+                                                    try {
+                                                        document.execCommand("copy");
+                                                        toast.success('Enlace de invitación copiado al portapapeles.');
+                                                    } catch (err) {
+                                                        toast.error('No se pudo copiar automáticamente. Copia este enlace: ' + link);
+                                                    }
+                                                    document.body.removeChild(textArea);
+                                                }
                                             }}
                                             className="text-primary hover:text-primary-dark text-xs font-bold flex items-center gap-1 px-3 py-2 bg-primary/10 rounded-lg border border-primary/20"
                                         >
