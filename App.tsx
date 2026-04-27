@@ -73,6 +73,18 @@ const App: React.FC = () => {
   // Load initial data
   useEffect(() => {
     const loadData = async () => {
+      // 1. Fetch Categories Limits from Supabase site_content
+      const { data: limitsData } = await supabase
+        .from('site_content')
+        .select('value')
+        .eq('key', 'category_limits')
+        .single();
+
+      if (limitsData?.value) {
+        setCategoryLimits(limitsData.value as CategoryLimits);
+      }
+
+      // 2. Fetch Teams and Matches
       const dbTeams = await teamService.getTeams();
       const dbMatches = await matchService.getMatches();
       if (dbTeams.length > 0) setTeams(dbTeams);
@@ -101,6 +113,19 @@ const App: React.FC = () => {
       supabase.removeChannel(matchSubscription);
     };
   }, []);
+
+  const handleUpdateLimits = async (newLimits: CategoryLimits) => {
+    setCategoryLimits(newLimits);
+    const { error } = await supabase
+      .from('site_content')
+      .upsert({ key: 'category_limits', value: newLimits }, { onConflict: 'key' });
+    
+    if (error) {
+      toast.error('Error al guardar los límites en la base de datos');
+    } else {
+      toast.success('Límites actualizados correctamente');
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -200,7 +225,7 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Home teams={teams} />} />
           <Route path="/info" element={<Information />} />
-          <Route path="/schedule" element={<Schedule matches={matches} teams={teams} />} />
+          <Route path="/schedule" element={<Schedule matches={matches} teams={teams} categoryLimits={categoryLimits} />} />
           <Route path="/registration" element={<Registration onRegister={addTeams} teams={teams} categoryLimits={categoryLimits} />} />
           <Route path="/sponsors" element={<Sponsors />} />
           <Route path="/media" element={<Media />} />
@@ -214,7 +239,7 @@ const App: React.FC = () => {
                 matches={matches}
                 onUpdateMatches={updateMatches}
                 categoryLimits={categoryLimits}
-                onUpdateLimits={setCategoryLimits}
+                onUpdateLimits={handleUpdateLimits}
                 onGenerateBrackets={handleGenerateBrackets}
               />
             </ProtectedRoute>

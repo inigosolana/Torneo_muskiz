@@ -54,7 +54,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
 
     // --- Actions ---
 
-    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+     const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             try {
@@ -70,6 +70,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             }
         }
     };
+
 
     const handlePayment = (e: React.FormEvent) => {
         e.preventDefault();
@@ -274,14 +275,27 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         switch (status) {
             case 'APPROVED': return <span className="text-green-500 material-symbols-outlined">check_circle</span>;
             case 'REJECTED': return <span className="text-red-500 material-symbols-outlined">cancel</span>;
-            case 'PENDING': return <span className="text-amber-500 material-symbols-outlined">hourglass_top</span>;
-            default: return <span className="text-slate-300 material-symbols-outlined">upload_file</span>;
-        }
-    };
-
     return (
         <div className="min-h-screen bg-background-light dark:bg-background-dark p-6 lg:p-12 animate-in fade-in">
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-6xl mx-auto space-y-6">
+
+                {/* Payment Feedback Notice */}
+                {selectedTeam.paymentStatus === 'PENDING' && selectedTeam.paymentFeedback && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-5 rounded-r-2xl animate-in slide-in-from-top-4 duration-500 shadow-md">
+                        <div className="flex items-center gap-4">
+                            <div className="size-10 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-red-500">error</span>
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-bold text-red-800 dark:text-red-200 text-sm">Validación de Pago Rechazada</h4>
+                                <p className="text-red-700 dark:text-red-300 text-xs mt-1">
+                                    <span className="font-black uppercase tracking-wider text-[10px] mr-1">Motivo:</span> 
+                                    {selectedTeam.paymentFeedback}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Team Selector & Header */}
                 <div className="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">

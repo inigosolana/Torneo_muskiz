@@ -189,7 +189,16 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
 
     const handleManualPayment = (team: Team) => {
         if (confirm(`¿Confirmar validación de pago para ${team.name}?`)) {
-            onUpdateTeam({ ...team, paymentStatus: 'PAID' });
+            onUpdateTeam({ ...team, paymentStatus: 'PAID', paymentFeedback: '' });
+            toast.success('Pago validado correctamente');
+        }
+    };
+
+    const handleRejectPayment = (team: Team) => {
+        const reason = window.prompt(`Motivo del rechazo para ${team.name}:`, 'El justificante no es válido o no se ve bien.');
+        if (reason) {
+            onUpdateTeam({ ...team, paymentStatus: 'PENDING', paymentFeedback: reason });
+            toast.info('Pago rechazado con feedback enviado al responsable.');
         }
     };
 
@@ -604,7 +613,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end gap-2">
-                                                        {team.receiptUrl && (
+                                                        {team.receiptUrl ? (
                                                             <a
                                                                 href={team.receiptUrl}
                                                                 target="_blank"
@@ -614,15 +623,31 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                             >
                                                                 <span className="material-symbols-outlined text-sm">description</span>
                                                             </a>
+                                                        ) : (
+                                                            <div 
+                                                                className="size-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-300 cursor-not-allowed"
+                                                                title="Sin justificante subido"
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">block</span>
+                                                            </div>
                                                         )}
                                                         {team.paymentStatus === 'PENDING' && (
-                                                            <button
-                                                                onClick={() => handleManualPayment(team)}
-                                                                className="bg-primary/10 text-primary hover:bg-primary/20 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
-                                                            >
-                                                                <span className="material-symbols-outlined text-xs">verified</span>
-                                                                VALIDAR
-                                                            </button>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => handleRejectPayment(team)}
+                                                                    className="bg-red-50 text-red-500 hover:bg-red-100 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-xs">close</span>
+                                                                    RECHAZAR
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleManualPayment(team)}
+                                                                    className="bg-green-50 text-green-600 hover:bg-green-100 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-xs">check</span>
+                                                                    VALIDAR
+                                                                </button>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </td>

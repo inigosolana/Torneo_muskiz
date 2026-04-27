@@ -131,6 +131,7 @@ export interface Team {
   fee: number;
   managerName: string;
   managerEmail: string;
+  paymentFeedback?: string;
 }
 
 export interface CategoryLimits {

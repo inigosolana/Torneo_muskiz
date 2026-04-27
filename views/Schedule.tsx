@@ -6,9 +6,10 @@ import { siteContent } from '../constants/siteContent';
 interface ScheduleProps {
     matches: Match[];
     teams: Team[];
+    categoryLimits: { [key: string]: number };
 }
 
-export const Schedule: React.FC<ScheduleProps> = ({ matches, teams }) => {
+export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, categoryLimits }) => {
     const [activeTab, setActiveTab] = useState<'info' | 'calendar' | 'results' | 'standings'>('info');
     const [infoSubTab, setInfoSubTab] = useState<'general' | 'rules'>('general');
 
@@ -186,21 +187,22 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams }) => {
                                                             <thead>
                                                                 <tr className="bg-slate-50 dark:bg-white/5">
                                                                     <th className="text-left px-6 py-4 font-bold text-xs uppercase text-slate-500">Categoría</th>
-                                                                    <th className="text-center px-6 py-4 font-bold text-xs uppercase text-slate-500">Mínimo</th>
-                                                                    <th className="text-center px-6 py-4 font-bold text-xs uppercase text-slate-500">Máximo</th>
+                                                                    <th className="text-center px-6 py-4 font-bold text-xs uppercase text-slate-500">Equipos Max.</th>
+                                                                    <th className="text-center px-6 py-4 font-bold text-xs uppercase text-slate-500">Jugadores (Min-Max)</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-700 dark:text-slate-200">
                                                                 {[
-                                                                    { cat: 'Senior (M/F)', min: 6, max: 12 },
-                                                                    { cat: 'Juvenil (M/F)', min: 6, max: 14 },
-                                                                    { cat: 'Cadete (M/F)', min: 6, max: 14 },
-                                                                    { cat: 'Infantil (M/F)', min: 6, max: 14 },
+                                                                    { cat: 'Senior Masculino', min: 6, max: 12, teams: categoryLimits['Senior Masculino'] },
+                                                                    { cat: 'Senior Femenino', min: 6, max: 12, teams: categoryLimits['Senior Femenino'] },
+                                                                    { cat: 'Juvenil (M/F)', min: 6, max: 14, teams: categoryLimits['Juvenil Masculino'] },
+                                                                    { cat: 'Cadete (M/F)', min: 6, max: 14, teams: categoryLimits['Cadete Masculino'] },
+                                                                    { cat: 'Infantil (M/F)', min: 6, max: 14, teams: categoryLimits['Infantil Masculino'] },
                                                                 ].map((row, i) => (
                                                                     <tr key={i} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                                                                         <td className="px-6 py-4 font-medium">{row.cat}</td>
-                                                                        <td className="px-6 py-4 text-center font-bold text-primary">{row.min}</td>
-                                                                        <td className="px-6 py-4 text-center font-bold text-primary">{row.max}</td>
+                                                                        <td className="px-6 py-4 text-center font-bold text-secondary">{row.teams}</td>
+                                                                        <td className="px-6 py-4 text-center font-bold text-primary">{row.min} - {row.max}</td>
                                                                     </tr>
                                                                 ))}
                                                             </tbody>
