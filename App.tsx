@@ -109,8 +109,18 @@ const App: React.FC = () => {
       })
       .subscribe();
 
+    const playerSubscription = supabase
+      .channel('public:players')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, async () => {
+        // Refresh all teams to get updated nested players
+        const updatedTeams = await teamService.getTeams();
+        setTeams(updatedTeams);
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(matchSubscription);
+      supabase.removeChannel(playerSubscription);
     };
   }, []);
 
