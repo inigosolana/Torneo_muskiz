@@ -94,7 +94,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     const isPlayerRegistrationClosed = Date.now() > new Date('2026-06-04T00:00:00').getTime();
     const canAddMore = (canAddPlayer || canAddStaff) && !isPlayerRegistrationClosed;
 
-    const handleAddPlayer = (newPlayer: Player) => {
+    const handleAddPlayer = async (newPlayer: Player) => {
         if (newPlayer.role === 'PLAYER' && !canAddPlayer) {
             toast.error(`Límite alcanzado: máximo ${maxPlayers} jugadores para ${selectedTeam.division}.`);
             return;
