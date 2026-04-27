@@ -256,7 +256,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                         if (p.id === playerId) {
                             return {
                                 ...p,
-                                [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'APPROVED' as const,
+                                [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'PENDING' as const,
                                 [type === 'dni' ? 'dniUrl' : 'insuranceUrl']: 'https://fake-supabase-storage.com/uploaded-file.jpg'
                             };
                         }

@@ -507,28 +507,42 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                     {player.teamName}
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    {player.dniStatus === 'PENDING' ? (
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => handleVerify(player.teamId, player.id, 'dni', 'APPROVED')} className="text-green-500 hover:bg-green-50 p-1 rounded"><span className="material-symbols-outlined">check</span></button>
-                                                            <button onClick={() => handleVerify(player.teamId, player.id, 'dni', 'REJECTED')} className="text-red-500 hover:bg-red-50 p-1 rounded"><span className="material-symbols-outlined">close</span></button>
-                                                        </div>
-                                                    ) : (
-                                                        <span className={`text-xs font-bold px-2 py-1 rounded ${player.dniStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : player.dniStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400'}`}>
-                                                            {player.dniStatus}
-                                                        </span>
-                                                    )}
+                                                    <div className="flex items-center gap-2">
+                                                        {player.dniUrl && (
+                                                            <a href={player.dniUrl} target="_blank" rel="noopener noreferrer" className="size-6 bg-slate-100 rounded flex items-center justify-center text-slate-500 hover:bg-primary/20 hover:text-primary transition-all">
+                                                                <span className="material-symbols-outlined text-xs">visibility</span>
+                                                            </a>
+                                                        )}
+                                                        {player.dniStatus === 'PENDING' ? (
+                                                            <div className="flex gap-1">
+                                                                <button onClick={() => handleVerify(player.teamId, player.id, 'dni', 'APPROVED')} className="text-green-500 hover:bg-green-50 p-1 rounded transition-colors"><span className="material-symbols-outlined text-xs">check</span></button>
+                                                                <button onClick={() => handleVerify(player.teamId, player.id, 'dni', 'REJECTED')} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><span className="material-symbols-outlined text-xs">close</span></button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${player.dniStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : player.dniStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400'}`}>
+                                                                {player.dniStatus}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    {player.insuranceStatus === 'PENDING' ? (
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => handleVerify(player.teamId, player.id, 'insurance', 'APPROVED')} className="text-green-500 hover:bg-green-50 p-1 rounded"><span className="material-symbols-outlined">check</span></button>
-                                                            <button onClick={() => handleVerify(player.teamId, player.id, 'insurance', 'REJECTED')} className="text-red-500 hover:bg-red-50 p-1 rounded"><span className="material-symbols-outlined">close</span></button>
-                                                        </div>
-                                                    ) : (
-                                                        <span className={`text-xs font-bold px-2 py-1 rounded ${player.insuranceStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : player.insuranceStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400'}`}>
-                                                            {player.insuranceStatus}
-                                                        </span>
-                                                    )}
+                                                    <div className="flex items-center gap-2">
+                                                        {player.insuranceUrl && (
+                                                            <a href={player.insuranceUrl} target="_blank" rel="noopener noreferrer" className="size-6 bg-slate-100 rounded flex items-center justify-center text-slate-500 hover:bg-primary/20 hover:text-primary transition-all">
+                                                                <span className="material-symbols-outlined text-xs">visibility</span>
+                                                            </a>
+                                                        )}
+                                                        {player.insuranceStatus === 'PENDING' ? (
+                                                            <div className="flex gap-1">
+                                                                <button onClick={() => handleVerify(player.teamId, player.id, 'insurance', 'APPROVED')} className="text-green-500 hover:bg-green-50 p-1 rounded transition-colors"><span className="material-symbols-outlined text-xs">check</span></button>
+                                                                <button onClick={() => handleVerify(player.teamId, player.id, 'insurance', 'REJECTED')} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><span className="material-symbols-outlined text-xs">close</span></button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${player.insuranceStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : player.insuranceStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400'}`}>
+                                                                {player.insuranceStatus}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
