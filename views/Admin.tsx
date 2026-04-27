@@ -211,6 +211,22 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         }
     };
 
+    const handleDeletePlayerAdmin = async (teamId: string, playerId: string) => {
+        const team = teams.find(t => t.id === teamId);
+        if (!team) return;
+        
+        if (!confirm('¿Estás seguro de que quieres eliminar a este jugador permanentemente?')) return;
+        
+        try {
+            await teamService.deletePlayer(playerId);
+            const updatedPlayers = team.players.filter(p => p.id !== playerId);
+            onUpdateTeam({ ...team, players: updatedPlayers });
+            toast.success('Jugador eliminado correctamente');
+        } catch (error) {
+            toast.error('Error al eliminar el jugador');
+        }
+    };
+
     const handleManualPayment = (team: Team) => {
         if (confirm(`¿Confirmar validación de pago para ${team.name}?`)) {
             onUpdateTeam({ ...team, paymentStatus: 'PAID', paymentFeedback: '' });
@@ -559,7 +575,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                 return matchTeam && matchCat && matchSex && matchStat;
                                             })
                                             .map(player => (
-                                            <tr key={player.id} className="hover:bg-slate-50/50">
+                                            <tr key={`${player.teamId}-${player.id}`} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                                                 <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-3">
                                                     <div className="size-8 rounded-full bg-slate-200 overflow-hidden">
                                                         {player.avatarUrl && <img src={player.avatarUrl} className="w-full h-full object-cover" />}
@@ -576,19 +592,23 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                                 <span className="material-symbols-outlined text-xs">visibility</span>
                                                             </a>
                                                         )}
-                                                        {player.dniStatus === 'PENDING' ? (
-                                                            <div className="flex gap-1">
-                                                                <button onClick={() => handleVerify(player.teamId, player.id, 'dni', 'APPROVED')} className="text-green-500 hover:bg-green-50 p-1 rounded transition-colors"><span className="material-symbols-outlined text-xs">check</span></button>
-                                                                <button onClick={() => handleVerify(player.teamId, player.id, 'dni', 'REJECTED')} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><span className="material-symbols-outlined text-xs">close</span></button>
+                                                        {player.dniStatus !== 'EMPTY' && player.dniStatus ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                                                    player.dniStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : 
+                                                                    player.dniStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 
+                                                                    'bg-amber-100 text-amber-700'
+                                                                }`}>
+                                                                    {player.dniStatus}
+                                                                </span>
+                                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <button onClick={() => handleVerify(player.teamId, player.id, 'dni', 'APPROVED')} className="text-green-500 hover:bg-green-50 p-1 rounded transition-colors" title="Aprobar"><span className="material-symbols-outlined text-xs">check</span></button>
+                                                                    <button onClick={() => handleVerify(player.teamId, player.id, 'dni', 'REJECTED')} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Rechazar"><span className="material-symbols-outlined text-xs">close</span></button>
+                                                                </div>
                                                             </div>
                                                         ) : (
-                                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                                                                player.dniStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : 
-                                                                player.dniStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 
-                                                                player.dniStatus === 'PENDING' ? 'bg-amber-100 text-amber-700' :
-                                                                'bg-slate-100 text-slate-400'
-                                                            }`}>
-                                                                {player.dniStatus === 'EMPTY' || !player.dniStatus ? 'Falta subir' : player.dniStatus}
+                                                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-400">
+                                                                Falta subir
                                                             </span>
                                                         )}
                                                     </div>
@@ -600,22 +620,35 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                                 <span className="material-symbols-outlined text-xs">visibility</span>
                                                             </a>
                                                         )}
-                                                        {player.insuranceStatus === 'PENDING' ? (
-                                                            <div className="flex gap-1">
-                                                                <button onClick={() => handleVerify(player.teamId, player.id, 'insurance', 'APPROVED')} className="text-green-500 hover:bg-green-50 p-1 rounded transition-colors"><span className="material-symbols-outlined text-xs">check</span></button>
-                                                                <button onClick={() => handleVerify(player.teamId, player.id, 'insurance', 'REJECTED')} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><span className="material-symbols-outlined text-xs">close</span></button>
+                                                        {player.insuranceStatus !== 'EMPTY' && player.insuranceStatus ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                                                    player.insuranceStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : 
+                                                                    player.insuranceStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 
+                                                                    'bg-amber-100 text-amber-700'
+                                                                }`}>
+                                                                    {player.insuranceStatus}
+                                                                </span>
+                                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <button onClick={() => handleVerify(player.teamId, player.id, 'insurance', 'APPROVED')} className="text-green-500 hover:bg-green-50 p-1 rounded transition-colors" title="Aprobar"><span className="material-symbols-outlined text-xs">check</span></button>
+                                                                    <button onClick={() => handleVerify(player.teamId, player.id, 'insurance', 'REJECTED')} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Rechazar"><span className="material-symbols-outlined text-xs">close</span></button>
+                                                                </div>
                                                             </div>
                                                         ) : (
-                                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                                                                player.insuranceStatus === 'APPROVED' ? 'bg-green-100 text-green-700' : 
-                                                                player.insuranceStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 
-                                                                player.insuranceStatus === 'PENDING' ? 'bg-amber-100 text-amber-700' :
-                                                                'bg-slate-100 text-slate-400'
-                                                            }`}>
-                                                                {player.insuranceStatus === 'EMPTY' || !player.insuranceStatus ? 'Falta subir' : player.insuranceStatus}
+                                                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-400">
+                                                                Falta subir
                                                             </span>
                                                         )}
                                                     </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button 
+                                                        onClick={() => handleDeletePlayerAdmin(player.teamId, player.id)}
+                                                        className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                                                        title="Eliminar jugador"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">delete</span>
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}
