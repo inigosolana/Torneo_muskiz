@@ -53,7 +53,7 @@ export const sendChatMessage = async (
 };
 
 // --- Image Analysis (Roster ID) ---
-export const analyzePlayerId = async (base64Image: string, mimeType: string = 'image/jpeg'): Promise<{ name?: string; number?: number }> => {
+export const analyzePlayerId = async (base64Image: string, mimeType: string = 'image/jpeg'): Promise<{ nombre?: string; apellidos?: string; dni?: string; fechaNacimiento?: string }> => {
   try {
     const { data, error } = await supabase.functions.invoke('analyze-player-id', {
       body: { base64Image, mimeType }

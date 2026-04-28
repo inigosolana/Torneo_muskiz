@@ -40,7 +40,9 @@ export const teamService = {
                 verified: p.verified,
                 dniStatus: p.dni_status,
                 insuranceStatus: p.insurance_status,
-                avatarUrl: p.avatar_url
+                avatarUrl: p.avatar_url,
+                dniUrl: p.dni_url,
+                insuranceUrl: p.insurance_url
             }))
         }));
     },

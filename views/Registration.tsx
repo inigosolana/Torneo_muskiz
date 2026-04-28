@@ -18,18 +18,21 @@ interface RegistrationProps {
     categoryLimits: CategoryLimits;
 }
 
-const PRICES: Record<string, number> = {
-    'Infantil Femenino': 70, 'Infantil Masculino': 70,
-    'Cadete Femenino': 90, 'Cadete Masculino': 90,
-    'Juvenil Femenino': 100, 'Juvenil Masculino': 100,
-    'Senior Femenino': 120, 'Senior Masculino': 120,
-};
-
 const RESERVATION_MINUTES = 15;
 
 export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, categoryLimits }) => {
     const navigate = useNavigate();
     const SESSION_KEY = 'reg_draft';
+
+    const [dbCategories, setDbCategories] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchCategories = async () => {
+            const { data } = await supabase.from('categories').select('*').order('name');
+            if (data) setDbCategories(data);
+        };
+        fetchCategories();
+    }, []);
 
     // Restore from sessionStorage on mount (if within 15 min window)
     const loadDraft = () => {
@@ -115,24 +118,13 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
     // Calculate occupied spots (registered teams + cart reservations)
     const getCounts = useCallback(() => {
         const counts: Record<string, number> = {};
-        Object.keys(categoryLimits).forEach(k => {
-            counts[k] = teams.filter(t => t.division === k).length + cart.filter(t => t.division === k).length;
+        dbCategories.forEach(cat => {
+            counts[cat.name] = teams.filter(t => t.division === cat.name).length + cart.filter(t => t.division === cat.name).length;
         });
         return counts;
-    }, [teams, cart, categoryLimits]);
+    }, [teams, cart, dbCategories]);
 
     const counts = getCounts();
-
-    const plans = [
-        { name: 'Infantil Femenino', features: ['Arbitraje escolar'] },
-        { name: 'Infantil Masculino', features: ['Arbitraje escolar'] },
-        { name: 'Cadete Femenino', features: ['Árbitros federados'] },
-        { name: 'Cadete Masculino', features: ['Árbitros federados'] },
-        { name: 'Juvenil Femenino', features: ['Medallas'] },
-        { name: 'Juvenil Masculino', features: ['Medallas'] },
-        { name: 'Senior Femenino', features: ['Árbitros Pro'] },
-        { name: 'Senior Masculino', features: ['Árbitros Pro'] },
-    ];
 
     const totalFee = cart.reduce((sum, t) => sum + t.fee, 0);
 
@@ -147,8 +139,11 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             alert('Introduce el nombre y la ciudad del equipo.');
             return;
         }
-        const limit = categoryLimits[selectedDivision as keyof CategoryLimits];
-        if (counts[selectedDivision] >= limit) {
+        
+        const category = dbCategories.find(c => c.name === selectedDivision);
+        if (!category) return;
+
+        if (counts[selectedDivision] >= category.max_teams) {
             alert('Esta categoría ya está llena.');
             return;
         }
@@ -158,7 +153,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             name: newTeamName.trim(),
             city: newTeamCity.trim(),
             division: selectedDivision as any,
-            fee: PRICES[selectedDivision],
+            fee: category.price,
         };
         setCart([...cart, entry]);
         setNewTeamName('');
@@ -398,30 +393,36 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
 
                         {/* Division selector */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-                            {plans.map(plan => {
-                                const limit = categoryLimits[plan.name as keyof CategoryLimits];
-                                const current = counts[plan.name] || 0;
-                                const isFull = current >= limit;
-                                return (
-                                    <div key={plan.name}
-                                        onClick={() => !isFull && setSelectedDivision(plan.name)}
-                                        className={`relative border rounded-lg p-3 transition-all text-center ${isFull
-                                            ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-white/5 border-slate-200'
-                                            : selectedDivision === plan.name
-                                                ? 'border-primary bg-primary/5 ring-1 ring-primary cursor-pointer'
-                                                : 'border-slate-200 dark:border-white/10 hover:border-primary/50 cursor-pointer'
-                                            }`}>
-                                        {isFull && (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 backdrop-blur-[1px] rounded-lg z-10">
-                                                <span className="bg-red-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase -rotate-12">Agotado</span>
-                                            </div>
-                                        )}
-                                        <h4 className="font-bold text-xs text-slate-900 dark:text-white">{plan.name}</h4>
-                                        <p className="text-lg font-black text-slate-900 dark:text-white mt-1">{PRICES[plan.name]}€</p>
-                                        <span className="text-[9px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300">{current}/{limit}</span>
-                                    </div>
-                                );
-                            })}
+                            {dbCategories.length === 0 ? (
+                                <div className="col-span-full py-10 text-center">
+                                    <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
+                                    <p className="text-xs text-slate-400 mt-2">Cargando categorías...</p>
+                                </div>
+                            ) : (
+                                dbCategories.map(cat => {
+                                    const current = counts[cat.name] || 0;
+                                    const isFull = current >= cat.max_teams;
+                                    return (
+                                        <div key={cat.id}
+                                            onClick={() => !isFull && setSelectedDivision(cat.name)}
+                                            className={`relative border rounded-lg p-3 transition-all text-center ${isFull
+                                                ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-white/5 border-slate-200'
+                                                : selectedDivision === cat.name
+                                                    ? 'border-primary bg-primary/5 ring-1 ring-primary cursor-pointer'
+                                                    : 'border-slate-200 dark:border-white/10 hover:border-primary/50 cursor-pointer'
+                                                }`}>
+                                            {isFull && (
+                                                <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 backdrop-blur-[1px] rounded-lg z-10">
+                                                    <span className="bg-red-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase -rotate-12">Agotado</span>
+                                                </div>
+                                            )}
+                                            <h4 className="font-bold text-xs text-slate-900 dark:text-white">{cat.name}</h4>
+                                            <p className="text-lg font-black text-slate-900 dark:text-white mt-1">{cat.price}€</p>
+                                            <span className="text-[9px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300">{current}/{cat.max_teams}</span>
+                                        </div>
+                                    );
+                                })
+                            )}
                         </div>
 
                         {/* Team name & city for this entry */}
@@ -443,7 +444,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                         <button onClick={handleAddToCart}
                             className="w-full bg-slate-100 dark:bg-white/5 hover:bg-primary/10 text-slate-900 dark:text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200 dark:border-white/10">
                             <span className="material-symbols-outlined text-primary">add_circle</span>
-                            Añadir Equipo al Carrito ({PRICES[selectedDivision]}€ — {selectedDivision})
+                            Añadir Equipo al Carrito ({dbCategories.find(c => c.name === selectedDivision)?.price || 0}€ — {selectedDivision})
                         </button>
                     </div>
 

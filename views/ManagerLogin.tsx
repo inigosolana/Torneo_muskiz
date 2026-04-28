@@ -31,7 +31,7 @@ export const ManagerLogin: React.FC = () => {
                 toast.error('Acceso denegado: Esta cuenta es de Staff y debe entrar por el panel de administración.');
             } else {
                 toast.success('Acceso concedido. Bienvenido a tu panel de gestión.');
-                navigate('/manage');
+                navigate('/team-manager');
             }
         }
 

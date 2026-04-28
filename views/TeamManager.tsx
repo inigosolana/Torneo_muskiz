@@ -17,6 +17,12 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     const [selectedTeamId, setSelectedTeamId] = useState<string>(teams.length > 0 ? teams[0].id : '');
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+    useEffect(() => {
+        if (teams.length > 0 && !selectedTeamId) {
+            setSelectedTeamId(teams[0].id);
+        }
+    }, [teams, selectedTeamId]);
+
     // Form States
     const [newTeamName, setNewTeamName] = useState('');
     const [newTeamCity, setNewTeamCity] = useState('');

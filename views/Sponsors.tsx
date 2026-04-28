@@ -1,19 +1,42 @@
-import React from 'react';
-import { siteContent as content } from '../constants/siteContent';
+import React, { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 export const Sponsors: React.FC = () => {
-  const platinumSponsors = content.sponsors.filter(s => s.tier === 'Platinum');
-  const goldSponsors = content.sponsors.filter(s => s.tier === 'Gold');
-  const silverSponsors = content.sponsors.filter(s => s.tier === 'Silver');
-  const collaborators = content.sponsors.filter(s => s.tier === 'Collaborator');
+  const [sponsors, setSponsors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const renderLogo = (logoUrl: string, sizeClass: string) => {
+  useEffect(() => {
+    const fetchSponsors = async () => {
+      const { data } = await supabase.from('sponsors').select('*');
+      if (data) setSponsors(data);
+      setLoading(false);
+    };
+    fetchSponsors();
+  }, []);
+
+  const platinumSponsors = sponsors.filter(s => s.tier === 'Platinum');
+  const goldSponsors = sponsors.filter(s => s.tier === 'Gold');
+  const silverSponsors = sponsors.filter(s => s.tier === 'Silver');
+  const collaborators = sponsors.filter(s => s.tier === 'Collaborator');
+
+  const renderLogo = (logoUrl: string | null, sizeClass: string) => {
+      if (!logoUrl) {
+          return <span className={`material-symbols-outlined ${sizeClass} text-slate-300 mb-4`}>image</span>;
+      }
       // Check if it's a material icon name (simple check: no slashes or dots usually)
       if (!logoUrl.includes('/') && !logoUrl.includes('.')) {
           return <span className={`material-symbols-outlined ${sizeClass} text-current mb-4`}>{logoUrl}</span>;
       }
       return <img src={logoUrl} alt="Logo" className="max-h-20 max-w-full object-contain mb-4 filter grayscale group-hover:grayscale-0 transition-all" />;
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 sm:px-6 lg:px-8 animate-in fade-in">

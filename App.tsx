@@ -87,8 +87,8 @@ const App: React.FC = () => {
       // 2. Fetch Teams and Matches
       const dbTeams = await teamService.getTeams();
       const dbMatches = await matchService.getMatches();
-      if (dbTeams.length > 0) setTeams(dbTeams);
-      if (dbMatches.length > 0) setMatches(dbMatches);
+      setTeams(dbTeams);
+      setMatches(dbMatches);
     };
     loadData();
 
@@ -122,7 +122,7 @@ const App: React.FC = () => {
       supabase.removeChannel(matchSubscription);
       supabase.removeChannel(playerSubscription);
     };
-  }, []);
+  }, [user]);
 
   const handleUpdateLimits = async (newLimits: CategoryLimits) => {
     setCategoryLimits(newLimits);

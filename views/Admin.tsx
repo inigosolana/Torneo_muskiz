@@ -53,6 +53,93 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     // Social Media Post State
     const [socialPostModal, setSocialPostModal] = useState<{ show: boolean, content: string, generating: boolean }>({ show: false, content: '', generating: false });
 
+    // Sponsors Management
+    const [sponsors, setSponsors] = useState<any[]>([]);
+    const [sponsorsLoading, setSponsorsLoading] = useState(false);
+    const [newSponsor, setNewSponsor] = useState<{ name: string, tier: string, website_url: string, logo_url?: string }>({ name: '', tier: 'Gold', website_url: '' });
+    const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+
+    // Categories Management
+    const [categories, setCategories] = useState<any[]>([]);
+
+    const fetchCategories = async () => {
+        const { data } = await supabase.from('categories').select('*').order('name');
+        if (data) setCategories(data);
+    };
+
+    const fetchSponsors = async () => {
+        setSponsorsLoading(true);
+        const { data, error } = await supabase.from('sponsors').select('*').order('created_at', { ascending: false });
+        if (data) setSponsors(data);
+        setSponsorsLoading(false);
+    };
+
+    useEffect(() => {
+        if (isAuthenticated) {
+            fetchSponsors();
+            fetchCategories();
+        }
+    }, [isAuthenticated]);
+
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploadingLogo(true);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Math.random()}.${fileExt}`;
+            const filePath = `logos/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('public-assets')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('public-assets')
+                .getPublicUrl(filePath);
+
+            setNewSponsor(prev => ({ ...prev, logo_url: publicUrl }));
+            toast.success('Logo subido correctamente');
+        } catch (error: any) {
+            toast.error('Error al subir logo: ' + error.message);
+        } finally {
+            setIsUploadingLogo(false);
+        }
+    };
+
+    const handleAddSponsor = async () => {
+        if (!newSponsor.name) {
+            toast.error('El nombre es obligatorio');
+            return;
+        }
+
+        try {
+            const { error } = await supabase.from('sponsors').insert([newSponsor]);
+            if (error) throw error;
+            toast.success('Patrocinador añadido');
+            setNewSponsor({ name: '', tier: 'Gold', website_url: '' });
+            fetchSponsors();
+        } catch (error: any) {
+            toast.error('Error al añadir patrocinador: ' + error.message);
+        }
+    };
+
+    const handleDeleteSponsor = async (id: string) => {
+        if (!confirm('¿Estás seguro de eliminar este patrocinador?')) return;
+
+        try {
+            const { error } = await supabase.from('sponsors').delete().eq('id', id);
+            if (error) throw error;
+            toast.success('Patrocinador eliminado');
+            fetchSponsors();
+        } catch (error: any) {
+            toast.error('Error al eliminar: ' + error.message);
+        }
+    };
+
     const handleGenerateSocialPost = async (match: Match) => {
         setSocialPostModal({ show: true, content: '', generating: true });
         const postContent = await generateSocialMediaPost(match);
@@ -95,7 +182,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     };
 
     // Main Navigation Tabs
-    const [activeTab, setActiveTab] = useState<'verification' | 'competition' | 'teams'>('verification');
+    const [activeTab, setActiveTab] = useState<'verification' | 'competition' | 'teams' | 'sponsors' | 'categories'>('verification');
     // Competition Sub-tabs
     const [compSubTab, setCompSubTab] = useState<'calendar' | 'results' | 'standings'>('calendar');
 
@@ -182,6 +269,17 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
             }
         }
         setAuthLoading(false);
+    };
+
+    const handleUpdateCategory = async (id: string, updates: any) => {
+        try {
+            const { error } = await supabase.from('categories').update(updates).eq('id', id);
+            if (error) throw error;
+            toast.success('Categoría actualizada');
+            fetchCategories();
+        } catch (error: any) {
+            toast.error('Error al actualizar: ' + error.message);
+        }
     };
 
     const handleLogout = async () => {
@@ -490,6 +588,18 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                         <span className="material-symbols-outlined text-lg">trophy</span> Competición
                     </button>
                     <button
+                        onClick={() => setActiveTab('sponsors')}
+                        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'sponsors' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
+                    >
+                        <span className="material-symbols-outlined text-lg">handshake</span> Patrocinadores
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('categories')}
+                        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'categories' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
+                    >
+                        <span className="material-symbols-outlined text-lg">settings_suggest</span> Configuración
+                    </button>
+                    <button
                         onClick={handleLogout}
                         className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium text-red-500 hover:bg-red-50 mt-12 transition-colors"
                     >
@@ -587,10 +697,14 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
-                                                        {player.dniUrl && (
-                                                            <a href={player.dniUrl} target="_blank" rel="noopener noreferrer" className="size-8 bg-slate-100 rounded flex items-center justify-center text-primary hover:bg-primary/10 transition-all shadow-sm" title="Ver DNI">
-                                                                <span className="material-symbols-outlined text-lg">visibility</span>
+                                                        {player.dniUrl ? (
+                                                            <a href={player.dniUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary rounded-lg text-[10px] font-bold hover:bg-primary/10 transition-all border border-primary/10 group/btn">
+                                                                <span className="material-symbols-outlined text-sm transition-transform group-hover/btn:scale-110">visibility</span> Ver Documento
                                                             </a>
+                                                        ) : (
+                                                            <div className="size-8 bg-slate-100 rounded flex items-center justify-center text-slate-300" title="No hay documento">
+                                                                <span className="material-symbols-outlined text-lg">block</span>
+                                                            </div>
                                                         )}
                                                         {player.dniStatus !== 'EMPTY' && player.dniStatus ? (
                                                             <div className="flex items-center gap-2">
@@ -615,10 +729,14 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
-                                                        {player.insuranceUrl && (
-                                                            <a href={player.insuranceUrl} target="_blank" rel="noopener noreferrer" className="size-8 bg-slate-100 rounded flex items-center justify-center text-primary hover:bg-primary/10 transition-all shadow-sm" title="Ver Seguro">
-                                                                <span className="material-symbols-outlined text-lg">visibility</span>
+                                                        {player.insuranceUrl ? (
+                                                            <a href={player.insuranceUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary rounded-lg text-[10px] font-bold hover:bg-primary/10 transition-all border border-primary/10 group/btn">
+                                                                <span className="material-symbols-outlined text-sm transition-transform group-hover/btn:scale-110">visibility</span> Ver Documento
                                                             </a>
+                                                        ) : (
+                                                            <div className="size-8 bg-slate-100 rounded flex items-center justify-center text-slate-300" title="No hay documento">
+                                                                <span className="material-symbols-outlined text-lg">block</span>
+                                                            </div>
                                                         )}
                                                         {player.insuranceStatus !== 'EMPTY' && player.insuranceStatus ? (
                                                             <div className="flex items-center gap-2">
@@ -681,23 +799,43 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                 </div>
                             </div>
 
-                            {/* Limits Config */}
+                            {/* Categories Config */}
                             <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-                                <h3 className="font-bold text-lg text-slate-800 mb-4">Límites de Equipos por Categoría</h3>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                    {Object.entries(categoryLimits).map(([cat, limit]) => (
-                                        <div key={cat}>
-                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">{cat}</label>
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="number"
-                                                    value={limit}
-                                                    onChange={(e) => onUpdateLimits({ ...categoryLimits, [cat]: parseInt(e.target.value) || 0 })}
-                                                    className="w-full border border-slate-200 rounded px-3 py-2"
-                                                />
-                                                <span className="text-xs text-slate-400 whitespace-nowrap">
-                                                    Actual: {teams.filter(t => t.division === cat).length}
-                                                </span>
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="font-bold text-lg text-slate-800">Gestión de Categorías y Precios</h3>
+                                    <div className="text-xs text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded-full uppercase">Configuración Global</div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    {categories.map(cat => (
+                                        <div key={cat.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-primary/30 transition-colors">
+                                            <label className="block text-xs font-black uppercase text-slate-500 mb-3 truncate" title={cat.name}>{cat.name}</label>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">Precio Inscripción</label>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="number"
+                                                            value={cat.price}
+                                                            onChange={(e) => handleUpdateCategory(cat.id, { price: parseFloat(e.target.value) || 0 })}
+                                                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none pr-8"
+                                                        />
+                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">€</span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">Límite Equipos</label>
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="number"
+                                                            value={cat.max_teams}
+                                                            onChange={(e) => handleUpdateCategory(cat.id, { max_teams: parseInt(e.target.value) || 0 })}
+                                                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                                        />
+                                                        <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                                                            Inscritos: {teams.filter(t => t.division === cat.name).length}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
@@ -1094,6 +1232,221 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                         </table>
                                     </div>
                                 )}
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'sponsors' && (
+                        <div className="space-y-6">
+                            <div className="flex justify-between items-center">
+                                <h2 className="text-2xl font-black text-slate-800">Gestión de Patrocinadores</h2>
+                                <div className="text-xs text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded-full uppercase tracking-wider">Base de Datos en Tiempo Real</div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                {/* Formulario */}
+                                <div className="lg:col-span-1">
+                                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm sticky top-6">
+                                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-primary">add_circle</span>
+                                            Añadir Patrocinador
+                                        </h3>
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre</label>
+                                                <input
+                                                    type="text"
+                                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"
+                                                    value={newSponsor.name}
+                                                    onChange={e => setNewSponsor({ ...newSponsor, name: e.target.value })}
+                                                    placeholder="Ej: Nike"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoría (Tier)</label>
+                                                <select
+                                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"
+                                                    value={newSponsor.tier}
+                                                    onChange={e => setNewSponsor({ ...newSponsor, tier: e.target.value as any })}
+                                                >
+                                                    <option value="Platinum">Platinum (Main)</option>
+                                                    <option value="Gold">Gold</option>
+                                                    <option value="Silver">Silver</option>
+                                                    <option value="Collaborator">Collaborator</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Website URL</label>
+                                                <input
+                                                    type="url"
+                                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm font-mono"
+                                                    value={newSponsor.website_url}
+                                                    onChange={e => setNewSponsor({ ...newSponsor, website_url: e.target.value })}
+                                                    placeholder="https://..."
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Logo</label>
+                                                <div className="flex flex-col gap-3">
+                                                    {newSponsor.logo_url && (
+                                                        <div className="relative size-20 bg-slate-50 rounded-xl border border-slate-200 overflow-hidden group">
+                                                            <img src={newSponsor.logo_url} alt="Preview" className="w-full h-full object-contain" />
+                                                            <button
+                                                                onClick={() => setNewSponsor({ ...newSponsor, logo_url: '' })}
+                                                                className="absolute inset-0 bg-red-500/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            >
+                                                                <span className="material-symbols-outlined">delete</span>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    <div className="relative">
+                                                        <input
+                                                            type="file"
+                                                            accept="image/*"
+                                                            onChange={handleLogoUpload}
+                                                            className="hidden"
+                                                            id="logo-upload"
+                                                            disabled={isUploadingLogo}
+                                                        />
+                                                        <label
+                                                            htmlFor="logo-upload"
+                                                            className={`w-full py-3 border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors ${isUploadingLogo ? 'bg-slate-50 border-slate-200' : 'border-slate-300 hover:border-primary hover:bg-primary/5'}`}
+                                                        >
+                                                            {isUploadingLogo ? (
+                                                                <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="material-symbols-outlined text-slate-400">upload</span>
+                                                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Subir Imagen</span>
+                                                                </>
+                                                            )}
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={handleAddSponsor}
+                                                className="w-full py-3 bg-primary text-background-dark font-black rounded-xl hover:opacity-90 shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 mt-4"
+                                            >
+                                                <span className="material-symbols-outlined">save</span>
+                                                Guardar Patrocinador
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Lista */}
+                                <div className="lg:col-span-2">
+                                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                                                <tr>
+                                                    <th className="px-6 py-4">Patrocinador</th>
+                                                    <th className="px-6 py-4">Nivel</th>
+                                                    <th className="px-6 py-4">Website</th>
+                                                    <th className="px-6 py-4 text-right">Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {sponsorsLoading ? (
+                                                    <tr><td colSpan={4} className="p-10 text-center"><span className="material-symbols-outlined animate-spin text-4xl text-slate-200">progress_activity</span></td></tr>
+                                                ) : sponsors.length === 0 ? (
+                                                    <tr><td colSpan={4} className="p-10 text-center text-slate-400 italic">No hay patrocinadores registrados</td></tr>
+                                                ) : (
+                                                    sponsors.map(sponsor => (
+                                                        <tr key={sponsor.id} className="hover:bg-slate-50/50 transition-colors">
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="size-10 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-200">
+                                                                        {sponsor.logo_url ? <img src={sponsor.logo_url} className="w-full h-full object-contain" /> : <span className="material-symbols-outlined text-slate-300">image</span>}
+                                                                    </div>
+                                                                    <span className="font-bold text-slate-800">{sponsor.name}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tighter ${
+                                                                    sponsor.tier === 'Platinum' ? 'bg-indigo-100 text-indigo-700' :
+                                                                    sponsor.tier === 'Gold' ? 'bg-yellow-100 text-yellow-700' :
+                                                                    sponsor.tier === 'Silver' ? 'bg-slate-200 text-slate-600' :
+                                                                    'bg-orange-100 text-orange-700'
+                                                                }`}>
+                                                                    {sponsor.tier}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {sponsor.website_url ? (
+                                                                    <a href={sponsor.website_url} target="_blank" className="text-primary hover:underline font-mono text-xs truncate max-w-[150px] block">{sponsor.website_url}</a>
+                                                                ) : (
+                                                                    <span className="text-slate-300">-</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right">
+                                                                <button
+                                                                    onClick={() => handleDeleteSponsor(sponsor.id)}
+                                                                    className="size-8 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-lg">delete</span>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- CATEGORIES TAB --- */}
+                    {activeTab === 'categories' && (
+                        <div className="space-y-6">
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <div className="p-6 border-b border-slate-100">
+                                    <h3 className="font-bold text-lg text-slate-800">Gestión de Categorías y Precios</h3>
+                                    <p className="text-xs text-slate-500 mt-1">Configura los límites de equipos y los precios de inscripción.</p>
+                                </div>
+                                <div className="p-6">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-left">
+                                            <thead>
+                                                <tr className="text-slate-500 border-b border-slate-100">
+                                                    <th className="px-6 py-4 font-bold uppercase text-[10px]">Categoría</th>
+                                                    <th className="px-6 py-4 font-bold uppercase text-[10px]">Precio (€)</th>
+                                                    <th className="px-6 py-4 font-bold uppercase text-[10px]">Límite Equipos</th>
+                                                    <th className="px-6 py-4 font-bold uppercase text-[10px] text-right">Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {categories.map(cat => (
+                                                    <tr key={cat.id} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="px-6 py-4 font-bold text-slate-800">{cat.name}</td>
+                                                        <td className="px-6 py-4">
+                                                            <input 
+                                                                type="number" 
+                                                                defaultValue={cat.price}
+                                                                onBlur={(e) => handleUpdateCategory(cat.id, { price: Number(e.target.value) })}
+                                                                className="w-20 border border-slate-200 rounded px-2 py-1 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                                            />
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <input 
+                                                                type="number" 
+                                                                defaultValue={cat.max_teams}
+                                                                onBlur={(e) => handleUpdateCategory(cat.id, { max_teams: Number(e.target.value) })}
+                                                                className="w-20 border border-slate-200 rounded px-2 py-1 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                                            />
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <span className="text-[10px] text-slate-400 font-mono">Autosave</span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
