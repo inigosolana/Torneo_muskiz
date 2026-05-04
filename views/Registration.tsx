@@ -60,7 +60,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
     const [selectedDivision, setSelectedDivision] = useState<string>(draftValid ? draft.selectedDivision : 'Senior Masculino');
 
     // Payment method
-    const [selectedPayment, setSelectedPayment] = useState<'transfer' | 'stripe' | null>(draftValid ? draft.selectedPayment : null);
+    const [selectedPayment, setSelectedPayment] = useState<'transfer' | null>('transfer');
 
     // Receipt (files can't be serialized — cleared on reload)
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -119,7 +119,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
     const getCounts = useCallback(() => {
         const counts: Record<string, number> = {};
         dbCategories.forEach(cat => {
-            counts[cat.name] = teams.filter(t => t.division === cat.name).length + cart.filter(t => t.division === cat.name).length;
+            counts[cat.name] = teams.filter(t => t.division === cat.name && t.paymentStatus !== 'EXPIRED').length + cart.filter(t => t.division === cat.name).length;
         });
         return counts;
     }, [teams, cart, dbCategories]);
@@ -183,7 +183,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             return;
         }
         if (selectedPayment === 'transfer' && !receiptFile) {
-            alert('Adjunta el justificante de la transferencia.');
+            alert('Debes adjuntar el justificante de la transferencia para reservar tu plaza.');
             return;
         }
 
@@ -207,8 +207,9 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                 name: entry.name,
                 city: entry.city,
                 division: entry.division,
-                paymentStatus: 'PENDING' as const,
-                paymentMethod: selectedPayment === 'transfer' ? 'TRANSFER' : 'CARD',
+                paymentStatus: 'WAITING_VALIDATION' as const,
+                paymentMethod: 'TRANSFER' as const,
+                paymentExpiresAt: Date.now() + RESERVATION_MINUTES * 60 * 1000,
                 fee: entry.fee,
                 players: [],
                 managerName: managerName,
@@ -243,7 +244,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                             <div className="flex items-start gap-2">
                                 <span className="material-symbols-outlined text-amber-500 text-base mt-0.5">hourglass_top</span>
                                 <p className="text-xs text-amber-800 dark:text-amber-200">
-                                    <strong>Pendiente de validación.</strong> El administrador revisará tu {selectedPayment === 'transfer' ? 'justificante de transferencia' : 'pago con tarjeta'} y activará tu acceso en un máximo de 24h.
+                                    <strong>Pendiente de validación.</strong> El administrador revisará tu justificante de transferencia y activará tu acceso en un máximo de 24h.
                                 </p>
                             </div>
                         </div>
@@ -488,60 +489,26 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                             </div>
 
                             {/* Payment method selector */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                {/* Transfer */}
-                                <button
-                                    type="button"
-                                    onClick={() => { setSelectedPayment('transfer'); setReceiptFile(null); }}
-                                    className={`bg-white dark:bg-surface-dark rounded-xl border-2 p-5 flex flex-col items-center text-center gap-3 transition-all ${
-                                        selectedPayment === 'transfer'
-                                            ? 'border-blue-500 ring-2 ring-blue-300 dark:ring-blue-700'
-                                            : 'border-blue-200 dark:border-blue-800/50 hover:border-blue-400'
-                                    }`}
-                                >
-                                    {selectedPayment === 'transfer' && (
-                                        <span className="absolute top-3 right-3 material-symbols-outlined text-blue-600 text-lg">check_circle</span>
-                                    )}
-                                    <div className="size-14 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
-                                        <span className="material-symbols-outlined text-3xl text-blue-600 dark:text-blue-400">account_balance</span>
-                                    </div>
-                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Transferencia Bancaria</h4>
-                                    <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 w-full">
-                                        <p className="font-mono font-bold text-[10px] sm:text-xs bg-blue-100 dark:bg-blue-900/40 px-2 py-1.5 rounded-md break-all">ES29 2095 0056 0120 5601 3105</p>
-                                        <p>Concepto: <strong className="text-[10px] sm:text-xs">Torneo + {cart[0]?.name || managerName} + {
-                                            Array.from(new Set(cart.map(t => {
-                                                const mapping: Record<string, string> = {
-                                                    'Infantil Masculino': 'INF M', 'Infantil Femenino': 'INF F',
-                                                    'Cadete Masculino': 'CAD M', 'Cadete Femenino': 'CAD F',
-                                                    'Juvenil Masculino': 'JUV M', 'Juvenil Femenino': 'JUV F',
-                                                    'Senior Masculino': 'SEN M', 'Senior Femenino': 'SEN F'
-                                                };
-                                                return mapping[t.division] || t.division;
-                                            }))).join('/')
-                                        }</strong></p>
-                                        <p className="text-[10px] text-slate-400">Importe: {totalFee}€</p>
-                                    </div>
-                                </button>
-
-                                {/* Stripe */}
-                                <button
-                                    type="button"
-                                    onClick={() => { setSelectedPayment('stripe'); setReceiptFile(null); }}
-                                    className={`relative bg-white dark:bg-surface-dark rounded-xl border-2 p-5 flex flex-col items-center text-center gap-3 transition-all ${
-                                        selectedPayment === 'stripe'
-                                            ? 'border-purple-500 ring-2 ring-purple-300 dark:ring-purple-700'
-                                            : 'border-blue-200 dark:border-blue-800/50 hover:border-purple-400'
-                                    }`}
-                                >
-                                    {selectedPayment === 'stripe' && (
-                                        <span className="absolute top-3 right-3 material-symbols-outlined text-purple-600 text-lg">check_circle</span>
-                                    )}
-                                    <div className="size-14 rounded-full bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center">
-                                        <span className="material-symbols-outlined text-3xl text-purple-600 dark:text-purple-400">credit_card</span>
-                                    </div>
-                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pago con Tarjeta</h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">Pago seguro mediante Stripe</p>
-                                </button>
+                            <div className="bg-white dark:bg-surface-dark rounded-xl border border-blue-200 dark:border-blue-800 p-5 flex flex-col items-center text-center gap-3 mb-6 shadow-sm">
+                                <div className="size-14 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-3xl text-blue-600 dark:text-blue-400">account_balance</span>
+                                </div>
+                                <h4 className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-widest">Transferencia Bancaria</h4>
+                                <div className="text-xs text-slate-600 dark:text-slate-300 space-y-2 w-full">
+                                    <p className="font-mono font-bold text-xs sm:text-sm bg-blue-50 dark:bg-black/20 border border-blue-100 dark:border-blue-800 px-3 py-2 rounded-md break-all shadow-inner text-blue-700 dark:text-blue-300">ES29 2095 0056 0120 5601 3105</p>
+                                    <p className="font-medium">Concepto: <strong className="text-blue-600 dark:text-blue-400">Torneo + {cart[0]?.name || managerName} + {
+                                        Array.from(new Set(cart.map(t => {
+                                            const mapping: Record<string, string> = {
+                                                'Infantil Masculino': 'INF M', 'Infantil Femenino': 'INF F',
+                                                'Cadete Masculino': 'CAD M', 'Cadete Femenino': 'CAD F',
+                                                'Juvenil Masculino': 'JUV M', 'Juvenil Femenino': 'JUV F',
+                                                'Senior Masculino': 'SEN M', 'Senior Femenino': 'SEN F'
+                                            };
+                                            return mapping[t.division] || t.division;
+                                        }))).join('/')
+                                    }</strong></p>
+                                    <p className="text-[10px] text-slate-400 italic">Debes adjuntar el justificante para que la reserva de plaza sea efectiva.</p>
+                                </div>
                             </div>
 
                             {/* Transfer details + receipt upload */}
@@ -588,25 +555,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                 </div>
                             )}
 
-                            {/* Stripe payment widget */}
-                            {selectedPayment === 'stripe' && (
-                                <div className="animate-in fade-in duration-200">
-                                    <StripeCheckout
-                                        items={cart.map(t => t.division)}
-                                        totalAmount={totalFee}
-                                        onSuccess={() => {
-                                            const mock = new File(['stripe'], 'stripe_payment.pdf', { type: 'application/pdf' });
-                                            setReceiptFile(mock);
-                                        }}
-                                    />
-                                    {receiptFile && (
-                                        <p className="text-xs text-green-600 dark:text-green-400 mt-2 flex items-center gap-1">
-                                            <span className="material-symbols-outlined text-sm">check_circle</span>
-                                            Pago procesado. Haz clic en "Completar Inscripción" para finalizar.
-                                        </p>
-                                    )}
-                                </div>
-                            )}
+
 
                             {/* Admin validation note */}
                             <div className="mt-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3 flex items-start gap-2">

@@ -335,8 +335,8 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     const handleRejectPayment = (team: Team) => {
         const reason = window.prompt(`Motivo del rechazo para ${team.name}:`, 'El justificante no es válido o no se ve bien.');
         if (reason) {
-            onUpdateTeam({ ...team, paymentStatus: 'PENDING', paymentFeedback: reason, status: 'rejected' });
-            toast.info('Pago rechazado con feedback enviado al responsable.');
+            onUpdateTeam({ ...team, paymentStatus: 'EXPIRED', paymentFeedback: reason, status: 'rejected' });
+            toast.info('Pago rechazado. La plaza ha sido liberada y el equipo marcado como EXPIRADO.');
         }
     };
 
@@ -362,7 +362,8 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         setGeneratingBracket(true);
         const courts = genConfig.courtsInput.split(',').map(s => s.trim());
 
-        const newMatches = await generateBracketAI(teams, {
+        const paidTeams = teams.filter(t => t.paymentStatus === 'PAID');
+        const newMatches = await generateBracketAI(paidTeams, {
             startTime: genConfig.startTime,
             endTime: genConfig.endTime,
             intervalMins: genConfig.intervalMins,
@@ -832,7 +833,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                             className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
                                                         />
                                                         <span className="text-[10px] text-slate-400 whitespace-nowrap">
-                                                            Inscritos: {teams.filter(t => t.division === cat.name).length}
+                                                            Inscritos: {teams.filter(t => t.division === cat.name && t.paymentStatus !== 'EXPIRED').length}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -878,7 +879,9 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                         >
                                             <option value="all">Estado Pago (Todos)</option>
                                             <option value="PAID">Pagado</option>
-                                            <option value="PENDING">Pendiente</option>
+                                            <option value="WAITING_VALIDATION">Pendiente Validar</option>
+                                            <option value="EXPIRED">Expirado/Rechazado</option>
+                                            <option value="PENDING">Pendiente Subir</option>
                                         </select>
 
                                         <select 
@@ -929,8 +932,12 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                     <div className="flex flex-col gap-1">
                                                         {team.paymentStatus === 'PAID' ? (
                                                             <span className="text-[10px] font-black bg-green-100 text-green-700 px-2 py-0.5 rounded w-fit">PAGADO</span>
+                                                        ) : team.paymentStatus === 'WAITING_VALIDATION' ? (
+                                                            <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded w-fit uppercase">A Validar</span>
+                                                        ) : team.paymentStatus === 'EXPIRED' ? (
+                                                            <span className="text-[10px] font-black bg-red-100 text-red-700 px-2 py-0.5 rounded w-fit uppercase">Expirado</span>
                                                         ) : (
-                                                            <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded w-fit uppercase">Pendiente Validación</span>
+                                                            <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded w-fit uppercase">Pendiente</span>
                                                         )}
                                                         <span className="text-[10px] text-slate-500 font-medium">
                                                             {team.paymentMethod === 'TRANSFER' ? 'Transferencia' : (team.paymentMethod === 'CARD' ? 'Tarjeta (Stripe)' : (team.paymentMethod || 'Manual'))}
@@ -962,7 +969,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                                 <span className="material-symbols-outlined text-sm">block</span>
                                                             </div>
                                                         )}
-                                                        {team.paymentStatus === 'PENDING' && (
+                                                        {team.paymentStatus === 'WAITING_VALIDATION' && (
                                                             <div className="flex gap-2">
                                                                 <button
                                                                     onClick={() => handleRejectPayment(team)}
@@ -976,7 +983,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                                     className="bg-green-50 text-green-600 hover:bg-green-100 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
                                                                 >
                                                                     <span className="material-symbols-outlined text-xs">payments</span>
-                                                                    PAGADO
+                                                                    VALIDAR
                                                                 </button>
                                                             </div>
                                                         )}

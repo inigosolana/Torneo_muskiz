@@ -23,6 +23,28 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         }
     }, [teams, selectedTeamId]);
 
+    const [timeLeft, setTimeLeft] = useState<number>(0);
+
+    useEffect(() => {
+        if (selectedTeam?.paymentStatus === 'PENDING' && selectedTeam.paymentExpiresAt) {
+            const interval = setInterval(() => {
+                const diff = Math.max(0, Math.floor((selectedTeam.paymentExpiresAt! - Date.now()) / 1000));
+                setTimeLeft(diff);
+                if (diff <= 0) {
+                    clearInterval(interval);
+                    onUpdateTeam({ ...selectedTeam, paymentStatus: 'EXPIRED' });
+                }
+            }, 1000);
+            return () => clearInterval(interval);
+        }
+    }, [selectedTeam, onUpdateTeam]);
+
+    const formatTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s < 10 ? '0' : ''}${s}`;
+    };
+
     // Form States
     const [newTeamName, setNewTeamName] = useState('');
     const [newTeamCity, setNewTeamCity] = useState('');
@@ -421,10 +443,32 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                 </div>
                                 <div className="flex justify-between text-xs pt-3 border-t border-slate-50 dark:border-white/5">
                                     <span className="text-slate-400">Estado Pago</span>
-                                    <span className={`font-black uppercase ${selectedTeam.paymentStatus === 'PAID' ? 'text-green-500' : 'text-amber-500'}`}>
-                                        {selectedTeam.paymentStatus === 'PAID' ? 'PAGADO' : 'PENDIENTE'}
+                                    <span className={`font-black uppercase ${
+                                        selectedTeam.paymentStatus === 'PAID' ? 'text-green-500' : 
+                                        selectedTeam.paymentStatus === 'WAITING_VALIDATION' ? 'text-amber-500' :
+                                        selectedTeam.paymentStatus === 'EXPIRED' ? 'text-red-500' : 'text-slate-400'
+                                    }`}>
+                                        {selectedTeam.paymentStatus === 'PAID' ? 'PAGADO' : 
+                                         selectedTeam.paymentStatus === 'WAITING_VALIDATION' ? 'A VALIDAR' :
+                                         selectedTeam.paymentStatus === 'EXPIRED' ? 'EXPIRADO' : 'PENDIENTE'}
                                     </span>
                                 </div>
+                                {selectedTeam.paymentStatus === 'PENDING' && (
+                                    <div className="pt-2">
+                                        <div className="bg-amber-50 dark:bg-amber-950/20 rounded-lg p-2 flex items-center justify-between">
+                                            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase">Reserva expira en:</span>
+                                            <span className="font-mono font-black text-amber-600 dark:text-amber-400">{formatTime(timeLeft)}</span>
+                                        </div>
+                                    </div>
+                                )}
+                                {selectedTeam.paymentFeedback && (
+                                    <div className="pt-2">
+                                        <div className="bg-red-50 dark:bg-red-950/20 rounded-lg p-2 border border-red-100 dark:border-red-900/30">
+                                            <p className="text-[10px] font-black text-red-700 dark:text-red-400 uppercase mb-1">Motivo Rechazo:</p>
+                                            <p className="text-[11px] text-red-600 dark:text-red-300 italic">"{selectedTeam.paymentFeedback}"</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
