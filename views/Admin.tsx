@@ -146,6 +146,67 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         setSocialPostModal({ show: true, content: postContent, generating: false });
     };
 
+    const handleAdminLogoUpload = (e: React.ChangeEvent<HTMLInputElement>, team: Team) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const result = event.target?.result as string;
+            onUpdateTeam({ ...team, logoUrl: result });
+            toast.success('Escudo actualizado');
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleDeleteTeam = async (team: Team) => {
+        if (window.confirm(`¿ESTÁS SEGURO? Esta acción es irreversible. Se eliminará al equipo "${team.name}" y a todos sus jugadores.`)) {
+            try {
+                await teamService.deleteTeam(team.id);
+                // We need a way to remove it from the local state. 
+                // Since 'teams' comes from props, we should ideally have an onDeleteTeam prop.
+                // For now, I'll assume the parent handles the refresh or I'll reload.
+                window.location.reload(); 
+            } catch (error: any) {
+                toast.error('Error al eliminar equipo: ' + error.message);
+            }
+        }
+    };
+
+    const handleManualAddTeam = async () => {
+        const name = window.prompt('Nombre del equipo:');
+        if (!name) return;
+        
+        const city = window.prompt('Ciudad:', 'Muskiz');
+        if (!city) return;
+
+        const division = window.prompt('Categoría (Ej: Senior Masculino):', 'Senior Masculino');
+        if (!division) return;
+
+        const managerName = window.prompt('Nombre del Responsable:', 'Admin Manual');
+        const managerEmail = window.prompt('Email del Responsable:', 'admin@torneomuskizbmplaya.es');
+
+        const newTeam: Partial<Team> = {
+            name,
+            city,
+            division,
+            managerName: managerName || 'Admin',
+            managerEmail: managerEmail || 'admin@torneomuskizbmplaya.es',
+            paymentStatus: 'PAID',
+            status: 'approved',
+            paymentMethod: 'MANUAL',
+            fee: 0
+        };
+
+        try {
+            await teamService.registerTeam(newTeam);
+            toast.success('Equipo añadido manualmente');
+            window.location.reload();
+        } catch (error: any) {
+            toast.error('Error al añadir equipo: ' + error.message);
+        }
+    };
+
     const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -869,7 +930,16 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                             {/* Payments Table */}
                             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <h3 className="font-bold text-lg text-slate-800">Estado de Pagos e Inscripciones</h3>
+                                    <div className="flex items-center gap-4">
+                                        <h3 className="font-bold text-lg text-slate-800">Estado de Pagos e Inscripciones</h3>
+                                        <button 
+                                            onClick={handleManualAddTeam}
+                                            className="bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-colors shadow-sm"
+                                        >
+                                            <span className="material-symbols-outlined text-sm">add_circle</span>
+                                            Añadir Equipo
+                                        </button>
+                                    </div>
                                     
                                     {/* Filter Bar */}
                                     <div className="flex flex-wrap gap-2">
@@ -1019,6 +1089,14 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                                 APROBAR
                                                             </button>
                                                         )}
+                                                        <button
+                                                            onClick={() => handleDeleteTeam(team)}
+                                                            className="bg-red-50 text-red-500 hover:bg-red-500 hover:text-white text-[10px] font-black px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"
+                                                            title="Eliminar Equipo"
+                                                        >
+                                                            <span className="material-symbols-outlined text-xs">delete</span>
+                                                            ELIMINAR
+                                                        </button>
                                                     </div>
                                                 </td>
                                             </tr>

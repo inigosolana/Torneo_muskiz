@@ -111,6 +111,20 @@ export const teamService = {
         if (error) console.error('Error updating team:', error);
     },
 
+    async deleteTeam(teamId: string): Promise<void> {
+        // Supabase foreign keys with ON DELETE CASCADE will handle players if configured,
+        // otherwise we might need to delete them manually. Assuming CASCADE for now.
+        const { error } = await supabase
+            .from('teams')
+            .delete()
+            .eq('id', teamId);
+
+        if (error) {
+            console.error('Error deleting team:', error);
+            throw new Error(error.message);
+        }
+    },
+
     async addPlayer(teamId: string, player: Partial<Player>): Promise<Player> {
         const { data, error } = await supabase
             .from('players')
