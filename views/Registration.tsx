@@ -491,7 +491,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                         <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-6 rounded-xl shadow-sm">
                             <div className="flex items-center gap-3 mb-6">
                                 <div className={`size-8 rounded-full flex items-center justify-center font-bold ${
-                                    (selectedPayment === 'stripe') || (selectedPayment === 'transfer' && receiptFile)
+                                    (selectedPayment === 'transfer' && receiptFile)
                                         ? 'bg-primary text-background-dark'
                                         : 'bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300'
                                 }`}>3</div>
