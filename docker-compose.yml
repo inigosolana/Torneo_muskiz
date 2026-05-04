@@ -8,8 +8,10 @@ services:
       args:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
-        VITE_STRIPE_PUBLIC_KEY: ${VITE_STRIPE_PUBLIC_KEY}
         VITE_GEMINI_API_KEY: ${GEMINI_API_KEY}
-    ports:
-      - "8080:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.torneo.rule=Host(`torneomuskizbmplaya.es`) || Host(`www.torneomuskizbmplaya.es`)"
+      - "traefik.http.routers.torneo.entrypoints=web"
+      - "traefik.http.services.torneo.loadbalancer.server.port=80"
     restart: unless-stopped
