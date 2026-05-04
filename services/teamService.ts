@@ -71,16 +71,32 @@ export const teamService = {
             receiptUrl = urlData.publicUrl;
         }
 
+        // 1. Create a parent Registration record for the webhook to group these teams
+        let regId: string | undefined;
+        if (newTeams.length > 0) {
+            const { data: regData, error: regError } = await supabase
+                .from('registrations')
+                .insert({
+                    manager_name: newTeams[0].managerName,
+                    manager_email: newTeams[0].managerEmail
+                })
+                .select()
+                .single();
+            
+            if (!regError) regId = regData.id;
+        }
+
         const insertData = newTeams.map(team => ({
             name: team.name,
             city: team.city,
             division: team.division,
-            payment_status: 'PENDING',
+            payment_status: 'WAITING_VALIDATION', // Set to WAITING_VALIDATION for transfer flow
             payment_method: team.paymentMethod || 'TRANSFER',
             fee: team.fee,
             receipt_url: receiptUrl || null,
             manager_name: team.managerName,
-            manager_email: team.managerEmail
+            manager_email: team.managerEmail,
+            registration_id: regId
         }));
 
         const { data, error } = await supabase.from('teams').insert(insertData).select();

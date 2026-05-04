@@ -189,7 +189,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         const newTeam: Partial<Team> = {
             name,
             city,
-            division,
+            division: division as any,
             managerName: managerName || 'Admin',
             managerEmail: managerEmail || 'admin@torneomuskizbmplaya.es',
             paymentStatus: 'PAID',
@@ -397,18 +397,6 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         const reason = window.prompt(`Motivo del rechazo para ${team.name}:`, 'El justificante no es válido o no se ve bien.');
         if (reason) {
             onUpdateTeam({ ...team, paymentStatus: 'EXPIRED', paymentFeedback: reason, status: 'rejected' });
-            
-            // Notify via Resend
-            await supabase.functions.invoke('handle-rejection', {
-                body: {
-                    teamName: team.name,
-                    managerName: team.managerName,
-                    managerEmail: team.managerEmail,
-                    division: team.division,
-                    rejectionReason: reason
-                }
-            });
-            
             toast.info('Pago rechazado. La plaza ha sido liberada y el equipo marcado como EXPIRADO.');
         }
     };
@@ -416,31 +404,10 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     const handleApproveTeam = async (team: Team) => {
         if (confirm(`¿Aprobar definitivamente al equipo ${team.name}? Esto creará su cuenta de acceso y enviará el email de bienvenida.`)) {
             onUpdateTeam({ ...team, status: 'approved', paymentStatus: 'PAID', paymentFeedback: '' });
-            
-            // Notify via Resend
-            await supabase.functions.invoke('handle-approval', {
-                body: {
-                    teamName: team.name,
-                    managerName: team.managerName,
-                    managerEmail: team.managerEmail,
-                    division: team.division
-                }
-            });
-            
             toast.success('Equipo aprobado e email de bienvenida enviado.');
         }
     };
 
-    const handleAdminLogoUpload = (e: React.ChangeEvent<HTMLInputElement>, team: Team) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                onUpdateTeam({ ...team, logoUrl: ev.target?.result as string });
-            };
-            reader.readAsDataURL(file);
-        }
-    };
     // --- Generator Logic ---
     const handleGenerateBracket = async () => {
         setGeneratingBracket(true);
