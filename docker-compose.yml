@@ -12,15 +12,17 @@ services:
     container_name: torneo_muskiz_web
     restart: always
     environment:
-      - HOST=0.0.0.0 # Necesario para que Vite responda a Traefik (si se usara dev mode)
+      - HOST=0.0.0.0
     networks:
       - traefik-net
     labels:
       - "traefik.enable=true"
-      # Regla para tu dominio específico
       - "traefik.http.routers.torneo.rule=Host(`torneomuskizbmplaya.es`) || Host(`www.torneomuskizbmplaya.es`)"
-      - "traefik.http.routers.torneo.entrypoints=web"
-      # Usamos el puerto 80 porque tu Dockerfile actual usa Nginx (Producción)
+      # --- CAMBIOS PARA EL SSL (HTTPS) ---
+      - "traefik.http.routers.torneo.entrypoints=websecure" # Cambiado a websecure
+      - "traefik.http.routers.torneo.tls=true" # Activamos el candado
+      - "traefik.http.routers.torneo.tls.certresolver=letsencrypt" # Pedimos el certificado
+      # -----------------------------------
       - "traefik.http.services.torneo.loadbalancer.server.port=80"
 
 networks:

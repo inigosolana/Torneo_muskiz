@@ -219,6 +219,16 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
 
             const finalReceipt = receiptFile ?? new File(['stripe-payment'], 'stripe_payment.pdf', { type: 'application/pdf' });
             await onRegister(newTeams, finalReceipt);
+
+            // 3. Notify via Resend Edge Function
+            await supabase.functions.invoke('notify-registration', {
+                body: { 
+                    teams: newTeams, 
+                    managerName: managerName, 
+                    managerEmail: managerEmail 
+                }
+            });
+
             sessionStorage.removeItem('reg_draft');
             setIsCompleted(true);
             setGeneratedCredentials({ email: managerEmail, password: password });
