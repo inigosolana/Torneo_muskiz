@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  torneo-web:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,19 +9,18 @@ services:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_GEMINI_API_KEY: ${GEMINI_API_KEY}
-    container_name: torneo_muskiz_app
+    container_name: torneo_muskiz_web
     restart: always
     environment:
-      # Esto arregla lo de Vite para que sea accesible desde fuera (si usaras dev mode)
-      - HOST=0.0.0.0
+      - HOST=0.0.0.0 # Necesario para que Vite responda a Traefik (si se usara dev mode)
     networks:
       - traefik-net
     labels:
       - "traefik.enable=true"
-      # Tu dominio (Traefik lo reconocerá al llegar la petición)
+      # Regla para tu dominio específico
       - "traefik.http.routers.torneo.rule=Host(`torneomuskizbmplaya.es`) || Host(`www.torneomuskizbmplaya.es`)"
       - "traefik.http.routers.torneo.entrypoints=web"
-      # Usamos el puerto 80 ya que tu Dockerfile actual usa Nginx (Producción)
+      # Usamos el puerto 80 porque tu Dockerfile actual usa Nginx (Producción)
       - "traefik.http.services.torneo.loadbalancer.server.port=80"
 
 networks:
