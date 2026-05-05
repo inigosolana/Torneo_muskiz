@@ -53,6 +53,14 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     // Social Media Post State
     const [socialPostModal, setSocialPostModal] = useState<{ show: boolean, content: string, generating: boolean }>({ show: false, content: '', generating: false });
 
+    // Edit Team Modal
+    const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+    const [editForm, setEditForm] = useState<{
+        name: string; city: string; division: string;
+        managerName: string; managerEmail: string;
+        paymentStatus: string; status: string; fee: number;
+    }>({ name: '', city: '', division: '', managerName: '', managerEmail: '', paymentStatus: '', status: '', fee: 0 });
+
     // Sponsors Management
     const [sponsors, setSponsors] = useState<any[]>([]);
     const [sponsorsLoading, setSponsorsLoading] = useState(false);
@@ -163,13 +171,52 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         if (window.confirm(`¿ESTÁS SEGURO? Esta acción es irreversible. Se eliminará al equipo "${team.name}" y a todos sus jugadores.`)) {
             try {
                 await teamService.deleteTeam(team.id);
-                // We need a way to remove it from the local state. 
-                // Since 'teams' comes from props, we should ideally have an onDeleteTeam prop.
-                // For now, I'll assume the parent handles the refresh or I'll reload.
-                window.location.reload(); 
+                // Force a re-fetch of teams to update state
+                const updatedTeams = await teamService.getTeams();
+                // We call onUpdateTeam with a dummy to trigger parent re-render,
+                // but actually we need the parent to refresh. Safest approach:
+                toast.success(`Equipo "${team.name}" eliminado correctamente.`);
+                // Refresh the page data without full reload
+                setTimeout(() => window.location.reload(), 500);
             } catch (error: any) {
                 toast.error('Error al eliminar equipo: ' + error.message);
             }
+        }
+    };
+
+    const handleEditTeam = (team: Team) => {
+        setEditingTeam(team);
+        setEditForm({
+            name: team.name,
+            city: team.city,
+            division: team.division,
+            managerName: team.managerName,
+            managerEmail: team.managerEmail,
+            paymentStatus: team.paymentStatus,
+            status: team.status,
+            fee: team.fee,
+        });
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingTeam) return;
+        try {
+            const updatedTeam: Team = {
+                ...editingTeam,
+                name: editForm.name,
+                city: editForm.city,
+                division: editForm.division as Team['division'],
+                managerName: editForm.managerName,
+                managerEmail: editForm.managerEmail,
+                paymentStatus: editForm.paymentStatus as Team['paymentStatus'],
+                status: editForm.status as Team['status'],
+                fee: editForm.fee,
+            };
+            onUpdateTeam(updatedTeam);
+            setEditingTeam(null);
+            toast.success(`Equipo "${editForm.name}" actualizado correctamente.`);
+        } catch (error: any) {
+            toast.error('Error al actualizar equipo: ' + error.message);
         }
     };
 
@@ -1057,6 +1104,14 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                             </button>
                                                         )}
                                                         <button
+                                                            onClick={() => handleEditTeam(team)}
+                                                            className="bg-blue-50 text-blue-500 hover:bg-blue-500 hover:text-white text-[10px] font-black px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"
+                                                            title="Editar Equipo"
+                                                        >
+                                                            <span className="material-symbols-outlined text-xs">edit</span>
+                                                            EDITAR
+                                                        </button>
+                                                        <button
                                                             onClick={() => handleDeleteTeam(team)}
                                                             className="bg-red-50 text-red-500 hover:bg-red-500 hover:text-white text-[10px] font-black px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"
                                                             title="Eliminar Equipo"
@@ -1639,6 +1694,167 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                     </button>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- EDIT TEAM MODAL --- */}
+            {editingTeam && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+                    <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+                        {/* Header */}
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-slate-800 to-slate-900 text-white">
+                            <h3 className="font-bold text-lg flex items-center gap-2">
+                                <span className="material-symbols-outlined">edit_note</span> Editar Equipo
+                            </h3>
+                            <button onClick={() => setEditingTeam(null)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+
+                        {/* Form */}
+                        <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
+                            {/* Team Info */}
+                            <div>
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-sm">groups</span> Datos del Equipo
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre del Equipo</label>
+                                        <input
+                                            type="text"
+                                            value={editForm.name}
+                                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Ciudad</label>
+                                        <input
+                                            type="text"
+                                            value={editForm.city}
+                                            onChange={e => setEditForm({ ...editForm, city: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Categoría</label>
+                                        <select
+                                            value={editForm.division}
+                                            onChange={e => setEditForm({ ...editForm, division: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                                        >
+                                            <option value="Infantil Femenino">Infantil Femenino</option>
+                                            <option value="Infantil Masculino">Infantil Masculino</option>
+                                            <option value="Cadete Femenino">Cadete Femenino</option>
+                                            <option value="Cadete Masculino">Cadete Masculino</option>
+                                            <option value="Juvenil Femenino">Juvenil Femenino</option>
+                                            <option value="Juvenil Masculino">Juvenil Masculino</option>
+                                            <option value="Senior Femenino">Senior Femenino</option>
+                                            <option value="Senior Masculino">Senior Masculino</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Cuota (€)</label>
+                                        <input
+                                            type="number"
+                                            value={editForm.fee}
+                                            onChange={e => setEditForm({ ...editForm, fee: parseFloat(e.target.value) || 0 })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Manager Info */}
+                            <div>
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-sm">person</span> Datos del Responsable
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre Responsable</label>
+                                        <input
+                                            type="text"
+                                            value={editForm.managerName}
+                                            onChange={e => setEditForm({ ...editForm, managerName: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Email Responsable</label>
+                                        <input
+                                            type="email"
+                                            value={editForm.managerEmail}
+                                            onChange={e => setEditForm({ ...editForm, managerEmail: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Status */}
+                            <div>
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-sm">tune</span> Estado
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Estado de Pago</label>
+                                        <select
+                                            value={editForm.paymentStatus}
+                                            onChange={e => setEditForm({ ...editForm, paymentStatus: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                                        >
+                                            <option value="PENDING">Pendiente</option>
+                                            <option value="WAITING_VALIDATION">Esperando Validación</option>
+                                            <option value="PAID">Pagado</option>
+                                            <option value="EXPIRED">Expirado / Rechazado</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Estado Inscripción</label>
+                                        <select
+                                            value={editForm.status}
+                                            onChange={e => setEditForm({ ...editForm, status: e.target.value })}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                                        >
+                                            <option value="pending">Pendiente</option>
+                                            <option value="approved">Aprobado</option>
+                                            <option value="rejected">Rechazado</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Warning */}
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                                <span className="material-symbols-outlined text-amber-500 text-base mt-0.5">warning</span>
+                                <p className="text-xs text-amber-800">
+                                    <strong>Atención:</strong> Cambiar el estado a «Aprobado» o «Rechazado» disparará automáticamente el envío de un email al responsable del equipo.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+                            <button
+                                onClick={() => setEditingTeam(null)}
+                                className="px-6 py-2.5 rounded-lg font-bold text-slate-500 hover:bg-slate-200 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleSaveEdit}
+                                className="px-6 py-2.5 rounded-lg font-bold bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-lg flex items-center gap-2"
+                            >
+                                <span className="material-symbols-outlined text-sm">save</span>
+                                Guardar Cambios
+                            </button>
                         </div>
                     </div>
                 </div>
