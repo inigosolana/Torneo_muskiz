@@ -25,6 +25,8 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
 
     const [timeLeft, setTimeLeft] = useState<number>(0);
 
+    const selectedTeam = teams.find(t => t.id === selectedTeamId) || teams[0];
+
     useEffect(() => {
         if (selectedTeam?.paymentStatus === 'PENDING' && selectedTeam.paymentExpiresAt) {
             const interval = setInterval(() => {
@@ -56,7 +58,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         role: 'PLAYER'
     });
 
-    const selectedTeam = teams.find(t => t.id === selectedTeamId) || teams[0];
+
 
     if (!selectedTeam) return <div className="p-12 text-center text-slate-500">Cargando equipo...</div>;
 

@@ -60,6 +60,7 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
         setTimeout(() => {
             const newPlayer: Player = {
                 id: Date.now().toString(),
+                teamId: team.id,
                 name: `${form.name} ${form.surnames}`,
                 surnames: form.surnames,
                 dniNumber: form.dniNumber,
