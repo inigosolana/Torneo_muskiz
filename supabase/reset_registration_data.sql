@@ -1,4 +1,4 @@
--- Alias corto: mismo contenido que reset_test_data_keep_admin.sql
+-- Reset de pruebas: NO borra sponsors, categories, site_content ni staff.
 -- Run in Supabase SQL Editor for project: jwixdjmbwfnfwmtsmsau
 
 begin;

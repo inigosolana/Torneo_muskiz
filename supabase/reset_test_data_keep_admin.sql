@@ -1,10 +1,10 @@
 -- Borra TODO lo operativo / de pruebas. Conserva solo configuración y admin.
 -- Ejecutar en Supabase → SQL Editor.
 --
--- SE CONSERVA:
+-- SE CONSERVA (no tocar en reset de pruebas):
 --   public.profiles donde role = 'staff' (acceso panel admin)
 --   public.categories (categorías y precios del torneo)
---   public.sponsors (patrocinadores del panel admin)
+--   public.sponsors — SIEMPRE se mantienen (configuración real del torneo)
 --   public.site_content (textos / bloques de la web)
 --   public.category_limits (límites si los usas; suele estar vacío o 1 fila)
 --
