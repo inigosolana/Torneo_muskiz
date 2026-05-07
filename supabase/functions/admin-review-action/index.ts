@@ -27,7 +27,12 @@ function parseChatIds(value?: string | null): string[] {
   return value.split(",").map((v) => v.trim()).filter(Boolean);
 }
 
-async function sendTelegramHtmlToChats(chatIds: string[], html: string, context: string): Promise<void> {
+async function sendTelegramHtmlToChats(
+  chatIds: string[],
+  html: string,
+  context: string,
+  replyMarkup?: Record<string, unknown>,
+): Promise<void> {
   if (!TELEGRAM_NOTIFICATIONS_BOT_TOKEN || chatIds.length === 0) return;
   await Promise.all(chatIds.map(async (chatId) => {
     try {
@@ -39,6 +44,7 @@ async function sendTelegramHtmlToChats(chatIds: string[], html: string, context:
           text: html,
           parse_mode: "HTML",
           disable_web_page_preview: true,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         }),
       });
       if (!res.ok) {
@@ -298,7 +304,7 @@ async function sendAdminReceipt(action: "approve" | "reject", team: {
 async function sendTeamReviewTelegram(
   supabase: ReturnType<typeof createClient>,
   action: "approve" | "reject",
-  team: { name?: string; division?: string; manager_name?: string },
+  team: { id?: string; name?: string; division?: string; manager_name?: string },
   rejectionReason?: string,
 ) {
   const capacity = await getCategoryCapacitySummary(supabase);
@@ -311,6 +317,9 @@ async function sendTeamReviewTelegram(
     ? `\n<b>📝 Motivo:</b> <i>${escHtmlTelegram(rejectionReason)}</i>`
     : "";
   const motivoLinePlain = !ok && rejectionReason ? `\nMotivo: ${rejectionReason}` : "";
+  const undoNote = !ok
+    ? "\n<i>El equipo ha sido eliminado de la BBDD; el responsable debe inscribirse de nuevo si quieres recuperarlo.</i>"
+    : "";
   const html = [
     `${tick} <b>${titleColor}</b>`,
     "",
@@ -318,6 +327,7 @@ async function sendTeamReviewTelegram(
     `👤 ${escHtmlTelegram(team.manager_name ?? "N/D")}`,
     `🎟️ Plazas restantes ${escHtmlTelegram(categoryLine.category)}: <b>${categoryLine.remaining}/${categoryLine.maxTeams}</b>`,
     motivoLineHtml,
+    undoNote,
   ].filter((line) => line !== "").join("\n");
   const plain = [
     `${tick} ${titleColor}`,
@@ -328,8 +338,13 @@ async function sendTeamReviewTelegram(
     motivoLinePlain,
   ].filter((line) => line !== "").join("\n");
 
+  // Botón Deshacer SOLO en aprobación de equipo (en rechazo se elimina, no es reversible).
+  const undoMarkup = ok && team.id
+    ? { inline_keyboard: [[{ text: "🔁 Deshacer (volver a pendiente)", callback_data: `t:u:${team.id}` }]] }
+    : undefined;
+
   // 1) Envío directo HTML al chat de admins (con tick).
-  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html, `team-${action}`);
+  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html, `team-${action}`, undoMarkup);
 
   // 2) n8n: solo viewer/read-only para no duplicar.
   if (N8N_WH_URL && TELEGRAM_VIEWER_CHAT_IDS) {
@@ -410,7 +425,13 @@ async function sendPlayerDocReviewTelegram(
   ].filter((line) => line !== "").join("\n");
 
   // 1) Directo al chat admin (HTML con tick).
-  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html, `${docType}-${action}`);
+  const docKey = docType === "dni" ? "d" : "i";
+  const undoMarkup = {
+    inline_keyboard: [[
+      { text: "🔁 Deshacer (volver a PENDING)", callback_data: `p:u:${docKey}:${playerId}` },
+    ]],
+  };
+  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html, `${docType}-${action}`, undoMarkup);
 
   // 2) n8n: solo viewer.
   if (N8N_WH_URL && TELEGRAM_VIEWER_CHAT_IDS) {
@@ -617,13 +638,13 @@ Deno.serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     if (entity === "team") {
-      if (action !== "approve" && action !== "reject") {
+      if (action !== "approve" && action !== "reject" && action !== "undo") {
         throw new Error("Acción de equipo no soportada.");
       }
 
       const { data: currentTeam, error: teamLookupError } = await supabase
         .from("teams")
-        .select("id, name, division, manager_name, manager_email, registration_id")
+        .select("id, name, division, manager_name, manager_email, registration_id, status")
         .eq("id", id)
         .maybeSingle();
       if (teamLookupError) throw teamLookupError;
@@ -637,6 +658,31 @@ Deno.serve(async (req) => {
           title: "Acción ya procesada",
           subtitle: `Este equipo ya no existe o ya fue revisado (${id}).`,
           success: false,
+        }));
+      }
+
+      // UNDO: equipo aprobado vuelve a pending. Los rechazos no son reversibles
+      // porque ya se elimina el equipo (no podríamos llegar aquí en ese caso).
+      if (action === "undo") {
+        const { error } = await supabase
+          .from("teams")
+          .update({ status: "pending", payment_feedback: null })
+          .eq("id", id);
+        if (error) throw error;
+        await sendTelegramHtmlToChats(
+          parseChatIds(TELEGRAM_ADMIN_CHAT_IDS),
+          [
+            `🔁 <b>EQUIPO VUELVE A PENDIENTE</b>`,
+            ``,
+            `🏐 <b>${escHtmlTelegram(currentTeam.name ?? "N/D")}</b> (${escHtmlTelegram(currentTeam.division ?? "N/D")})`,
+            `<i>Se ha deshecho la aprobación. Vuelve a revisarlo cuando puedas.</i>`,
+          ].join("\n"),
+          "team-undo",
+        );
+        return htmlResponse(renderActionPage({
+          title: "Aprobación deshecha",
+          subtitle: `El equipo vuelve a pendiente (${id}).`,
+          success: true,
         }));
       }
 
@@ -717,14 +763,19 @@ Deno.serve(async (req) => {
       if (!docType || (docType !== "dni" && docType !== "insurance")) {
         throw new Error("Tipo de documento inválido.");
       }
-      if (action !== "approve" && action !== "reject") {
+      if (action !== "approve" && action !== "reject" && action !== "undo") {
         throw new Error("Acción de documento no soportada.");
       }
 
       const field = docType === "dni" ? "dni_status" : "insurance_status";
+      const newStatus = action === "approve"
+        ? "APPROVED"
+        : action === "reject"
+          ? "REJECTED"
+          : "PENDING";
       const { data, error } = await supabase
         .from("players")
-        .update({ [field]: action === "approve" ? "APPROVED" : "REJECTED" })
+        .update({ [field]: newStatus })
         .select("id")
         .eq("id", id);
 
@@ -739,6 +790,41 @@ Deno.serve(async (req) => {
           title: "Acción ya procesada",
           subtitle: `El documento ya estaba revisado o el jugador no existe (${id}).`,
           success: false,
+        }));
+      }
+
+      // UNDO: vuelve a PENDING. No reenviamos correo al responsable
+      // (sería confuso) ni al admin; solo confirmamos en Telegram.
+      if (action === "undo") {
+        const { data: playerDataUndo } = await supabase
+          .from("players")
+          .select("name, surnames, team_id")
+          .eq("id", id)
+          .maybeSingle();
+        const playerNameUndo = [playerDataUndo?.name, playerDataUndo?.surnames]
+          .filter(Boolean).join(" ").trim() || "Jugador";
+        let teamNameUndo = "N/D";
+        if (playerDataUndo?.team_id) {
+          const { data: tu } = await supabase
+            .from("teams").select("name").eq("id", playerDataUndo.team_id).maybeSingle();
+          if (tu?.name) teamNameUndo = tu.name;
+        }
+        const docLabelUndo = docType === "dni" ? "DNI" : "Seguro";
+        await sendTelegramHtmlToChats(
+          parseChatIds(TELEGRAM_ADMIN_CHAT_IDS),
+          [
+            `🔁 <b>${docLabelUndo} VUELVE A PENDING</b>`,
+            ``,
+            `👤 <b>${escHtmlTelegram(playerNameUndo)}</b>`,
+            `🏐 ${escHtmlTelegram(teamNameUndo)}`,
+            `<i>Se ha deshecho la última revisión. Pendiente de validar otra vez.</i>`,
+          ].join("\n"),
+          `${docType}-undo`,
+        );
+        return htmlResponse(renderActionPage({
+          title: "Revisión deshecha",
+          subtitle: `${docType.toUpperCase()} vuelve a PENDING (${id}).`,
+          success: true,
         }));
       }
 

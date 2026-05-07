@@ -180,7 +180,7 @@ async function signActionPayload(payload: string): Promise<string> {
 async function callAdminReviewAction(params: {
   entity: "team" | "player-doc";
   id: string;
-  action: "approve" | "reject";
+  action: "approve" | "reject" | "undo";
   docType?: "dni" | "insurance";
   rejectionReason?: string;
 }): Promise<{ ok: boolean; status: number; bodySnippet?: string }> {
@@ -328,29 +328,35 @@ async function sendForceReplyPrompt(chatId: number, text: string): Promise<numbe
 }
 
 type CallbackParsed =
-  | { kind: "team"; id: string; action: "approve" | "reject" }
-  | { kind: "player-doc"; id: string; action: "approve" | "reject"; docType: "dni" | "insurance" }
+  | { kind: "team"; id: string; action: "approve" | "reject" | "undo" }
+  | { kind: "player-doc"; id: string; action: "approve" | "reject" | "undo"; docType: "dni" | "insurance" }
   | null;
+
+function actionFromCode(code: string): "approve" | "reject" | "undo" | null {
+  if (code === "a") return "approve";
+  if (code === "r") return "reject";
+  if (code === "u") return "undo";
+  return null;
+}
 
 function parseCallbackData(raw: string): CallbackParsed {
   const parts = raw.split(":");
-  if (parts.length === 3 && parts[0] === "t" && (parts[1] === "a" || parts[1] === "r") && parts[2]) {
-    return {
-      kind: "team",
-      action: parts[1] === "a" ? "approve" : "reject",
-      id: parts[2],
-    };
+  if (parts.length === 3 && parts[0] === "t" && parts[2]) {
+    const action = actionFromCode(parts[1]);
+    if (!action) return null;
+    return { kind: "team", action, id: parts[2] };
   }
   if (
     parts.length === 4 &&
     parts[0] === "p" &&
-    (parts[1] === "a" || parts[1] === "r") &&
     (parts[2] === "d" || parts[2] === "i") &&
     parts[3]
   ) {
+    const action = actionFromCode(parts[1]);
+    if (!action) return null;
     return {
       kind: "player-doc",
-      action: parts[1] === "a" ? "approve" : "reject",
+      action,
       docType: parts[2] === "d" ? "dni" : "insurance",
       id: parts[3],
     };
@@ -363,13 +369,19 @@ function describeAction(parsed: NonNullable<CallbackParsed>): { toast: string; f
     if (parsed.action === "approve") {
       return { toast: "✅ Equipo aprobado", footer: "✅ <b>EQUIPO APROBADO</b>" };
     }
-    return { toast: "❌ Equipo denegado", footer: "❌ <b>EQUIPO DENEGADO</b>" };
+    if (parsed.action === "reject") {
+      return { toast: "❌ Equipo denegado", footer: "❌ <b>EQUIPO DENEGADO</b>" };
+    }
+    return { toast: "🔁 Aprobación deshecha", footer: "🔁 <b>EQUIPO PENDIENTE OTRA VEZ</b>" };
   }
   const docName = parsed.docType === "dni" ? "DNI" : "Seguro";
   if (parsed.action === "approve") {
     return { toast: `✅ ${docName} aprobado`, footer: `✅ <b>${docName} APROBADO</b>` };
   }
-  return { toast: `❌ ${docName} denegado`, footer: `❌ <b>${docName} DENEGADO</b>` };
+  if (parsed.action === "reject") {
+    return { toast: `❌ ${docName} denegado`, footer: `❌ <b>${docName} DENEGADO</b>` };
+  }
+  return { toast: `🔁 ${docName} deshecho`, footer: `🔁 <b>${docName} PENDING OTRA VEZ</b>` };
 }
 
 async function handleCallbackQuery(callbackQuery: any): Promise<void> {
