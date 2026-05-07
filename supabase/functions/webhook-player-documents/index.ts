@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { data: team } = await supabase
       .from("teams")
-      .select("name, manager_name, manager_email")
+      .select("name, manager_name, manager_email, manager_phone")
       .eq("id", record.team_id)
       .single();
 
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
           eventType: "player-documents",
           managerName: team?.manager_name ?? "Responsable",
           managerEmail: team?.manager_email ?? "N/D",
-          managerPhone: "N/D",
+          managerPhone: team?.manager_phone ?? "N/D",
           teamsCount: 0,
           adminChatIds,
           telegramButtons,

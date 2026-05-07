@@ -8,7 +8,6 @@ services:
       args:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
-        VITE_STRIPE_PUBLIC_KEY: ${VITE_STRIPE_PUBLIC_KEY}
         GEMINI_API_KEY: ${GEMINI_API_KEY}
     container_name: torneo_muskiz_web
     restart: always

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Team, CategoryLimits } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { StripeCheckout } from '../components/StripeCheckout';
 import { supabase } from '../services/supabaseClient';
 
 interface TeamEntry {
@@ -48,6 +47,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
 
     // Manager info
     const [managerName, setManagerName] = useState(draftValid ? draft.managerName : '');
+    const [managerSurnames, setManagerSurnames] = useState(draftValid ? draft.managerSurnames : '');
     const [managerEmail, setManagerEmail] = useState(draftValid ? draft.managerEmail : '');
     const [managerPhone, setManagerPhone] = useState(draftValid ? draft.managerPhone : '');
     const [password, setPassword] = useState('');
@@ -86,13 +86,13 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             return;
         }
         const data = {
-            managerName, managerEmail, managerPhone,
+            managerName, managerSurnames, managerEmail, managerPhone,
             cart, newTeamName, newTeamCity,
             selectedDivision, selectedPayment,
             reservationStart,
         };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
-    }, [managerName, managerEmail, managerPhone, cart, newTeamName, newTeamCity,
+    }, [managerName, managerSurnames, managerEmail, managerPhone, cart, newTeamName, newTeamCity,
         selectedDivision, selectedPayment, reservationStart, isCompleted, expired]);
 
     // Timer effect
@@ -171,7 +171,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
     };
 
     const handleComplete = async () => {
-        if (!managerName || !managerEmail || !managerPhone || !password) {
+        if (!managerName || !managerSurnames || !managerEmail || !managerPhone || !password) {
             alert('Por favor, completa los datos del responsable.');
             return;
         }
@@ -190,12 +190,14 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
 
         try {
             // 1. Sign up the manager in Supabase Auth
+            const managerFullName = `${managerName} ${managerSurnames}`.trim();
+
             const { error: authError } = await supabase.auth.signUp({
                 email: managerEmail,
                 password: password,
                 options: {
                     data: {
-                        full_name: managerName
+                        full_name: managerFullName
                     }
                 }
             });
@@ -213,13 +215,13 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                 paymentExpiresAt: Date.now() + RESERVATION_MINUTES * 60 * 1000,
                 fee: entry.fee,
                 players: [],
-                managerName: managerName,
+                managerName: managerFullName,
                 managerEmail: managerEmail,
                 managerPhone: managerPhone,
                 status: 'pending' as const
             }));
 
-            const finalReceipt = receiptFile ?? new File(['stripe-payment'], 'stripe_payment.pdf', { type: 'application/pdf' });
+            const finalReceipt = receiptFile ?? new File(['payment-receipt'], 'payment_receipt.pdf', { type: 'application/pdf' });
             await onRegister(newTeams, finalReceipt);
 
             sessionStorage.removeItem('reg_draft');
@@ -365,17 +367,25 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                         </div>
                         <p className="text-xs text-slate-500 mb-4">Serás el responsable de todos los equipos que inscribas. Con estas credenciales podrás acceder al panel de gestión para añadir jugadores.</p>
                         <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre del Responsable</label>
-                                <input type="text" value={managerName} onChange={e => setManagerName(e.target.value)}
-                                    className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                                    placeholder="Nombre completo" />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre del Responsable *</label>
+                                    <input type="text" value={managerName} onChange={e => setManagerName(e.target.value)}
+                                        className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                        placeholder="Nombre" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Apellidos del Responsable *</label>
+                                    <input type="text" value={managerSurnames} onChange={e => setManagerSurnames(e.target.value)}
+                                        className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                        placeholder="Apellidos" />
+                                </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Email (Usuario)</label>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Email (Usuario) *</label>
                                     <input type="email" value={managerEmail} onChange={e => setManagerEmail(e.target.value)}
-                                        className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                    className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                                         placeholder="correo@ejemplo.com" />
                                 </div>
                                 <div>
