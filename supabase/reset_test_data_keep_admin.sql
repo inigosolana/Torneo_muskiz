@@ -1,26 +1,32 @@
--- Limpia datos de prueba y deja intacto lo de administración / configuración del torneo.
--- Ejecutar en Supabase → SQL Editor (proyecto jwixdjmbwfnfwmtsmsau).
+-- Borra TODO lo operativo / de pruebas. Conserva solo configuración y admin.
+-- Ejecutar en Supabase → SQL Editor.
 --
--- BORRA:
---   players, teams, registrations, matches
---   telegram_pending_rejections (motivos de denegación pendientes en Telegram)
---   profiles con role = 'manager' (responsables de equipo de prueba)
+-- SE CONSERVA:
+--   public.profiles donde role = 'staff' (acceso panel admin)
+--   public.categories (categorías y precios del torneo)
+--   public.sponsors (patrocinadores del panel admin)
+--   public.site_content (textos / bloques de la web)
+--   public.category_limits (límites si los usas; suele estar vacío o 1 fila)
 --
--- NO TOCA (admin / sitio):
---   profiles con role = 'staff' (tu panel admin)
---   categories, sponsors, site_content
---   auth.users (los usuarios siguen existiendo; solo se quita la fila en profiles si era manager)
+-- SE BORRA:
+--   player_stats, matches, players, teams, registrations
+--   telegram_pending_rejections
+--   gallery (imágenes de galería en BBDD; los ficheros en Storage hay que borrarlos aparte)
+--   profiles con role = 'manager'
 --
--- Storage (justificantes, DNI, logos): NO se borra aquí. Si quieres vaciar buckets,
--- hazlo en Storage del dashboard o con la CLI.
+-- NO borra: archivos en Storage (receipts, player-documents, public-assets).
+--   Para vaciar buckets: Dashboard → Storage → seleccionar bucket → vaciar,
+--   o supabase storage rm --recursive ...
 
 begin;
 
+delete from public.player_stats;
 delete from public.telegram_pending_rejections;
+delete from public.matches;
 delete from public.players;
 delete from public.teams;
 delete from public.registrations;
-delete from public.matches;
+delete from public.gallery;
 delete from public.profiles where role = 'manager';
 
 commit;
