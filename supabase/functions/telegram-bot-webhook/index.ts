@@ -44,6 +44,7 @@ Deno.serve(async (req) => {
     const update = await req.json();
     const message = update?.message ?? update?.edited_message;
     const chatId = Number(message?.chat?.id);
+    const userId = Number(message?.from?.id);
     const text = String(message?.text ?? "").trim();
     if (!Number.isFinite(chatId) || !text) {
       return new Response(JSON.stringify({ ok: true, skipped: true }), {
@@ -55,7 +56,7 @@ Deno.serve(async (req) => {
     const queryRes = await fetch(`${SUPABASE_URL}/functions/v1/telegram-admin-query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId, text }),
+      body: JSON.stringify({ chatId, userId, text }),
     });
     const queryJson = await queryRes.json().catch(() => ({}));
     const reply = queryJson?.message ?? queryJson?.error ?? "No pude procesar la consulta.";

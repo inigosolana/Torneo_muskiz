@@ -52,19 +52,22 @@ Deno.serve(async (req) => {
 
     const payload = await req.json();
     const { type, record, old_record } = payload;
-    if (type !== "UPDATE") return new Response(JSON.stringify({ skipped: true }), { status: 200 });
+    if (type !== "UPDATE" && type !== "INSERT") {
+      return new Response(JSON.stringify({ skipped: true }), { status: 200 });
+    }
 
     const becamePendingDni = record.dni_status === "PENDING" && old_record?.dni_status !== "PENDING";
     const becamePendingInsurance = record.insurance_status === "PENDING" && old_record?.insurance_status !== "PENDING";
+    const isNewPlayer = type === "INSERT";
 
-    if (!becamePendingDni && !becamePendingInsurance) {
+    if (!isNewPlayer && !becamePendingDni && !becamePendingInsurance) {
       return new Response(JSON.stringify({ skipped: true }), { status: 200 });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { data: team } = await supabase
       .from("teams")
-      .select("name, manager_name, manager_email, manager_phone")
+      .select("name, manager_name, manager_email")
       .eq("id", record.team_id)
       .single();
 
@@ -102,7 +105,9 @@ Deno.serve(async (req) => {
       if (record.insurance_url) telegramButtons.push({ text: "Ver seguro", url: record.insurance_url });
     }
 
-    const messageText = `NUEVO DOCUMENTO PENDIENTE\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nACCIONES:\n${docLinesTelegram.join("\n\n")}`;
+    const messageText = isNewPlayer
+      ? `NUEVO JUGADOR REGISTRADO\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nEstado DNI: ${record.dni_status ?? "EMPTY"}\nEstado Seguro: ${record.insurance_status ?? "EMPTY"}`
+      : `NUEVO DOCUMENTO PENDIENTE\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nACCIONES:\n${docLinesTelegram.join("\n\n")}`;
 
     await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -113,14 +118,17 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: FROM_EMAIL,
         to: ADMIN_EMAIL,
-        subject: `📄 Documentación pendiente: ${record.name}`,
+        subject: isNewPlayer ? `👤 Nuevo jugador añadido: ${record.name}` : `📄 Documentación pendiente: ${record.name}`,
         html: `
           <div style="font-family:Segoe UI,Tahoma,sans-serif;max-width:620px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
-            <h2 style="margin:0 0 10px;color:#0f172a;">Nueva documentación pendiente de revisión</h2>
+            <h2 style="margin:0 0 10px;color:#0f172a;">${isNewPlayer ? "Nuevo jugador añadido al equipo" : "Nueva documentación pendiente de revisión"}</h2>
             <p style="margin:0 0 10px;color:#475569;">Jugador: <strong>${record.name}</strong></p>
             <p style="margin:0 0 10px;color:#475569;">Equipo: <strong>${team?.name ?? "N/D"}</strong></p>
             <p style="margin:0 0 16px;color:#475569;">Responsable: <strong>${team?.manager_name ?? "N/D"}</strong> (${team?.manager_email ?? "N/D"})</p>
-            ${docSections.join("")}
+            ${isNewPlayer ? `
+              <p style="margin:0 0 8px;color:#334155;">Estado DNI: <strong>${record.dni_status ?? "EMPTY"}</strong></p>
+              <p style="margin:0 0 8px;color:#334155;">Estado Seguro: <strong>${record.insurance_status ?? "EMPTY"}</strong></p>
+            ` : docSections.join("")}
           </div>
         `,
       }),
@@ -136,7 +144,7 @@ Deno.serve(async (req) => {
           eventType: "player-documents",
           managerName: team?.manager_name ?? "Responsable",
           managerEmail: team?.manager_email ?? "N/D",
-          managerPhone: team?.manager_phone ?? "N/D",
+          managerPhone: "N/D",
           teamsCount: 0,
           adminChatIds,
           telegramButtons,
@@ -151,7 +159,7 @@ Deno.serve(async (req) => {
             eventType: "player-documents",
             managerName: team?.manager_name ?? "Responsable",
             managerEmail: team?.manager_email ?? "N/D",
-            managerPhone: team?.manager_phone ?? "N/D",
+            managerPhone: "N/D",
             teamsCount: 0,
             adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
             telegramButtons: [],
@@ -180,7 +188,9 @@ Deno.serve(async (req) => {
     }
     if (PLAYER_DOCS_TELEGRAM_BOT_TOKEN && hasChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS)) {
       const viewerChats = parseChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS);
-      const readOnlyText = `NUEVO DOCUMENTO PENDIENTE (SOLO LECTURA)\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nDocumentos:\n${docLinesTelegram.map((line) => line.replace(/Aprobar:.*\nDenegar:.*\n?/g, "")).join("\n\n")}`;
+      const readOnlyText = isNewPlayer
+        ? `NUEVO JUGADOR REGISTRADO (SOLO LECTURA)\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nEstado DNI: ${record.dni_status ?? "EMPTY"}\nEstado Seguro: ${record.insurance_status ?? "EMPTY"}`
+        : `NUEVO DOCUMENTO PENDIENTE (SOLO LECTURA)\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nDocumentos:\n${docLinesTelegram.map((line) => line.replace(/Aprobar:.*\nDenegar:.*\n?/g, "")).join("\n\n")}`;
       for (const chatId of viewerChats) {
         await fetch(`https://api.telegram.org/bot${PLAYER_DOCS_TELEGRAM_BOT_TOKEN}/sendMessage`, {
           method: "POST",

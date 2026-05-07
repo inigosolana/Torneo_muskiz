@@ -22,6 +22,12 @@ function allowedChatIds(): Set<number> {
   );
 }
 
+function isAuthorized(allowed: Set<number>, chatId: number, userId?: number): boolean {
+  if (allowed.has(chatId)) return true;
+  if (typeof userId === "number" && Number.isFinite(userId) && allowed.has(userId)) return true;
+  return false;
+}
+
 async function getPlayerCountForTeam(supabase: ReturnType<typeof createClient>, teamId: string): Promise<number> {
   const { count } = await supabase
     .from("players")
@@ -89,12 +95,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { chatId, text } = await req.json();
+    const { chatId, userId, text } = await req.json();
     const chatIdNumber = Number(chatId);
+    const userIdNumber = Number(userId);
     const rawText = String(text ?? "");
     const query = normalize(rawText);
     const allowed = allowedChatIds();
-    if (!allowed.has(chatIdNumber)) {
+    if (!isAuthorized(allowed, chatIdNumber, Number.isFinite(userIdNumber) ? userIdNumber : undefined)) {
       return new Response(JSON.stringify({ message: "No autorizado para consultas." }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
