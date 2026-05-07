@@ -301,19 +301,6 @@ Deno.serve(async (req) => {
     }), 500);
   }
 
-  const requestUrl = new URL(req.url);
-  const fullPageUrl = requestUrl.href;
-  const formActionUrl = `${SUPABASE_URL}/functions/v1/admin-review-action`;
-  let urlHostMismatch: { requestHost: string; expectedHost: string } | undefined;
-  try {
-    const configuredHost = new URL(SUPABASE_URL).hostname;
-    if (requestUrl.hostname !== configuredHost) {
-      urlHostMismatch = { requestHost: requestUrl.hostname, expectedHost: configuredHost };
-    }
-  } catch {
-    // ignore invalid SUPABASE_URL shape
-  }
-
   const isPost = req.method === "POST";
   let entity: string | null;
   let id: string | null;
@@ -369,54 +356,8 @@ Deno.serve(async (req) => {
     }), 401);
   }
 
-  if (!isPost) {
-    if (entity === "team" && action === "approve") {
-      return htmlResponse(renderActionPage({
-        title: "Confirmar aprobación",
-        subtitle: "Vas a aprobar esta inscripción. ¿Quieres continuar?",
-        success: true,
-        showForm: true,
-        formActionUrl,
-        openInBrowserUrl: fullPageUrl,
-        urlHostMismatch,
-        formFieldsHtml: `
-          <input type="hidden" name="entity" value="${entity}" />
-          <input type="hidden" name="id" value="${id}" />
-          <input type="hidden" name="action" value="${action}" />
-          <input type="hidden" name="docType" value="${docType ?? ""}" />
-          <input type="hidden" name="exp" value="${exp}" />
-          <input type="hidden" name="token" value="${token}" />
-          <button type="submit" style="background:#15803d;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;">Sí, aprobar ahora</button>
-        `,
-      }));
-    }
-
-    if (entity === "team" && action === "reject") {
-      return htmlResponse(renderActionPage({
-        title: "Denegar inscripción",
-        subtitle: "Indica el motivo para enviarlo al responsable.",
-        success: false,
-        showForm: true,
-        formActionUrl,
-        openInBrowserUrl: fullPageUrl,
-        urlHostMismatch,
-        formFieldsHtml: `
-          <input type="hidden" name="entity" value="${entity}" />
-          <input type="hidden" name="id" value="${id}" />
-          <input type="hidden" name="action" value="${action}" />
-          <input type="hidden" name="docType" value="${docType ?? ""}" />
-          <input type="hidden" name="exp" value="${exp}" />
-          <input type="hidden" name="token" value="${token}" />
-          <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:8px;">Motivo del rechazo</label>
-          <textarea name="rejectionReason" required rows="4" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-family:inherit;margin-bottom:10px;" placeholder="Ejemplo: El justificante no se ve completo."></textarea>
-          <button type="submit" style="background:#b91c1c;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;">Denegar y enviar motivo</button>
-        `,
-      }));
-    }
-
-    // player-doc: un solo paso en GET (Telegram/WebView bloquea POST del formulario por sandbox).
-    // El enlace ya va firmado y con caducidad; equipos siguen con formulario de confirmación.
-  }
+  // En Telegram WebView el POST del formulario queda bloqueado por sandbox.
+  // Ejecutamos las acciones firmadas en un solo GET tanto para team como player-doc.
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -447,11 +388,7 @@ Deno.serve(async (req) => {
 
       if (action === "reject") {
         if (!rejectionReason) {
-          return htmlResponse(renderActionPage({
-            title: "Falta motivo de rechazo",
-            subtitle: "Debes indicar un motivo para denegar desde Telegram.",
-            success: false,
-          }), 400);
+          rejectionReason = "La inscripción ha sido rechazada por el staff del torneo. Revisa la documentación y vuelve a realizar el alta.";
         }
         await sendManagerEmail("reject", currentTeam, rejectionReason);
         await sendAdminReceipt("reject", currentTeam, rejectionReason);
