@@ -16,6 +16,7 @@ import { ManagerLogin } from './views/ManagerLogin';
 import { teamService, matchService } from './services/teamService';
 import { generateBracketAI } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
+import { OpsErrorBoundary } from './components/OpsErrorBoundary';
 import { reportOpsAlert } from './services/opsAlertService';
 import { Toaster, toast } from 'sonner';
 import type { User } from '@supabase/supabase-js';
@@ -180,6 +181,12 @@ const App: React.FC = () => {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al guardar el equipo';
       toast.error(msg);
+      void reportOpsAlert({
+        source: 'frontend.team-update',
+        severity: 'error',
+        message: 'Error al guardar equipo (manager/admin)',
+        details: e instanceof Error ? `${msg}\n${e.stack ?? ''}`.slice(0, 3500) : msg,
+      });
       throw e;
     }
   };
@@ -273,8 +280,9 @@ const App: React.FC = () => {
   };
 
   return (
-    <Router>
-      <Layout>
+    <OpsErrorBoundary>
+      <Router>
+        <Layout>
         <Toaster richColors position="bottom-right" />
         <Routes>
           <Route path="/" element={<Home teams={teams} />} />
@@ -320,6 +328,7 @@ const App: React.FC = () => {
         <ChatBot matches={matches} />
       </Layout>
     </Router>
+    </OpsErrorBoundary>
   );
 };
 

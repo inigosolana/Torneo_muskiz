@@ -192,7 +192,7 @@ function getErrorMessage(error: unknown): string {
 
 async function sendOpsAlert(severity: "info" | "warning" | "error" | "critical", message: string, details: string) {
   try {
-    await fetch(OPS_ALERT_URL, {
+    const res = await fetch(OPS_ALERT_URL, {
       method: "POST",
       headers: internalSupabaseFnHeaders(),
       body: JSON.stringify({
@@ -202,8 +202,12 @@ async function sendOpsAlert(severity: "info" | "warning" | "error" | "critical",
         details,
       }),
     });
-  } catch {
-    // ignore alert failures
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      console.error(`[admin-review sendOpsAlert] http=${res.status} body=${t.slice(0, 400)}`);
+    }
+  } catch (e) {
+    console.error("[admin-review sendOpsAlert] fetch error", e);
   }
 }
 
