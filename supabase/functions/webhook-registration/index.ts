@@ -82,6 +82,20 @@ Deno.serve(async (req) => {
 
     if (teams.length === 0) {
       console.log('No teams found after retries for registration:', registration.id);
+      try {
+        await fetch(OPS_ALERT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: 'backend.webhook-registration',
+            severity: 'warning',
+            message: 'Inscripción sin equipos detectada',
+            details: `registration_id=${registration.id}; manager_email=${managerEmail ?? 'N/D'}; manager_name=${managerName ?? 'N/D'}`,
+          }),
+        });
+      } catch {
+        // ignore alert failures
+      }
       return new Response(JSON.stringify({ message: 'No teams to notify.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

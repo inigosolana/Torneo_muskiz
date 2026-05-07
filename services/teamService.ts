@@ -71,24 +71,8 @@ export const teamService = {
             receiptUrl = urlData.publicUrl;
         }
 
-        // 1. Create a parent Registration record for the webhook to group these teams
-        let regId: string | undefined;
-        if (newTeams.length > 0) {
-            const { data: regData, error: regError } = await supabase
-                .from('registrations')
-                .insert({
-                    manager_name: newTeams[0].managerName,
-                    manager_email: newTeams[0].managerEmail,
-                    manager_phone: newTeams[0].managerPhone || null
-                })
-                .select()
-                .single();
-
-            if (regError || !regData?.id) {
-                console.error('Error creating registration:', regError);
-                throw new Error(regError?.message || 'No se pudo crear el registro de inscripción');
-            }
-            regId = regData.id;
+        if (newTeams.length === 0) {
+            throw new Error('Debes añadir al menos un equipo.');
         }
 
         const insertData = newTeams.map(team => ({
@@ -100,25 +84,22 @@ export const teamService = {
             fee: team.fee,
             receipt_url: receiptUrl || null,
             manager_name: team.managerName,
-            manager_email: team.managerEmail,
-            registration_id: regId
+            manager_email: team.managerEmail
         }));
 
-        const { data, error } = await supabase.from('teams').insert(insertData).select();
+        const { data, error } = await supabase.rpc('create_registration_with_teams', {
+            p_manager_name: newTeams[0].managerName || null,
+            p_manager_email: newTeams[0].managerEmail || null,
+            p_manager_phone: newTeams[0].managerPhone || null,
+            p_teams: insertData,
+        });
 
         if (error) {
             console.error('Error registering teams:', error);
-            // Best-effort cleanup of orphan registration
-            if (regId) {
-                await supabase.from('registrations').delete().eq('id', regId);
-            }
             throw new Error(`No se pudieron guardar los equipos: ${error.message}`);
         }
 
         if (!data || data.length === 0) {
-            if (regId) {
-                await supabase.from('registrations').delete().eq('id', regId);
-            }
             throw new Error('No se guardó ningún equipo. Inténtalo de nuevo.');
         }
 
