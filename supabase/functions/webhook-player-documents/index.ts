@@ -146,39 +146,33 @@ Deno.serve(async (req) => {
       ? "N/D"
       : escHtmlTelegram(managerPhoneDisplay);
 
-    /** Tarjeta corta tipo panel admin: sin URLs largas (van en los botones). */
+    // Tarjeta compacta: solo lo imprescindible. Sin URLs en el cuerpo.
+    const docTitle = becamePendingDni && becamePendingInsurance
+      ? "🪪🛡️ DNI y Seguro pendientes"
+      : becamePendingDni
+        ? "🪪 DNI pendiente"
+        : becamePendingInsurance
+          ? "🛡️ Seguro pendiente"
+          : "📄 Nuevo jugador";
+
     const messageHtml = isNewPlayer
       ? [
-        "<b>📄 DOCUMENTACIÓN DE JUGADOR</b>",
-        "<i>Nuevo jugador en plantilla</i>",
+        `<b>📄 Nuevo jugador inscrito</b>`,
         "",
-        `<b>👤 Jugador:</b> ${escHtmlTelegram(record.name)}`,
-        `<b>🏐 Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
-        `<b>👔 Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
-        `<b>📧 Correo:</b> ${escHtmlTelegram(team?.manager_email ?? "N/D")}`,
-        `<b>📱 Teléfono:</b> ${phoneLine}`,
+        `👤 <b>${escHtmlTelegram(record.name)}</b>`,
+        `🏐 ${escHtmlTelegram(team?.name ?? "N/D")}`,
+        `👔 ${escHtmlTelegram(team?.manager_name ?? "N/D")} · 📞 ${phoneLine}`,
         "",
-        `🪪 <b>DNI:</b> ${escHtmlTelegram(record.dni_status ?? "EMPTY")}`,
-        `🛡️ <b>Seguro:</b> ${escHtmlTelegram(record.insurance_status ?? "EMPTY")}`,
-        "",
-        "<i>Pulsa los botones si hay documentos pendientes de revisión.</i>",
+        `🪪 DNI: <b>${escHtmlTelegram(record.dni_status ?? "EMPTY")}</b>  ·  🛡️ Seguro: <b>${escHtmlTelegram(record.insurance_status ?? "EMPTY")}</b>`,
       ].join("\n")
       : [
-        "<b>📄 DOCUMENTACIÓN DE JUGADOR</b>",
-        "<i>Pendiente de revisión</i>",
+        `<b>${docTitle}</b>`,
         "",
-        `<b>👤 Jugador:</b> ${escHtmlTelegram(record.name)}`,
-        `<b>🏐 Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
-        `<b>👔 Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
-        `<b>📧 Correo:</b> ${escHtmlTelegram(team?.manager_email ?? "N/D")}`,
-        `<b>📱 Teléfono:</b> ${phoneLine}`,
+        `👤 <b>${escHtmlTelegram(record.name)}</b>`,
+        `🏐 ${escHtmlTelegram(team?.name ?? "N/D")}`,
+        `👔 ${escHtmlTelegram(team?.manager_name ?? "N/D")} · 📞 ${phoneLine}`,
         "",
-        ...(becamePendingDni ? [`🪪 <b>DNI</b> · <code>PENDING</code> · usa los botones de abajo.`] : []),
-        ...(becamePendingInsurance
-          ? [`🛡️ <b>Seguro</b> · <code>PENDING</code> · usa los botones de abajo.`]
-          : []),
-        "",
-        "<i>Pulsa los botones para revisar documentos.</i>",
+        "<i>👇 Toca el botón para revisar.</i>",
       ].join("\n");
 
     await fetch("https://api.resend.com/emails", {

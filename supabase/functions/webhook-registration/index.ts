@@ -310,19 +310,16 @@ Deno.serve(async (req) => {
     if (TELEGRAM_NOTIFICATIONS_BOT_TOKEN && adminChatList.length > 0) {
       const adminMessageHtml = [
         "<b>🚨 NUEVA INSCRIPCIÓN</b>",
-        "<i>Pendiente de revisión</i>",
         "",
-        `<b>👤 Responsable:</b> ${escHtmlTelegram(managerName)}`,
-        `<b>📧 Correo:</b> ${escHtmlTelegram(managerEmail)}`,
-        `<b>📱 Teléfono:</b> ${escHtmlTelegram(managerPhone)}`,
-        `<b>💰 Importe total:</b> ${totalFee}€`,
+        `👤 <b>${escHtmlTelegram(managerName)}</b> · 📞 ${escHtmlTelegram(managerPhone)}`,
+        `📧 ${escHtmlTelegram(managerEmail)}`,
+        `💰 Total: <b>${totalFee}€</b> · ${teams.length} equipo${teams.length === 1 ? "" : "s"}`,
         "",
-        "<b>Equipos:</b>",
         ...teams.map((t: any) =>
-          `• <b>${escHtmlTelegram(t.name)}</b> (${escHtmlTelegram(t.division)}) — ${t.fee}€${t.city ? ` · ${escHtmlTelegram(t.city)}` : ""}`
+          `🏐 <b>${escHtmlTelegram(t.name)}</b> (${escHtmlTelegram(t.division)}) — ${t.fee}€`
         ),
         "",
-        "<i>Pulsa los botones para aprobar o denegar.</i>",
+        "<i>👇 Toca para revisar cada equipo.</i>",
       ].join("\n");
 
       const inline_keyboard: Array<Array<Record<string, string>>> = [];

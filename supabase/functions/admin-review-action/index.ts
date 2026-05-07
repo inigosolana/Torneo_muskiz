@@ -299,6 +299,7 @@ async function sendTeamReviewTelegram(
   supabase: ReturnType<typeof createClient>,
   action: "approve" | "reject",
   team: { name?: string; division?: string; manager_name?: string },
+  rejectionReason?: string,
 ) {
   const capacity = await getCategoryCapacitySummary(supabase);
   const categoryLine = capacity.find((c) => c.category === (team.division ?? "")) ??
@@ -306,26 +307,26 @@ async function sendTeamReviewTelegram(
   const ok = action === "approve";
   const tick = ok ? "✅" : "❌";
   const titleColor = ok ? "EQUIPO APROBADO" : "EQUIPO DENEGADO";
+  const motivoLineHtml = !ok && rejectionReason
+    ? `\n<b>📝 Motivo:</b> <i>${escHtmlTelegram(rejectionReason)}</i>`
+    : "";
+  const motivoLinePlain = !ok && rejectionReason ? `\nMotivo: ${rejectionReason}` : "";
   const html = [
     `${tick} <b>${titleColor}</b>`,
     "",
-    `<b>🏐 Equipo:</b> ${escHtmlTelegram(team.name ?? "N/D")}`,
-    `<b>🏷️ Categoría:</b> ${escHtmlTelegram(team.division ?? "N/D")}`,
-    `<b>👤 Responsable:</b> ${escHtmlTelegram(team.manager_name ?? "N/D")}`,
-    "",
-    `<b>🎟️ Plazas restantes en ${escHtmlTelegram(categoryLine.category)}:</b> ${categoryLine.remaining}/${categoryLine.maxTeams}`,
-    "<i>(pendientes + aprobadas ocupan plaza)</i>",
-  ].join("\n");
+    `🏐 <b>${escHtmlTelegram(team.name ?? "N/D")}</b> (${escHtmlTelegram(team.division ?? "N/D")})`,
+    `👤 ${escHtmlTelegram(team.manager_name ?? "N/D")}`,
+    `🎟️ Plazas restantes ${escHtmlTelegram(categoryLine.category)}: <b>${categoryLine.remaining}/${categoryLine.maxTeams}</b>`,
+    motivoLineHtml,
+  ].filter((line) => line !== "").join("\n");
   const plain = [
     `${tick} ${titleColor}`,
     "",
-    `Equipo: ${team.name ?? "N/D"}`,
-    `Categoría: ${team.division ?? "N/D"}`,
+    `Equipo: ${team.name ?? "N/D"} (${team.division ?? "N/D"})`,
     `Responsable: ${team.manager_name ?? "N/D"}`,
-    "",
-    `Plazas restantes en ${categoryLine.category}: ${categoryLine.remaining}/${categoryLine.maxTeams}`,
-    "(pendientes + aprobadas ocupan plaza)",
-  ].join("\n");
+    `Plazas restantes ${categoryLine.category}: ${categoryLine.remaining}/${categoryLine.maxTeams}`,
+    motivoLinePlain,
+  ].filter((line) => line !== "").join("\n");
 
   // 1) Envío directo HTML al chat de admins (con tick).
   await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html, `team-${action}`);
@@ -364,6 +365,7 @@ async function sendPlayerDocReviewTelegram(
   action: "approve" | "reject",
   docType: "dni" | "insurance",
   playerId: string,
+  rejectionReason?: string,
 ) {
   const ok = action === "approve";
   const tick = ok ? "✅" : "❌";
@@ -383,24 +385,29 @@ async function sendPlayerDocReviewTelegram(
     .eq("id", player.team_id)
     .maybeSingle();
 
+  const motivoLineHtml = !ok && rejectionReason
+    ? `\n📝 <b>Motivo:</b> <i>${escHtmlTelegram(rejectionReason)}</i>\n<i>(enviado al responsable por correo)</i>`
+    : "";
+  const motivoLinePlain = !ok && rejectionReason
+    ? `\nMotivo: ${rejectionReason} (enviado al responsable por correo)`
+    : "";
+
   const html = [
     `${tick} <b>${docLabel} ${ok ? "APROBADO" : "DENEGADO"}</b>`,
     "",
-    `<b>👤 Jugador:</b> ${escHtmlTelegram(playerName)}`,
-    `<b>🏐 Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
-    `<b>🏷️ Categoría:</b> ${escHtmlTelegram(team?.division ?? "N/D")}`,
-    `<b>👔 Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
-    `<b>📧 Correo:</b> ${escHtmlTelegram(team?.manager_email ?? "N/D")}`,
-  ].join("\n");
+    `👤 <b>${escHtmlTelegram(playerName)}</b>`,
+    `🏐 ${escHtmlTelegram(team?.name ?? "N/D")} (${escHtmlTelegram(team?.division ?? "N/D")})`,
+    `👔 ${escHtmlTelegram(team?.manager_name ?? "N/D")} · 📧 ${escHtmlTelegram(team?.manager_email ?? "N/D")}`,
+    motivoLineHtml,
+  ].filter((line) => line !== "").join("\n");
   const plain = [
     `${tick} ${docLabel} ${ok ? "APROBADO" : "DENEGADO"}`,
     "",
     `Jugador: ${playerName}`,
-    `Equipo: ${team?.name ?? "N/D"}`,
-    `Categoría: ${team?.division ?? "N/D"}`,
-    `Responsable: ${team?.manager_name ?? "N/D"}`,
-    `Correo: ${team?.manager_email ?? "N/D"}`,
-  ].join("\n");
+    `Equipo: ${team?.name ?? "N/D"} (${team?.division ?? "N/D"})`,
+    `Responsable: ${team?.manager_name ?? "N/D"} · ${team?.manager_email ?? "N/D"}`,
+    motivoLinePlain,
+  ].filter((line) => line !== "").join("\n");
 
   // 1) Directo al chat admin (HTML con tick).
   await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html, `${docType}-${action}`);
@@ -695,7 +702,7 @@ Deno.serve(async (req) => {
         await sendAdminReceipt("approve", currentTeam);
       }
 
-      await sendTeamReviewTelegram(supabase, action, currentTeam);
+      await sendTeamReviewTelegram(supabase, action, currentTeam, action === "reject" ? rejectionReason : undefined);
 
       return htmlResponse(renderActionPage({
         title: action === "approve" ? "Equipo aprobado" : "Equipo rechazado",
@@ -810,7 +817,7 @@ Deno.serve(async (req) => {
 
       // Resumen tipo tarjeta con tick a Telegram (admin + viewer).
       try {
-        await sendPlayerDocReviewTelegram(supabase, action, docType, id);
+        await sendPlayerDocReviewTelegram(supabase, action, docType, id, action === "reject" ? effectiveRejectReason : undefined);
       } catch (notifyError) {
         console.warn("No se pudo enviar resumen player-doc a Telegram:", notifyError);
       }
