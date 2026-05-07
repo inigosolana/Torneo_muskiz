@@ -1144,40 +1144,29 @@ Deno.serve(async (req) => {
         ? (rejectionReason && rejectionReason.trim() ? rejectionReason.trim() : defaultRejectReason)
         : undefined;
 
-      // Correo al RESPONSABLE (vía notify-player-doc-manager-email si tiene secret configurado).
-      const notifySecret = Deno.env.get("PLAYER_DOC_NOTIFY_INTERNAL_SECRET");
-      if (notifySecret) {
-        try {
-          const notifyUrl = `${SUPABASE_URL}/functions/v1/notify-player-doc-manager-email`;
-          const resNotify = await fetch(notifyUrl, {
-            method: "POST",
-            headers: internalSupabaseFnHeaders({
-              "x-player-doc-notify-secret": notifySecret,
-            }),
-            body: JSON.stringify({
-              playerId: id,
-              docType,
-              approved: action === "approve",
-              rejectionReason: action === "reject" ? effectiveRejectReason : undefined,
-            }),
-          });
-          if (!resNotify.ok) {
-            const txt = await resNotify.text();
-            await sendOpsAlert(
-              "warning",
-              "notify-player-doc-manager-email failed",
-              `status=${resNotify.status} body=${txt.slice(0, 500)}`,
-            );
-          }
-        } catch (e) {
-          await sendOpsAlert("warning", "notify-player-doc-manager-email exception", getErrorMessage(e));
+      // Correo al responsable: notify-player-doc-manager-email acepta Bearer service role (llamada interna).
+      try {
+        const notifyUrl = `${SUPABASE_URL}/functions/v1/notify-player-doc-manager-email`;
+        const resNotify = await fetch(notifyUrl, {
+          method: "POST",
+          headers: internalSupabaseFnHeaders(),
+          body: JSON.stringify({
+            playerId: id,
+            docType,
+            approved: action === "approve",
+            rejectionReason: action === "reject" ? effectiveRejectReason : undefined,
+          }),
+        });
+        if (!resNotify.ok) {
+          const txt = await resNotify.text();
+          await sendOpsAlert(
+            "warning",
+            "notify-player-doc-manager-email failed",
+            `status=${resNotify.status} body=${txt.slice(0, 500)}`,
+          );
         }
-      } else {
-        await sendOpsAlert(
-          "warning",
-          "PLAYER_DOC_NOTIFY_INTERNAL_SECRET no configurado",
-          "El responsable no recibirá email automático de revisión de documento.",
-        );
+      } catch (e) {
+        await sendOpsAlert("warning", "notify-player-doc-manager-email exception", getErrorMessage(e));
       }
 
       // Recibo al ADMIN.

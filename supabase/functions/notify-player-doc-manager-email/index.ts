@@ -47,10 +47,15 @@ Deno.serve(async (req) => {
       const auth = req.headers.get("Authorization");
       if (auth?.startsWith("Bearer ")) {
         const jwt = auth.slice(7);
-        const { data: { user }, error: uErr } = await supabase.auth.getUser(jwt);
-        if (!uErr && user) {
-          const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-          if (profile?.role === "staff") authorized = true;
+        // Otras Edge Functions del mismo proyecto (p. ej. admin-review-action) llaman con service role.
+        if (SERVICE_ROLE && jwt === SERVICE_ROLE) {
+          authorized = true;
+        } else {
+          const { data: { user }, error: uErr } = await supabase.auth.getUser(jwt);
+          if (!uErr && user) {
+            const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+            if (profile?.role === "staff") authorized = true;
+          }
         }
       }
     }
