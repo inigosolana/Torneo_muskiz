@@ -1,10 +1,15 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const BOT_TOKEN = Deno.env.get("TELEGRAM_NOTIFICATIONS_BOT_TOKEN");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
 const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
+
+const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  : null;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -146,6 +151,7 @@ async function callAdminReviewAction(params: {
   id: string;
   action: "approve" | "reject";
   docType?: "dni" | "insurance";
+  rejectionReason?: string;
 }): Promise<{ ok: boolean; status: number; bodySnippet?: string }> {
   if (!SUPABASE_URL || !REVIEW_ACTION_SECRET) {
     return { ok: false, status: 0, bodySnippet: "Missing server configuration" };
@@ -161,6 +167,7 @@ async function callAdminReviewAction(params: {
     token,
   });
   if (params.docType) q.set("docType", params.docType);
+  if (params.rejectionReason) q.set("rejectionReason", params.rejectionReason.slice(0, 1500));
   const url = `${SUPABASE_URL}/functions/v1/admin-review-action?${q.toString()}`;
   const res = await fetch(url);
   let bodySnippet: string | undefined;
@@ -172,6 +179,86 @@ async function callAdminReviewAction(params: {
     }
   }
   return { ok: res.ok, status: res.status, bodySnippet };
+}
+
+type PendingRejectionRow = {
+  chat_id: string;
+  user_id: string;
+  entity: "team" | "player-doc";
+  entity_id: string;
+  doc_type: "dni" | "insurance" | null;
+  prompt_message_id: number | null;
+  source_message_id: number | null;
+  source_chat_id: number | null;
+  expires_at: string;
+};
+
+async function setPendingRejection(row: {
+  chat_id: string;
+  user_id: string;
+  entity: "team" | "player-doc";
+  entity_id: string;
+  doc_type: "dni" | "insurance" | null;
+  prompt_message_id: number | null;
+  source_message_id: number | null;
+  source_chat_id: number | null;
+}): Promise<boolean> {
+  if (!supabaseAdmin) return false;
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const { error } = await supabaseAdmin
+    .from("telegram_pending_rejections")
+    .upsert({ ...row, expires_at: expiresAt }, { onConflict: "chat_id,user_id" });
+  if (error) {
+    await sendOpsAlert("setPendingRejection falló", error.message, "error");
+    return false;
+  }
+  return true;
+}
+
+async function getPendingRejection(chatId: string, userId: string): Promise<PendingRejectionRow | null> {
+  if (!supabaseAdmin) return null;
+  const { data, error } = await supabaseAdmin
+    .from("telegram_pending_rejections")
+    .select("*")
+    .eq("chat_id", chatId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  if (new Date(data.expires_at).getTime() < Date.now()) {
+    await clearPendingRejection(chatId, userId);
+    return null;
+  }
+  return data as PendingRejectionRow;
+}
+
+async function clearPendingRejection(chatId: string, userId: string): Promise<void> {
+  if (!supabaseAdmin) return;
+  await supabaseAdmin
+    .from("telegram_pending_rejections")
+    .delete()
+    .eq("chat_id", chatId)
+    .eq("user_id", userId);
+}
+
+async function sendForceReplyPrompt(chatId: number, text: string): Promise<number | null> {
+  if (!BOT_TOKEN) return null;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        reply_markup: { force_reply: true, selective: true, input_field_placeholder: "Motivo del rechazo" },
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Number(data?.result?.message_id ?? 0) || null;
+  } catch {
+    return null;
+  }
 }
 
 type CallbackParsed =
@@ -245,6 +332,52 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
     return;
   }
 
+  const userLabel = fromUser?.username
+    ? `@${fromUser.username}`
+    : (fromUser?.first_name ?? "admin");
+
+  // DENEGAR: pedimos motivo en chat (flujo en dos pasos).
+  if (parsed.action === "reject") {
+    if (!supabaseAdmin) {
+      await answerCallbackQuery(callbackId, "❌ Configuración incompleta.", true);
+      return;
+    }
+    const targetLabel = parsed.kind === "team"
+      ? "el equipo"
+      : (parsed.docType === "dni" ? "el DNI" : "el seguro");
+    const promptText = [
+      `✏️ <b>Motivo del rechazo</b>`,
+      ``,
+      `Vas a denegar ${targetLabel}. Responde a este mensaje con el motivo`,
+      `(por ejemplo: <i>"DNI ilegible, vuelve a subirlo"</i>).`,
+      ``,
+      `Para anular, escribe <code>/cancel</code>.`,
+    ].join("\n");
+    const promptMsgId = Number.isFinite(chatId)
+      ? await sendForceReplyPrompt(chatId, promptText)
+      : null;
+    const stored = await setPendingRejection({
+      chat_id: String(chatId),
+      user_id: fromId,
+      entity: parsed.kind,
+      entity_id: parsed.id,
+      doc_type: parsed.kind === "player-doc" ? parsed.docType : null,
+      prompt_message_id: promptMsgId,
+      source_message_id: Number.isFinite(messageId) ? messageId : null,
+      source_chat_id: Number.isFinite(chatId) ? chatId : null,
+    });
+    if (!stored) {
+      await answerCallbackQuery(callbackId, "❌ No pude registrar la denegación.", true);
+      return;
+    }
+    if (Number.isFinite(chatId) && Number.isFinite(messageId)) {
+      await editMessageReplyMarkup(chatId, messageId);
+    }
+    await answerCallbackQuery(callbackId, "✏️ Escribe el motivo en el chat.", false);
+    return;
+  }
+
+  // APROBAR: ejecuta directamente.
   const params = parsed.kind === "team"
     ? { entity: "team" as const, id: parsed.id, action: parsed.action }
     : {
@@ -270,12 +403,46 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
 
   if (Number.isFinite(chatId) && Number.isFinite(messageId)) {
     await editMessageReplyMarkup(chatId, messageId);
-    const userLabel = fromUser?.username
-      ? `@${fromUser.username}`
-      : (fromUser?.first_name ?? "admin");
-    // Pequeño reply con "quién" lo hizo. La tarjeta-resumen completa la envía admin-review-action.
     await appendMessageFooter(chatId, messageId, `${footer} · Por ${userLabel}`);
   }
+}
+
+async function processPendingRejection(
+  pending: PendingRejectionRow,
+  motivo: string,
+  fromUser: { username?: string; first_name?: string } | null,
+): Promise<{ ok: boolean; toast: string; footer: string; chatId: number; sourceMessageId: number | null }> {
+  const params = pending.entity === "team"
+    ? {
+      entity: "team" as const,
+      id: pending.entity_id,
+      action: "reject" as const,
+      rejectionReason: motivo,
+    }
+    : {
+      entity: "player-doc" as const,
+      id: pending.entity_id,
+      action: "reject" as const,
+      docType: (pending.doc_type === "insurance" ? "insurance" : "dni") as "dni" | "insurance",
+      rejectionReason: motivo,
+    };
+  const result = await callAdminReviewAction(params);
+  const parsed = pending.entity === "team"
+    ? { kind: "team" as const, id: pending.entity_id, action: "reject" as const }
+    : {
+      kind: "player-doc" as const,
+      id: pending.entity_id,
+      action: "reject" as const,
+      docType: (pending.doc_type === "insurance" ? "insurance" : "dni") as "dni" | "insurance",
+    };
+  const { toast, footer } = describeAction(parsed);
+  return {
+    ok: result.ok,
+    toast,
+    footer,
+    chatId: Number(pending.source_chat_id ?? pending.chat_id),
+    sourceMessageId: pending.source_message_id,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -321,6 +488,60 @@ Deno.serve(async (req) => {
     const text = String(message?.text ?? "").trim();
     if (!Number.isFinite(chatId) || !text) {
       return new Response(JSON.stringify({ ok: true, skipped: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // /cancel: si hay denegación pendiente, la cancela.
+    if (text.toLowerCase().startsWith("/cancel")) {
+      const pending = await getPendingRejection(String(chatId), String(userId));
+      if (pending) {
+        await clearPendingRejection(String(chatId), String(userId));
+        await sendTelegramMessage(chatId, "🚫 Denegación cancelada. Si quieres, vuelve a pulsar Denegar.");
+        return new Response(JSON.stringify({ ok: true, cancelled: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // Si hay denegación pendiente para este (chat, user), usamos el texto como motivo.
+    const pending = await getPendingRejection(String(chatId), String(userId));
+    if (pending) {
+      const motivo = text.slice(0, 1500).trim();
+      if (motivo.length < 5) {
+        await sendTelegramMessage(
+          chatId,
+          "✏️ El motivo es demasiado corto. Escribe al menos una frase explicando el problema, o /cancel para anular.",
+        );
+        return new Response(JSON.stringify({ ok: true, awaiting: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const fromUser = message?.from ?? null;
+      const result = await processPendingRejection(pending, motivo, fromUser);
+      await clearPendingRejection(String(chatId), String(userId));
+      if (!result.ok) {
+        await sendTelegramMessage(chatId, "❌ No pude completar la denegación. Vuelve a intentarlo.");
+        return new Response(JSON.stringify({ ok: false }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const userLabel = fromUser?.username ? `@${fromUser.username}` : (fromUser?.first_name ?? "admin");
+      const ackChatId = Number.isFinite(result.chatId) ? result.chatId : chatId;
+      if (result.sourceMessageId && Number.isFinite(ackChatId)) {
+        await appendMessageFooter(
+          ackChatId,
+          result.sourceMessageId,
+          `${result.footer} · Por ${userLabel}\n<i>Motivo:</i> ${motivo.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}`,
+        );
+      } else {
+        await sendTelegramMessage(chatId, `${result.footer} · Por ${userLabel}\nMotivo: ${motivo}`);
+      }
+      return new Response(JSON.stringify({ ok: true, rejected: true }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

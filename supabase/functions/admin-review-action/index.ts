@@ -482,6 +482,7 @@ Deno.serve(async (req) => {
     docType = url.searchParams.get("docType");
     exp = url.searchParams.get("exp");
     token = url.searchParams.get("token");
+    rejectionReason = String(url.searchParams.get("rejectionReason") ?? "").trim();
   }
 
   if (!entity || !id || !action || !exp || !token) {
