@@ -430,20 +430,48 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
 
     const handleVerify = async (teamId: string, playerId: string, type: 'dni' | 'insurance', status: 'APPROVED' | 'REJECTED') => {
         const team = teams.find(t => t.id === teamId);
-        if (team) {
-            const playerToUpdate = team.players.find(p => p.id === playerId);
-            if (playerToUpdate) {
-                const updatedPlayer = { 
-                    ...playerToUpdate, 
-                    [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: status 
-                };
-                
-                // Save to DB
-                await teamService.updatePlayer(updatedPlayer);
+        if (!team) return;
+        const playerToUpdate = team.players.find(p => p.id === playerId);
+        if (!playerToUpdate) return;
 
-                const updatedPlayers = team.players.map(p => p.id === playerId ? updatedPlayer : p);
-                onUpdateTeam({ ...team, players: updatedPlayers });
-            }
+        let rejectionReason: string | undefined;
+        if (status === 'REJECTED') {
+            const entered = window.prompt(
+                'Motivo del rechazo (lo recibirá el responsable por correo). Puedes dejarlo en blanco para usar el texto estándar:',
+                ''
+            );
+            if (entered === null) return;
+            rejectionReason = entered.trim() || undefined;
+        }
+
+        const updatedPlayer = {
+            ...playerToUpdate,
+            [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: status,
+        };
+
+        try {
+            await teamService.updatePlayer(updatedPlayer);
+            const updatedPlayers = team.players.map(p => p.id === playerId ? updatedPlayer : p);
+            onUpdateTeam({ ...team, players: updatedPlayers });
+
+            const { error: fnError } = await supabase.functions.invoke('notify-player-doc-manager-email', {
+                body: {
+                    playerId,
+                    docType: type,
+                    approved: status === 'APPROVED',
+                    rejectionReason: status === 'REJECTED' ? (rejectionReason ?? null) : null,
+                },
+            });
+            if (fnError) throw fnError;
+
+            toast.success(
+                status === 'APPROVED'
+                    ? 'Documento aprobado. Se ha notificado al responsable por correo.'
+                    : 'Documento rechazado. Se ha notificado al responsable por correo.'
+            );
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Error al guardar o al enviar el correo';
+            toast.error(msg);
         }
     };
 

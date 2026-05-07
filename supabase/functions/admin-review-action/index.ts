@@ -551,6 +551,36 @@ Deno.serve(async (req) => {
         }));
       }
 
+      const notifySecret = Deno.env.get("PLAYER_DOC_NOTIFY_INTERNAL_SECRET");
+      if (notifySecret) {
+        try {
+          const notifyUrl = `${SUPABASE_URL}/functions/v1/notify-player-doc-manager-email`;
+          const resNotify = await fetch(notifyUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-player-doc-notify-secret": notifySecret,
+            },
+            body: JSON.stringify({
+              playerId: id,
+              docType,
+              approved: action === "approve",
+              rejectionReason: action === "reject" ? null : undefined,
+            }),
+          });
+          if (!resNotify.ok) {
+            const txt = await resNotify.text();
+            await sendOpsAlert(
+              "warning",
+              "notify-player-doc-manager-email failed",
+              `status=${resNotify.status} body=${txt.slice(0, 500)}`,
+            );
+          }
+        } catch (e) {
+          await sendOpsAlert("warning", "notify-player-doc-manager-email exception", getErrorMessage(e));
+        }
+      }
+
       const label = docType === "dni" ? "DNI" : "seguro";
       return htmlResponse(renderActionPage({
         title: action === "approve" ? `${label} aprobado` : `${label} rechazado`,
