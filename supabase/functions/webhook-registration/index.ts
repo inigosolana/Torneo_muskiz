@@ -6,11 +6,34 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const ADMIN_EMAIL = "torneomuskizbmplaya@gmail.com";
 const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
+const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
+const ACTION_BASE_URL = `${SUPABASE_URL}/functions/v1/admin-review-action`;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const encoder = new TextEncoder();
+
+async function signAction(payload: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(REVIEW_ACTION_SECRET!),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  return btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function buildTeamActionUrl(teamId: string, action: "approve" | "reject"): Promise<string> {
+  const exp = String(Date.now() + 1000 * 60 * 60 * 24 * 2);
+  const payload = ["team", teamId, action, "", exp].join("|");
+  const token = await signAction(payload);
+  return `${ACTION_BASE_URL}?entity=team&id=${teamId}&action=${action}&exp=${exp}&token=${token}`;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -18,7 +41,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (!RESEND_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    if (!RESEND_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !REVIEW_ACTION_SECRET) {
       return new Response(JSON.stringify({ error: 'Faltan variables de entorno requeridas.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -45,7 +68,7 @@ Deno.serve(async (req) => {
     for (let attempt = 1; attempt <= 5; attempt++) {
       const { data: fetchedTeams, error: teamsError } = await supabase
         .from('teams')
-        .select('name, division, city, fee')
+        .select('id, name, division, city, fee, receipt_url')
         .eq('registration_id', registration.id);
 
       if (teamsError) throw teamsError;
@@ -72,6 +95,49 @@ Deno.serve(async (req) => {
     ).join('');
 
     const totalFee = teams.reduce((sum: number, t: any) => sum + t.fee, 0);
+    const teamSummaryForAdmin = teams.map((t: any) =>
+      `<strong>${t.name}</strong> (${t.division})`
+    ).join(', ');
+
+    const teamActionsHtml = await Promise.all(
+      teams.map(async (t: any) => {
+        const approveUrl = await buildTeamActionUrl(t.id, "approve");
+        const rejectUrl = await buildTeamActionUrl(t.id, "reject");
+        return `
+          <div style="border:1px solid #e2e8f0; border-radius:10px; padding:10px; margin-bottom:8px;">
+            <p style="margin:0 0 6px; font-size:13px; color:#0f172a;"><strong>${t.name}</strong> (${t.division})</p>
+            <p style="margin:0 0 8px; font-size:12px;">
+              ${t.receipt_url ? `<a href="${t.receipt_url}" target="_blank" rel="noopener noreferrer">Ver justificante</a>` : "Sin justificante adjunto"}
+            </p>
+            <div>
+              <a href="${approveUrl}" style="display:inline-block; margin-right:8px; background:#15803d; color:#fff; text-decoration:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:700;">Aprobar</a>
+              <a href="${rejectUrl}" style="display:inline-block; background:#b91c1c; color:#fff; text-decoration:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:700;">Denegar</a>
+            </div>
+          </div>
+        `;
+      })
+    );
+
+    const teamActionsTelegram = await Promise.all(
+      teams.map(async (t: any) => {
+        const approveUrl = await buildTeamActionUrl(t.id, "approve");
+        const rejectUrl = await buildTeamActionUrl(t.id, "reject");
+        return `- ${t.name} (${t.division})\n  Aprobar: ${approveUrl}\n  Denegar: ${rejectUrl}\n  Justificante: ${t.receipt_url || "No adjunto"}`;
+      })
+    );
+    const teamSummaryLines = teams.map((t: any) => `${t.name} (${t.division})`);
+    const telegramButtons = await Promise.all(
+      teams.map(async (t: any) => {
+        const approveUrl = await buildTeamActionUrl(t.id, "approve");
+        const rejectUrl = await buildTeamActionUrl(t.id, "reject");
+        return {
+          teamName: `${t.name} (${t.division})`,
+          approveUrl,
+          rejectUrl,
+          receiptUrl: t.receipt_url || null,
+        };
+      }),
+    );
 
     // --- 1. EMAIL AL RESPONSABLE (Comprobante) ---
     const managerEmailBody = {
@@ -125,10 +191,6 @@ Deno.serve(async (req) => {
     };
 
     // --- 2. EMAIL AL ADMINISTRADOR (Aviso) ---
-    const teamSummaryForAdmin = teams.map((t: any) =>
-      `<strong>${t.name}</strong> (${t.division})`
-    ).join(', ');
-
     const adminEmailBody = {
       from: FROM_EMAIL,
       to: ADMIN_EMAIL,
@@ -171,6 +233,11 @@ Deno.serve(async (req) => {
                 <li>Datos del responsable y categoría de cada equipo</li>
                 <li>Disponibilidad de plazas por categoría</li>
               </ul>
+            </div>
+
+            <div style="margin: 0 0 18px;">
+              <p style="margin:0 0 8px; font-size:13px; font-weight:700; color:#334155;">Acción rápida por equipo</p>
+              ${teamActionsHtml.join("")}
             </div>
 
             <div style="text-align: center;">
@@ -216,15 +283,22 @@ Deno.serve(async (req) => {
     }
 
     const n8nWebhookUrl = Deno.env.get('N8N_WH_URL');
+    const adminChatIds = Deno.env.get('TELEGRAM_ADMIN_CHAT_IDS');
     if (n8nWebhookUrl) {
       try {
         await fetch(n8nWebhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            eventType: "team-registration",
             managerName,
+            managerEmail,
+            managerPhone,
             teamsCount: teams.length,
-            message: '¡Nueva inscripción recibida!',
+            teamSummaryLines,
+            adminChatIds,
+            telegramButtons,
+            message: `NUEVA INSCRIPCION RECIBIDA\n\nResponsable: ${managerName}\nCorreo: ${managerEmail}\nTelefono: ${managerPhone}\nEquipos: ${teams.length}\n\nACCIONES RAPIDAS:\n${teamActionsTelegram.join("\n\n")}`,
           }),
         });
         console.log('n8n webhook sent from webhook-registration');
