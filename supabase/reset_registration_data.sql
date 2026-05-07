@@ -1,18 +1,17 @@
--- Reset only registration-related data (safe for tournament config content).
+-- Reset registration-related data (keeps staff/admin config).
+-- Prefer the fuller script: reset_test_data_keep_admin.sql
 -- Run in Supabase SQL Editor for project: jwixdjmbwfnfwmtsmsau
 
 begin;
 
--- Remove dependent rows first
+delete from public.telegram_pending_rejections;
 delete from public.players;
 delete from public.teams;
 delete from public.registrations;
 delete from public.matches;
+delete from public.profiles where role = 'manager';
 
 commit;
-
--- Optional: also remove manager app profiles (keeps staff profiles)
--- delete from public.profiles where role = 'manager';
 
 -- Optional: remove manager auth users too (execute only if you really want clean auth)
 -- delete from auth.users
