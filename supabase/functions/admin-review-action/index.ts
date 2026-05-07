@@ -29,11 +29,15 @@ function mergeChatIds(...values: Array<string | undefined>): string | null {
 }
 
 function htmlResponse(html: string, status = 200) {
-  return new Response(html, {
+  // Blob fija el MIME de forma explícita; algunos WebViews (p. ej. Telegram) muestran el HTML
+  // como texto plano si solo se pasa string sin Content-Type claro.
+  const body = new Blob([html], { type: "text/html;charset=utf-8" });
+  return new Response(body, {
     status,
     headers: {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-store",
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store, max-age=0",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }
@@ -58,6 +62,7 @@ function renderActionPage(params: {
 <html lang="es">
   <head>
     <meta charset="utf-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title}</title>
   </head>
