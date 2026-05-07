@@ -7,15 +7,56 @@ const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
 const N8N_WH_URL = Deno.env.get("N8N_WH_URL");
 const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
 const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
+const HANDLE_APPROVAL_URL = `${SUPABASE_URL}/functions/v1/handle-approval`;
+const HANDLE_REJECTION_URL = `${SUPABASE_URL}/functions/v1/handle-rejection`;
 
 const encoder = new TextEncoder();
-const ADMIN_PANEL_URL = "https://torneomuskizbmplaya.es/admin";
 
-function redirectToAdmin(title: string, message: string) {
-  const redirectUrl = new URL(ADMIN_PANEL_URL);
-  redirectUrl.searchParams.set("review_title", title);
-  redirectUrl.searchParams.set("review_message", message);
-  return Response.redirect(redirectUrl.toString(), 302);
+function htmlResponse(html: string, status = 200) {
+  return new Response(html, {
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+}
+
+function renderActionPage(params: {
+  title: string;
+  subtitle: string;
+  success?: boolean;
+  showForm?: boolean;
+  formFieldsHtml?: string;
+}) {
+  const {
+    title,
+    subtitle,
+    success = true,
+    showForm = false,
+    formFieldsHtml = "",
+  } = params;
+  const color = success ? "#15803d" : "#b91c1c";
+  const bg = success ? "#f0fdf4" : "#fef2f2";
+  return `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+  </head>
+  <body style="font-family:Segoe UI,Tahoma,sans-serif;background:#f8fafc;padding:24px;">
+    <div style="max-width:620px;margin:auto;background:white;border:1px solid #e2e8f0;border-radius:12px;padding:24px;">
+      <h1 style="margin:0 0 8px;color:${color};font-size:22px;">${title}</h1>
+      <p style="margin:0 0 16px;color:#334155;line-height:1.5;">${subtitle}</p>
+      ${
+        showForm
+          ? `<form method="POST" style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;">${formFieldsHtml}</form>`
+          : `<div style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;color:#334155;">Puedes cerrar esta pestaña y volver a Telegram.</div>`
+      }
+    </div>
+  </body>
+</html>`;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -48,6 +89,39 @@ async function sendOpsAlert(severity: "info" | "warning" | "error" | "critical",
     });
   } catch {
     // ignore alert failures
+  }
+}
+
+async function sendManagerEmail(action: "approve" | "reject", team: {
+  name?: string;
+  division?: string;
+  manager_name?: string;
+  manager_email?: string;
+}, rejectionReason?: string) {
+  if (!team.manager_email) return;
+  const url = action === "approve" ? HANDLE_APPROVAL_URL : HANDLE_REJECTION_URL;
+  const body = action === "approve"
+    ? {
+        teamName: team.name ?? "Equipo",
+        managerName: team.manager_name ?? "Responsable",
+        managerEmail: team.manager_email,
+        division: team.division ?? "N/D",
+      }
+    : {
+        teamName: team.name ?? "Equipo",
+        managerName: team.manager_name ?? "Responsable",
+        managerEmail: team.manager_email,
+        division: team.division ?? "N/D",
+        rejectionReason: rejectionReason ?? "No cumple los requisitos de validación",
+      };
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // ignore email failures here
   }
 }
 
@@ -97,19 +171,47 @@ async function getCategoryCapacitySummary(supabase: ReturnType<typeof createClie
 
 Deno.serve(async (req) => {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !REVIEW_ACTION_SECRET) {
-    return redirectToAdmin("Configuración incompleta", "Faltan variables de entorno para ejecutar esta acción.");
+    return htmlResponse(renderActionPage({
+      title: "Configuración incompleta",
+      subtitle: "Faltan variables de entorno para ejecutar esta acción.",
+      success: false,
+    }), 500);
   }
 
-  const url = new URL(req.url);
-  const entity = url.searchParams.get("entity");
-  const id = url.searchParams.get("id");
-  const action = url.searchParams.get("action");
-  const docType = url.searchParams.get("docType");
-  const exp = url.searchParams.get("exp");
-  const token = url.searchParams.get("token");
+  const isPost = req.method === "POST";
+  let entity: string | null;
+  let id: string | null;
+  let action: string | null;
+  let docType: string | null;
+  let exp: string | null;
+  let token: string | null;
+  let rejectionReason = "";
+
+  if (isPost) {
+    const form = await req.formData();
+    entity = String(form.get("entity") ?? "");
+    id = String(form.get("id") ?? "");
+    action = String(form.get("action") ?? "");
+    docType = String(form.get("docType") ?? "");
+    exp = String(form.get("exp") ?? "");
+    token = String(form.get("token") ?? "");
+    rejectionReason = String(form.get("rejectionReason") ?? "").trim();
+  } else {
+    const url = new URL(req.url);
+    entity = url.searchParams.get("entity");
+    id = url.searchParams.get("id");
+    action = url.searchParams.get("action");
+    docType = url.searchParams.get("docType");
+    exp = url.searchParams.get("exp");
+    token = url.searchParams.get("token");
+  }
 
   if (!entity || !id || !action || !exp || !token) {
-    return redirectToAdmin("Solicitud inválida", "Faltan parámetros obligatorios en el enlace.");
+    return htmlResponse(renderActionPage({
+      title: "Solicitud inválida",
+      subtitle: "Faltan parámetros obligatorios en el enlace.",
+      success: false,
+    }), 400);
   }
 
   const expiresAt = Number(exp);
@@ -120,7 +222,69 @@ Deno.serve(async (req) => {
   const payload = [entity, id, action, docType ?? "", exp].join("|");
   const expected = await sign(payload);
   if (expected !== token) {
-    return redirectToAdmin("Token inválido", "No se ha podido verificar la firma del enlace.");
+    return htmlResponse(renderActionPage({
+      title: "Token inválido",
+      subtitle: "No se ha podido verificar la firma del enlace.",
+      success: false,
+    }), 401);
+  }
+
+  if (!isPost) {
+    if (entity === "team" && action === "approve") {
+      return htmlResponse(renderActionPage({
+        title: "Confirmar aprobación",
+        subtitle: "Vas a aprobar esta inscripción. ¿Quieres continuar?",
+        success: true,
+        showForm: true,
+        formFieldsHtml: `
+          <input type="hidden" name="entity" value="${entity}" />
+          <input type="hidden" name="id" value="${id}" />
+          <input type="hidden" name="action" value="${action}" />
+          <input type="hidden" name="docType" value="${docType ?? ""}" />
+          <input type="hidden" name="exp" value="${exp}" />
+          <input type="hidden" name="token" value="${token}" />
+          <button type="submit" style="background:#15803d;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;">Sí, aprobar ahora</button>
+        `,
+      }));
+    }
+
+    if (entity === "team" && action === "reject") {
+      return htmlResponse(renderActionPage({
+        title: "Denegar inscripción",
+        subtitle: "Indica el motivo para enviarlo al responsable.",
+        success: false,
+        showForm: true,
+        formFieldsHtml: `
+          <input type="hidden" name="entity" value="${entity}" />
+          <input type="hidden" name="id" value="${id}" />
+          <input type="hidden" name="action" value="${action}" />
+          <input type="hidden" name="docType" value="${docType ?? ""}" />
+          <input type="hidden" name="exp" value="${exp}" />
+          <input type="hidden" name="token" value="${token}" />
+          <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:8px;">Motivo del rechazo</label>
+          <textarea name="rejectionReason" required rows="4" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-family:inherit;margin-bottom:10px;" placeholder="Ejemplo: El justificante no se ve completo."></textarea>
+          <button type="submit" style="background:#b91c1c;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;">Denegar y enviar motivo</button>
+        `,
+      }));
+    }
+
+    if (entity === "player-doc") {
+      return htmlResponse(renderActionPage({
+        title: action === "approve" ? "Confirmar aprobación de documento" : "Confirmar rechazo de documento",
+        subtitle: "Vas a actualizar el estado del documento del jugador.",
+        success: action === "approve",
+        showForm: true,
+        formFieldsHtml: `
+          <input type="hidden" name="entity" value="${entity}" />
+          <input type="hidden" name="id" value="${id}" />
+          <input type="hidden" name="action" value="${action}" />
+          <input type="hidden" name="docType" value="${docType ?? ""}" />
+          <input type="hidden" name="exp" value="${exp}" />
+          <input type="hidden" name="token" value="${token}" />
+          <button type="submit" style="background:${action === "approve" ? "#15803d" : "#b91c1c"};color:#fff;border:none;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;">Confirmar</button>
+        `,
+      }));
+    }
   }
 
   try {
@@ -133,7 +297,7 @@ Deno.serve(async (req) => {
 
       const { data: currentTeam, error: teamLookupError } = await supabase
         .from("teams")
-        .select("id, name, division, manager_name, manager_phone, registration_id")
+        .select("id, name, division, manager_name, manager_email, registration_id")
         .eq("id", id)
         .maybeSingle();
       if (teamLookupError) throw teamLookupError;
@@ -143,13 +307,22 @@ Deno.serve(async (req) => {
           "Team action already processed or missing",
           `entity=team; action=${action}; id=${id}`,
         );
-        return redirectToAdmin(
-          "Acción ya procesada",
-          `Este equipo ya no existe o ya fue revisado (${id}). Puedes continuar en el panel admin.`,
-        );
+        return htmlResponse(renderActionPage({
+          title: "Acción ya procesada",
+          subtitle: `Este equipo ya no existe o ya fue revisado (${id}).`,
+          success: false,
+        }));
       }
 
       if (action === "reject") {
+        if (!rejectionReason) {
+          return htmlResponse(renderActionPage({
+            title: "Falta motivo de rechazo",
+            subtitle: "Debes indicar un motivo para denegar desde Telegram.",
+            success: false,
+          }), 400);
+        }
+        await sendManagerEmail("reject", currentTeam, rejectionReason);
         // Rechazado => pierde la plaza y debe volver a rellenar desde cero.
         // Eliminamos jugadores + equipo y, si procede, la cabecera de registro.
         const { error: playersDeleteError } = await supabase
@@ -196,11 +369,13 @@ Deno.serve(async (req) => {
             "Team approve affected 0 rows",
             `entity=team; action=${action}; id=${id}`,
           );
-          return redirectToAdmin(
-            "Acción ya procesada",
-            `El equipo ya estaba revisado o no existe (${id}).`,
-          );
+          return htmlResponse(renderActionPage({
+            title: "Acción ya procesada",
+            subtitle: `El equipo ya estaba revisado o no existe (${id}).`,
+            success: false,
+          }));
         }
+        await sendManagerEmail("approve", currentTeam);
       }
 
       if (action === "approve" && N8N_WH_URL) {
@@ -233,12 +408,13 @@ Deno.serve(async (req) => {
         }
       }
 
-      return redirectToAdmin(
-        action === "approve" ? "Equipo aprobado" : "Equipo rechazado",
-        action === "approve"
+      return htmlResponse(renderActionPage({
+        title: action === "approve" ? "Equipo aprobado" : "Equipo rechazado",
+        subtitle: action === "approve"
           ? `La revisión del equipo se ha guardado correctamente (${id}).`
-          : `Equipo rechazado y eliminado (${id}). Para inscribirse, deberá rellenar de nuevo el formulario.`,
-      );
+          : `Equipo rechazado y eliminado (${id}). Motivo enviado al responsable.`,
+        success: action === "approve",
+      }));
     }
 
     if (entity === "player-doc") {
@@ -263,22 +439,32 @@ Deno.serve(async (req) => {
           "Player document action affected 0 rows",
           `entity=player-doc; action=${action}; docType=${docType}; id=${id}`,
         );
-        return redirectToAdmin(
-          "Acción ya procesada",
-          `El documento ya estaba revisado o el jugador no existe (${id}).`,
-        );
+        return htmlResponse(renderActionPage({
+          title: "Acción ya procesada",
+          subtitle: `El documento ya estaba revisado o el jugador no existe (${id}).`,
+          success: false,
+        }));
       }
 
       const label = docType === "dni" ? "DNI" : "seguro";
-      return redirectToAdmin(
-        action === "approve" ? `${label} aprobado` : `${label} rechazado`,
-        `La revisión del documento del jugador se ha guardado correctamente (${id}).`,
-      );
+      return htmlResponse(renderActionPage({
+        title: action === "approve" ? `${label} aprobado` : `${label} rechazado`,
+        subtitle: `La revisión del documento del jugador se ha guardado correctamente (${id}).`,
+        success: action === "approve",
+      }));
     }
 
-    return redirectToAdmin("Entidad inválida", "El enlace no apunta a una revisión reconocida.");
+    return htmlResponse(renderActionPage({
+      title: "Entidad inválida",
+      subtitle: "El enlace no apunta a una revisión reconocida.",
+      success: false,
+    }), 400);
   } catch (error) {
     await sendOpsAlert("error", "Error processing admin review action", getErrorMessage(error));
-    return redirectToAdmin("Error al procesar acción", getErrorMessage(error));
+    return htmlResponse(renderActionPage({
+      title: "Error al procesar acción",
+      subtitle: getErrorMessage(error),
+      success: false,
+    }), 500);
   }
 });
