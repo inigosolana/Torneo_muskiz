@@ -414,26 +414,8 @@ Deno.serve(async (req) => {
       }));
     }
 
-    if (entity === "player-doc") {
-      return htmlResponse(renderActionPage({
-        title: action === "approve" ? "Confirmar aprobación de documento" : "Confirmar rechazo de documento",
-        subtitle: "Vas a actualizar el estado del documento del jugador.",
-        success: action === "approve",
-        showForm: true,
-        formActionUrl,
-        openInBrowserUrl: fullPageUrl,
-        urlHostMismatch,
-        formFieldsHtml: `
-          <input type="hidden" name="entity" value="${entity}" />
-          <input type="hidden" name="id" value="${id}" />
-          <input type="hidden" name="action" value="${action}" />
-          <input type="hidden" name="docType" value="${docType ?? ""}" />
-          <input type="hidden" name="exp" value="${exp}" />
-          <input type="hidden" name="token" value="${token}" />
-          <button type="submit" style="background:${action === "approve" ? "#15803d" : "#b91c1c"};color:#fff;border:none;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;">Confirmar</button>
-        `,
-      }));
-    }
+    // player-doc: un solo paso en GET (Telegram/WebView bloquea POST del formulario por sandbox).
+    // El enlace ya va firmado y con caducidad; equipos siguen con formulario de confirmación.
   }
 
   try {
@@ -572,7 +554,8 @@ Deno.serve(async (req) => {
       const label = docType === "dni" ? "DNI" : "seguro";
       return htmlResponse(renderActionPage({
         title: action === "approve" ? `${label} aprobado` : `${label} rechazado`,
-        subtitle: `La revisión del documento del jugador se ha guardado correctamente (${id}).`,
+        subtitle:
+          `La revisión del documento se ha guardado. Puedes cerrar esta ventana y volver a Telegram. (${id})`,
         success: action === "approve",
       }));
     }
