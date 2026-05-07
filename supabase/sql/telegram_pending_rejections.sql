@@ -5,7 +5,7 @@
 create table if not exists public.telegram_pending_rejections (
   chat_id text not null,
   user_id text not null,
-  entity text not null check (entity in ('team', 'player-doc')),
+  entity text not null check (entity in ('team', 'player-doc', 'registration')),
   entity_id uuid not null,
   doc_type text check (doc_type in ('dni', 'insurance')),
   prompt_message_id bigint,

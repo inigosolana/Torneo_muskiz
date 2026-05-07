@@ -62,6 +62,20 @@ async function buildTeamActionUrl(teamId: string, action: "approve" | "reject"):
   return `${ACTION_BASE_URL}?${q.toString()}`;
 }
 
+async function buildRegistrationActionUrl(registrationId: string, action: "approve" | "reject"): Promise<string> {
+  const exp = String(Date.now() + 1000 * 60 * 60 * 24 * 2);
+  const payload = ["registration", registrationId, action, "", exp].join("|");
+  const token = await signAction(payload);
+  const q = new URLSearchParams({
+    entity: "registration",
+    id: registrationId,
+    action,
+    exp,
+    token,
+  });
+  return `${ACTION_BASE_URL}?${q.toString()}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -140,11 +154,33 @@ Deno.serve(async (req) => {
       `<strong>${t.name}</strong> (${t.division})`
     ).join(', ');
 
-    const teamActionsHtml = await Promise.all(
-      teams.map(async (t: any) => {
-        const approveUrl = await buildTeamActionUrl(t.id, "approve");
-        const rejectUrl = await buildTeamActionUrl(t.id, "reject");
-        return `
+    let teamActionsHtml: string[];
+    if (teams.length > 1) {
+      const approveUrl = await buildRegistrationActionUrl(registration.id, "approve");
+      const rejectUrl = await buildRegistrationActionUrl(registration.id, "reject");
+      const receiptLines = [...new Set(teams.map((t: any) => t.receipt_url).filter(Boolean))] as string[];
+      const receiptBlock = receiptLines.length === 0
+        ? "<p style=\"margin:0 0 8px; font-size:12px;\">Sin justificante adjunto (revisa en el panel).</p>"
+        : receiptLines.map((url: string, i: number) =>
+          `<p style="margin:0 0 6px; font-size:12px;"><a href="${url}" target="_blank" rel="noopener noreferrer">Ver justificante${
+            receiptLines.length > 1 ? ` ${i + 1}` : " de pago"
+          }</a></p>`
+        ).join("");
+      teamActionsHtml = [
+        `<div style="border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:8px; background:#f8fafc;">`,
+        `<p style="margin:0 0 8px; font-size:13px; color:#0f172a;"><strong>Inscripción conjunta</strong> (${teams.length} equipos · un solo pago)</p>`,
+        receiptBlock,
+        `<div style="margin-top:10px;">`,
+        `<a href="${approveUrl}" style="display:inline-block; margin-right:8px; background:#15803d; color:#fff; text-decoration:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:700;">Aprobar toda la inscripción</a>`,
+        `<a href="${rejectUrl}" style="display:inline-block; background:#b91c1c; color:#fff; text-decoration:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:700;">Denegar toda la inscripción</a>`,
+        `</div></div>`,
+      ];
+    } else {
+      teamActionsHtml = await Promise.all(
+        teams.map(async (t: any) => {
+          const approveUrl = await buildTeamActionUrl(t.id, "approve");
+          const rejectUrl = await buildTeamActionUrl(t.id, "reject");
+          return `
           <div style="border:1px solid #e2e8f0; border-radius:10px; padding:10px; margin-bottom:8px;">
             <p style="margin:0 0 6px; font-size:13px; color:#0f172a;"><strong>${t.name}</strong> (${t.division})</p>
             <p style="margin:0 0 8px; font-size:12px;">
@@ -156,8 +192,9 @@ Deno.serve(async (req) => {
             </div>
           </div>
         `;
-      })
-    );
+        }),
+      );
+    }
 
     const teamSummaryLines = teams.map((t: any) => `${t.name} (${t.division})`);
 
@@ -258,7 +295,9 @@ Deno.serve(async (req) => {
             </div>
 
             <div style="margin: 0 0 18px;">
-              <p style="margin:0 0 8px; font-size:13px; font-weight:700; color:#334155;">Acción rápida por equipo</p>
+              <p style="margin:0 0 8px; font-size:13px; font-weight:700; color:#334155;">${
+                teams.length > 1 ? "Acción conjunta (un solo pago)" : "Acción rápida por equipo"
+              }</p>
               ${teamActionsHtml.join("")}
             </div>
 
@@ -319,17 +358,33 @@ Deno.serve(async (req) => {
           `🏐 <b>${escHtmlTelegram(t.name)}</b> (${escHtmlTelegram(t.division)}) — ${t.fee}€`
         ),
         "",
-        "<i>👇 Toca para revisar cada equipo.</i>",
+        teams.length > 1
+          ? "<i>Un solo pago para todos los equipos: revisa el justificante y aprueba o deniega la inscripción completa.</i>"
+          : "<i>👇 Toca para revisar el equipo.</i>",
       ].join("\n");
 
       const inline_keyboard: Array<Array<Record<string, string>>> = [];
-      for (const t of teams) {
-        if (t.receipt_url) {
-          inline_keyboard.push([{ text: `📄 Ver justificante (${t.name})`, url: String(t.receipt_url) }]);
+      if (teams.length > 1) {
+        const receiptUrls = [...new Set(teams.map((t: any) => t.receipt_url).filter(Boolean))] as string[];
+        for (let i = 0; i < receiptUrls.length; i++) {
+          const url = receiptUrls[i];
+          const label = receiptUrls.length === 1
+            ? "📄 Ver justificante de pago"
+            : `📄 Justificante ${i + 1}`;
+          inline_keyboard.push([{ text: label.slice(0, 64), url: String(url) }]);
         }
         inline_keyboard.push([
-          { text: `✅ ${t.name}`, callback_data: `t:a:${t.id}` },
-          { text: `❌ ${t.name}`, callback_data: `t:r:${t.id}` },
+          { text: `✅ Aprobar (${teams.length} eq.)`.slice(0, 64), callback_data: `b:a:${registration.id}` },
+          { text: "❌ Denegar inscripción".slice(0, 64), callback_data: `b:r:${registration.id}` },
+        ]);
+      } else {
+        const t = teams[0];
+        if (t.receipt_url) {
+          inline_keyboard.push([{ text: "📄 Ver justificante", url: String(t.receipt_url) }]);
+        }
+        inline_keyboard.push([
+          { text: `✅ ${t.name}`.slice(0, 64), callback_data: `t:a:${t.id}` },
+          { text: `❌ ${t.name}`.slice(0, 64), callback_data: `t:r:${t.id}` },
         ]);
       }
 

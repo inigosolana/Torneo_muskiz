@@ -109,6 +109,10 @@ async function answerCallbackQuery(callbackId: string, text: string, showAlert =
   }
 }
 
+function isTelegramMessageUnchangedError(body: string): boolean {
+  return body.includes("message is not modified");
+}
+
 async function editMessageReplyMarkup(chatId: number, messageId: number): Promise<void> {
   if (!BOT_TOKEN) return;
   try {
@@ -123,6 +127,9 @@ async function editMessageReplyMarkup(chatId: number, messageId: number): Promis
     });
     if (!res.ok) {
       const body = await res.text();
+      if (res.status === 400 && isTelegramMessageUnchangedError(body)) {
+        return;
+      }
       await sendOpsAlert(
         "editMessageReplyMarkup falló",
         `http=${res.status} chat=${chatId} msg=${messageId} body=${body.slice(0, 400)}`,
@@ -178,7 +185,7 @@ async function signActionPayload(payload: string): Promise<string> {
 }
 
 async function callAdminReviewAction(params: {
-  entity: "team" | "player-doc";
+  entity: "team" | "player-doc" | "registration";
   id: string;
   action: "approve" | "reject" | "undo";
   docType?: "dni" | "insurance";
@@ -215,7 +222,7 @@ async function callAdminReviewAction(params: {
 type PendingRejectionRow = {
   chat_id: string;
   user_id: string;
-  entity: "team" | "player-doc";
+  entity: "team" | "player-doc" | "registration";
   entity_id: string;
   doc_type: "dni" | "insurance" | null;
   prompt_message_id: number | null;
@@ -227,7 +234,7 @@ type PendingRejectionRow = {
 async function setPendingRejection(row: {
   chat_id: string;
   user_id: string;
-  entity: "team" | "player-doc";
+  entity: "team" | "player-doc" | "registration";
   entity_id: string;
   doc_type: "dni" | "insurance" | null;
   prompt_message_id: number | null;
@@ -329,6 +336,7 @@ async function sendForceReplyPrompt(chatId: number, text: string): Promise<numbe
 
 type CallbackParsed =
   | { kind: "team"; id: string; action: "approve" | "reject" | "undo" }
+  | { kind: "registration"; id: string; action: "approve" | "reject" }
   | { kind: "player-doc"; id: string; action: "approve" | "reject" | "undo"; docType: "dni" | "insurance" }
   | null;
 
@@ -341,6 +349,12 @@ function actionFromCode(code: string): "approve" | "reject" | "undo" | null {
 
 function parseCallbackData(raw: string): CallbackParsed {
   const parts = raw.split(":");
+  /** Inscripción completa (mismo responsable / un pago): callback_data corto `b:a|b:r` + uuid */
+  if (parts.length === 3 && parts[0] === "b" && parts[2]) {
+    const action = actionFromCode(parts[1]);
+    if (!action || action === "undo") return null;
+    return { kind: "registration", action, id: parts[2] };
+  }
   if (parts.length === 3 && parts[0] === "t" && parts[2]) {
     const action = actionFromCode(parts[1]);
     if (!action) return null;
@@ -365,6 +379,12 @@ function parseCallbackData(raw: string): CallbackParsed {
 }
 
 function describeAction(parsed: NonNullable<CallbackParsed>): { toast: string; footer: string } {
+  if (parsed.kind === "registration") {
+    if (parsed.action === "approve") {
+      return { toast: "✅ Inscripción aprobada", footer: "✅ <b>INSCRIPCIÓN APROBADA</b> (todos los equipos)" };
+    }
+    return { toast: "❌ Inscripción denegada", footer: "❌ <b>INSCRIPCIÓN DENEGADA</b> (todos los equipos)" };
+  }
   if (parsed.kind === "team") {
     if (parsed.action === "approve") {
       return { toast: "✅ Equipo aprobado", footer: "✅ <b>EQUIPO APROBADO</b>" };
@@ -451,6 +471,8 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
     }
     const targetLabel = parsed.kind === "team"
       ? "el equipo"
+      : parsed.kind === "registration"
+      ? "toda la inscripción (todos los equipos de este aviso)"
       : (parsed.docType === "dni" ? "el DNI" : "el seguro");
     const promptText = [
       `✏️ <b>Motivo del rechazo</b>`,
@@ -466,7 +488,7 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
     const stored = await setPendingRejection({
       chat_id: String(chatId),
       user_id: fromId,
-      entity: parsed.kind,
+      entity: parsed.kind === "registration" ? "registration" : parsed.kind,
       entity_id: parsed.id,
       doc_type: parsed.kind === "player-doc" ? parsed.docType : null,
       prompt_message_id: promptMsgId,
@@ -487,6 +509,8 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
   // APROBAR: ejecuta directamente.
   const params = parsed.kind === "team"
     ? { entity: "team" as const, id: parsed.id, action: parsed.action }
+    : parsed.kind === "registration"
+    ? { entity: "registration" as const, id: parsed.id, action: parsed.action }
     : {
       entity: "player-doc" as const,
       id: parsed.id,
@@ -526,6 +550,13 @@ async function processPendingRejection(
       action: "reject" as const,
       rejectionReason: motivo,
     }
+    : pending.entity === "registration"
+    ? {
+      entity: "registration" as const,
+      id: pending.entity_id,
+      action: "reject" as const,
+      rejectionReason: motivo,
+    }
     : {
       entity: "player-doc" as const,
       id: pending.entity_id,
@@ -536,6 +567,8 @@ async function processPendingRejection(
   const result = await callAdminReviewAction(params);
   const parsed = pending.entity === "team"
     ? { kind: "team" as const, id: pending.entity_id, action: "reject" as const }
+    : pending.entity === "registration"
+    ? { kind: "registration" as const, id: pending.entity_id, action: "reject" as const }
     : {
       kind: "player-doc" as const,
       id: pending.entity_id,

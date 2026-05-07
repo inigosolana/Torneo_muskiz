@@ -385,6 +385,123 @@ async function sendTeamReviewTelegram(
   }
 }
 
+async function sendBulkRegistrationAdminReceipt(
+  action: "approve" | "reject",
+  registration: { manager_name?: string | null; manager_email?: string | null },
+  teams: Array<{ name?: string | null; division?: string | null }>,
+  rejectionReason?: string,
+) {
+  if (!RESEND_API_KEY) {
+    await sendOpsAlert(
+      "warning",
+      "RESEND_API_KEY sin configurar",
+      "El admin no recibirá recibo de inscripción conjunta.",
+    );
+    return;
+  }
+  const actionLabel = action === "approve" ? "APROBADA" : "DENEGADA";
+  const reasonBlock = action === "reject" ? `<p><strong>Motivo:</strong> ${rejectionReason ?? "No informado"}</p>` : "";
+  const teamList = teams.map((t) => `<li>${t.name ?? "N/D"} (${t.division ?? "N/D"})</li>`).join("");
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: FROM_EMAIL,
+        to: ADMIN_EMAIL,
+        subject: `Inscripción conjunta ${actionLabel} — ${teams.length} equipo(s)`,
+        html: `
+          <div style="font-family:Segoe UI,Tahoma,sans-serif;max-width:620px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;padding:18px;">
+            <h2 style="margin:0 0 10px;">Comprobante de revisión (inscripción conjunta)</h2>
+            <p><strong>Resultado:</strong> ${actionLabel}</p>
+            <p><strong>Responsable:</strong> ${registration.manager_name ?? "N/D"} (${registration.manager_email ?? "N/D"})</p>
+            <p><strong>Equipos:</strong></p>
+            <ul>${teamList}</ul>
+            ${reasonBlock}
+          </div>
+        `,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      await sendOpsAlert(
+        "warning",
+        `Recibo admin inscripción conjunta falló (${action})`,
+        `http=${res.status} body=${text.slice(0, 400)}`,
+      );
+    }
+  } catch (e) {
+    await sendOpsAlert(
+      "warning",
+      `Recibo admin inscripción conjunta excepción (${action})`,
+      e instanceof Error ? e.message : String(e),
+    );
+  }
+}
+
+async function sendRegistrationBulkReviewTelegram(
+  supabase: ReturnType<typeof createClient>,
+  action: "approve" | "reject",
+  teams: Array<{ name?: string | null; division?: string | null; manager_name?: string | null }>,
+  rejectionReason?: string,
+) {
+  const capacity = await getCategoryCapacitySummary(supabase);
+  const teamLines = teams.map((t) =>
+    `🏐 <b>${escHtmlTelegram(t.name ?? "N/D")}</b> (${escHtmlTelegram(t.division ?? "N/D")})`
+  );
+  const categoriesAffected = new Set(teams.map((t) => t.division ?? "").filter(Boolean));
+  const capLines = capacity
+    .filter((c) => categoriesAffected.has(c.category))
+    .map((c) => `🎟️ Plazas <b>${escHtmlTelegram(c.category)}</b>: ${c.remaining}/${c.maxTeams}`);
+  const ok = action === "approve";
+  const motivoLine = !ok && rejectionReason
+    ? `\n\n<b>📝 Motivo:</b> <i>${escHtmlTelegram(rejectionReason)}</i>\n<i>(enviado al responsable por correo)</i>`
+    : "";
+  const undoNote = !ok
+    ? "\n<i>Se han eliminado los equipos de la base de datos; el responsable debe inscribirse de nuevo si procede.</i>"
+    : "";
+  const html = [
+    `${ok ? "✅" : "❌"} <b>INSCRIPCIÓN ${ok ? "APROBADA" : "DENEGADA"}</b> (${teams.length} equipos)`,
+    "",
+    `👤 ${escHtmlTelegram(teams[0]?.manager_name ?? "N/D")}`,
+    "",
+    ...teamLines,
+    "",
+    ...capLines,
+    motivoLine,
+    undoNote,
+  ].filter((line) => line !== "").join("\n");
+  const plain = html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
+
+  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html, `registration-bulk-${action}`);
+
+  if (N8N_WH_URL && TELEGRAM_VIEWER_CHAT_IDS) {
+    try {
+      const res = await fetch(N8N_WH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventType: action === "approve" ? "registration-bulk-approved" : "registration-bulk-rejected",
+          adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
+          message: plain.slice(0, 3500),
+        }),
+      });
+      if (!res.ok) {
+        await sendOpsAlert("warning", "n8n resumen inscripción conjunta falló", `http=${res.status} action=${action}`);
+      }
+    } catch (notifyError) {
+      await sendOpsAlert(
+        "warning",
+        "n8n resumen inscripción conjunta excepción",
+        notifyError instanceof Error ? notifyError.message : String(notifyError),
+      );
+    }
+  }
+}
+
 async function sendPlayerDocReviewTelegram(
   supabase: ReturnType<typeof createClient>,
   action: "approve" | "reject",
@@ -766,6 +883,149 @@ Deno.serve(async (req) => {
           ? `La revisión del equipo se ha guardado correctamente (${id}).`
           : `Equipo rechazado y eliminado (${id}). Motivo enviado al responsable.`,
         success: action === "approve",
+      }));
+    }
+
+    if (entity === "registration") {
+      if (action !== "approve" && action !== "reject") {
+        throw new Error("Acción de inscripción conjunta no soportada.");
+      }
+
+      const { data: registration, error: regErr } = await supabase
+        .from("registrations")
+        .select("id, manager_name, manager_email")
+        .eq("id", id)
+        .maybeSingle();
+      if (regErr) throw regErr;
+      if (!registration) {
+        await sendOpsAlert(
+          "warning",
+          "Registration action: registration missing",
+          `entity=registration; action=${action}; id=${id}`,
+        );
+        return htmlResponse(renderActionPage({
+          title: "Acción ya procesada",
+          subtitle: "Esta inscripción ya no existe o ya fue tramitada.",
+          success: false,
+        }));
+      }
+
+      const { data: teamRows, error: teamsErr } = await supabase
+        .from("teams")
+        .select("id, name, division, manager_name, manager_email, status")
+        .eq("registration_id", id);
+      if (teamsErr) throw teamsErr;
+      const teams = teamRows ?? [];
+      if (teams.length === 0) {
+        await sendOpsAlert("warning", "Registration sin equipos", `registration_id=${id}`);
+        return htmlResponse(renderActionPage({
+          title: "Sin equipos",
+          subtitle: "No hay equipos vinculados a esta inscripción.",
+          success: false,
+        }), 404);
+      }
+
+      if (action === "approve") {
+        const pendingTeamIds = teams.filter((t) => t.status === "pending").map((t) => t.id);
+        if (pendingTeamIds.length === 0) {
+          return htmlResponse(renderActionPage({
+            title: "Acción ya procesada",
+            subtitle: "Todos los equipos de esta inscripción ya estaban revisados.",
+            success: false,
+          }));
+        }
+        const { error: upErr } = await supabase
+          .from("teams")
+          .update({ status: "approved", payment_feedback: null })
+          .in("id", pendingTeamIds);
+        if (upErr) throw upErr;
+
+        const approvedTeamDetails = teams.filter((t) => pendingTeamIds.includes(t.id));
+        const managerName = registration.manager_name ?? approvedTeamDetails[0]?.manager_name ?? "Responsable";
+        const managerEmail = registration.manager_email ?? approvedTeamDetails[0]?.manager_email ?? "";
+        if (!managerEmail) {
+          await sendOpsAlert(
+            "error",
+            "Inscripción conjunta aprobada sin email de responsable",
+            `registration_id=${id}`,
+          );
+        } else {
+          const approvalRes = await fetch(HANDLE_APPROVAL_URL, {
+            method: "POST",
+            headers: internalSupabaseFnHeaders(),
+            body: JSON.stringify({
+              bulkRegistrationApproval: true,
+              managerName,
+              managerEmail,
+              teams: approvedTeamDetails.map((t) => ({ teamName: t.name ?? "Equipo", division: t.division ?? "N/D" })),
+            }),
+          });
+          if (!approvalRes.ok) {
+            const snippet = (await approvalRes.text()).slice(0, 500);
+            await sendOpsAlert(
+              "error",
+              "handle-approval (inscripción conjunta) falló",
+              `registration_id=${id} http=${approvalRes.status} body=${snippet}`,
+            );
+          }
+        }
+
+        await sendBulkRegistrationAdminReceipt("approve", registration, approvedTeamDetails);
+        await sendRegistrationBulkReviewTelegram(supabase, "approve", approvedTeamDetails);
+
+        return htmlResponse(renderActionPage({
+          title: "Inscripción aprobada",
+          subtitle: `Se han aprobado ${pendingTeamIds.length} equipo(s) vinculados a esta inscripción.`,
+          success: true,
+        }));
+      }
+
+      if (!rejectionReason) {
+        rejectionReason =
+          "La inscripción conjunta ha sido rechazada por el staff del torneo. Revisa la documentación y vuelve a realizar el alta.";
+      }
+
+      const managerName = registration.manager_name ?? teams[0]?.manager_name ?? "Responsable";
+      const managerEmail = registration.manager_email ?? teams[0]?.manager_email ?? "";
+      if (managerEmail) {
+        const rejRes = await fetch(HANDLE_REJECTION_URL, {
+          method: "POST",
+          headers: internalSupabaseFnHeaders(),
+          body: JSON.stringify({
+            bulkRegistrationRejection: true,
+            managerName,
+            managerEmail,
+            rejectionReason,
+            teams: teams.map((t) => ({ teamName: t.name ?? "Equipo", division: t.division ?? "N/D" })),
+          }),
+        });
+        if (!rejRes.ok) {
+          const snippet = (await rejRes.text()).slice(0, 500);
+          await sendOpsAlert(
+            "error",
+            "handle-rejection (inscripción conjunta) falló",
+            `registration_id=${id} http=${rejRes.status} body=${snippet}`,
+          );
+        }
+      }
+
+      await sendBulkRegistrationAdminReceipt("reject", registration, teams, rejectionReason);
+
+      for (const tid of teams.map((t) => t.id)) {
+        const { error: playersDeleteError } = await supabase.from("players").delete().eq("team_id", tid);
+        if (playersDeleteError) throw playersDeleteError;
+      }
+      const { error: teamsDeleteError } = await supabase.from("teams").delete().eq("registration_id", id);
+      if (teamsDeleteError) throw teamsDeleteError;
+      const { error: registrationDeleteError } = await supabase.from("registrations").delete().eq("id", id);
+      if (registrationDeleteError) throw registrationDeleteError;
+
+      await sendRegistrationBulkReviewTelegram(supabase, "reject", teams, rejectionReason);
+
+      return htmlResponse(renderActionPage({
+        title: "Inscripción rechazada",
+        subtitle: `Se han eliminado ${teams.length} equipo(s) y la inscripción. Motivo enviado al responsable.`,
+        success: false,
       }));
     }
 

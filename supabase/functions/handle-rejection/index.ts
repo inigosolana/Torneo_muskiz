@@ -24,8 +24,70 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { teamName, managerName, managerEmail, division, rejectionReason } = await req.json();
+    const payload = await req.json();
+    const { teamName, managerName, managerEmail, division, rejectionReason } = payload;
+    const bulkRegistrationRejection = payload.bulkRegistrationRejection === true;
+    const bulkTeams = Array.isArray(payload.teams)
+      ? payload.teams as Array<{ teamName?: string; division?: string }>
+      : [];
 
+    function escHtml(s: string): string {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    }
+
+    let emailBody: { from: string; to: string; subject: string; html: string };
+
+    if (bulkRegistrationRejection && bulkTeams.length > 0) {
+      if (!managerEmail || !managerName || !rejectionReason) {
+        return new Response(JSON.stringify({ error: 'Faltan datos requeridos (inscripción conjunta, motivo).' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const teamListHtml = bulkTeams.map((t) =>
+        `<li><strong>${escHtml(String(t.teamName ?? "Equipo"))}</strong> (${escHtml(String(t.division ?? "N/D"))})</li>`
+      ).join("");
+      emailBody = {
+        from: FROM_EMAIL,
+        to: managerEmail,
+        subject: `❌ Inscripciones declinadas — ${bulkTeams.length} equipos — II Torneo Muskiz`,
+        html: `
+        <div style="font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 600px; margin: auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+          <div style="background: linear-gradient(135deg, #dc2626, #ef4444); padding: 32px 24px; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 8px;">❌</div>
+            <h1 style="color: #ffffff; margin: 0; font-size: 22px;">Inscripciones declinadas</h1>
+            <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 13px;">${bulkTeams.length} equipos · un solo aviso</p>
+          </div>
+          <div style="padding: 28px 24px;">
+            <h2 style="color: #1e293b; margin: 0 0 8px;">Hola, ${escHtml(managerName)}</h2>
+            <p style="color: #475569; line-height: 1.6; font-size: 14px;">
+              La inscripción conjunta de los siguientes equipos ha sido <strong style="color: #dc2626;">declinada</strong> por el administrador del torneo:
+            </p>
+            <ul style="color:#334155; line-height:1.65;">${teamListHtml}</ul>
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 24px 0;">
+              <h3 style="margin: 0 0 8px; color: #991b1b; font-size: 13px; text-transform: uppercase;">📝 Motivo</h3>
+              <p style="margin: 0; color: #7f1d1d; font-size: 15px; line-height: 1.6; font-style: italic;">
+                "${escHtml(rejectionReason)}"
+              </p>
+            </div>
+            <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 16px; margin: 24px 0;">
+              <p style="margin: 0; color: #a16207; font-size: 13px; line-height: 1.6;">
+                Debes subsanar lo indicado y <strong>volver a inscribirte desde la web</strong>. Las plazas anteriores han sido liberadas.
+              </p>
+            </div>
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="https://torneomuskizbmplaya.es/registration" style="background: linear-gradient(135deg, #1e293b, #334155); color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 15px; display: inline-block;">
+                VOLVER A INSCRIBIRME →
+              </a>
+            </div>
+          </div>
+          <div style="background: #f1f5f9; padding: 16px 24px; text-align: center;">
+            <p style="color: #94a3b8; font-size: 11px; margin: 0;">© 2026 II Torneo Balonmano Playa Muskiz · torneomuskizbmplaya.es</p>
+          </div>
+        </div>
+      `,
+      };
+    } else {
     if (!managerEmail || !teamName || !rejectionReason) {
       return new Response(JSON.stringify({ error: 'Faltan datos requeridos (email, equipo, motivo).' }), {
         status: 400,
@@ -33,7 +95,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const emailBody = {
+    emailBody = {
       from: FROM_EMAIL,
       to: managerEmail,
       subject: `❌ Inscripción Declinada — ${teamName} — II Torneo Muskiz`,
@@ -101,6 +163,7 @@ Deno.serve(async (req) => {
         </div>
       `,
     };
+    }
 
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',

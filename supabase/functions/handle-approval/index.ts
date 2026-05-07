@@ -31,9 +31,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { teamName, managerName, managerEmail, division } = await req.json();
+    const payload = await req.json();
+    const bulkRegistrationApproval = payload.bulkRegistrationApproval === true;
+    const bulkTeams = Array.isArray(payload.teams) ? payload.teams as Array<{ teamName?: string; division?: string }> : [];
+    const { teamName, managerName, managerEmail, division } = payload;
 
-    if (!managerEmail || !teamName) {
+    if (bulkRegistrationApproval && bulkTeams.length > 0) {
+      if (!managerEmail || !managerName) {
+        return new Response(JSON.stringify({ error: 'Faltan datos requeridos (inscripción conjunta).' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    } else if (!managerEmail || !teamName) {
       return new Response(JSON.stringify({ error: 'Faltan datos requeridos.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -82,12 +92,58 @@ Deno.serve(async (req) => {
     const magicLink = linkData?.properties?.action_link || 'https://torneomuskizbmplaya.es/manager-login';
     console.log('[handle-approval] Magic link prepared', { managerEmail, hasMagicLink: Boolean(linkData?.properties?.action_link) });
 
+    function escAttr(s: string): string {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    }
+
+    let emailBody: { from: string; to: string; subject: string; html: string };
+
+    if (bulkRegistrationApproval && bulkTeams.length > 0) {
+      const teamListHtml = bulkTeams.map((t) =>
+        `<li><strong>${escAttr(String(t.teamName ?? "Equipo"))}</strong> (${escAttr(String(t.division ?? "N/D"))})</li>`
+      ).join("");
+      emailBody = {
+        from: FROM_EMAIL,
+        to: managerEmail,
+        subject: `✅ ¡Inscripciones aprobadas! — ${bulkTeams.length} equipos — II Torneo Muskiz`,
+        html: `
+        <div style="font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 600px; margin: auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+          <div style="background: linear-gradient(135deg, #059669, #10b981); padding: 32px 24px; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 8px;">✅</div>
+            <h1 style="color: #ffffff; margin: 0; font-size: 22px;">¡Inscripciones aprobadas!</h1>
+            <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 13px;">${bulkTeams.length} equipos aceptados oficialmente</p>
+          </div>
+          <div style="padding: 28px 24px;">
+            <h2 style="color: #1e293b; margin: 0 0 8px;">¡Enhorabuena, ${escAttr(String(managerName))}!</h2>
+            <p style="color: #475569; line-height: 1.6; font-size: 14px;">
+              Los siguientes equipos han sido aprobados para el <strong>II Torneo Balonmano Playa Muskiz</strong>:
+            </p>
+            <ul style="color:#334155; line-height:1.65;">${teamListHtml}</ul>
+            <p style="color: #334155; line-height: 1.65; font-size: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin: 14px 0 0;">
+              <strong>Importante:</strong> entra en la <strong>gestión de responsables</strong> y completa la plantilla de <strong>cada equipo</strong> (jugadores, DNI y seguro). El cupo máximo de jugadores en pista depende de la categoría de cada equipo (Senior: hasta 12; otras categorías: hasta 14).
+            </p>
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${magicLink}" style="background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 15px; display: inline-block;">
+                ACCEDER AL PANEL →
+              </a>
+            </div>
+            <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+              Usuario (email): <strong>${escAttr(String(managerEmail))}</strong> · Contraseña: la que elegiste al registrarte · Plazo plantilla: <strong>2 de junio de 2026</strong>
+            </p>
+          </div>
+          <div style="background: #f1f5f9; padding: 16px 24px; text-align: center;">
+            <p style="color: #94a3b8; font-size: 11px; margin: 0;">© 2026 II Torneo Balonmano Playa Muskiz · torneomuskizbmplaya.es</p>
+          </div>
+        </div>
+        `,
+      };
+    } else {
     const divisionStr = String(division ?? '');
     const isSeniorCategory = divisionStr.toLowerCase().includes('senior');
     const maxJugadores = isSeniorCategory ? 12 : 14;
 
     // 5. Send approval email with credentials
-    const emailBody = {
+    emailBody = {
       from: FROM_EMAIL,
       to: managerEmail,
       subject: `✅ ¡Inscripción Aprobada! — ${teamName} — II Torneo Muskiz`,
@@ -195,6 +251,7 @@ Deno.serve(async (req) => {
         </div>
       `,
     };
+    }
 
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -214,7 +271,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log('[handle-approval] Approval email sent successfully', { managerEmail, teamName });
+    console.log('[handle-approval] Approval email sent successfully', { managerEmail, teamName: teamName ?? `bulk:${bulkTeams.length}` });
 
     return new Response(JSON.stringify({ success: true, email: resData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
