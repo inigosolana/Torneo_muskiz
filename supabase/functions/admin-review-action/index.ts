@@ -15,6 +15,16 @@ const HANDLE_REJECTION_URL = `${SUPABASE_URL}/functions/v1/handle-rejection`;
 const ADMIN_EMAIL = "torneomuskizbmplaya@gmail.com";
 const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 
+/** Cabeceras para invocar otras Edge Functions del mismo proyecto (JWT verification activada). */
+function internalSupabaseFnHeaders(extra?: Record<string, string>): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json", ...extra };
+  if (SUPABASE_SERVICE_ROLE_KEY) {
+    h.Authorization = `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`;
+    h.apikey = SUPABASE_SERVICE_ROLE_KEY;
+  }
+  return h;
+}
+
 function escHtmlTelegram(s: unknown): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -180,7 +190,7 @@ async function sendOpsAlert(severity: "info" | "warning" | "error" | "critical",
   try {
     await fetch(OPS_ALERT_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalSupabaseFnHeaders(),
       body: JSON.stringify({
         source: "backend.admin-review-action",
         severity,
@@ -225,7 +235,7 @@ async function sendManagerEmail(action: "approve" | "reject", team: {
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalSupabaseFnHeaders(),
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -862,10 +872,9 @@ Deno.serve(async (req) => {
           const notifyUrl = `${SUPABASE_URL}/functions/v1/notify-player-doc-manager-email`;
           const resNotify = await fetch(notifyUrl, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
+            headers: internalSupabaseFnHeaders({
               "x-player-doc-notify-secret": notifySecret,
-            },
+            }),
             body: JSON.stringify({
               playerId: id,
               docType,
