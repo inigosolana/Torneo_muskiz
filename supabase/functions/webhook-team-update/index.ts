@@ -45,6 +45,9 @@ Deno.serve(async (req) => {
       const managerName = record.manager_name;
       const teamName = record.name;
       const division = record.division;
+      const divisionStr = String(division ?? '');
+      const isSeniorCategory = divisionStr.toLowerCase().includes('senior');
+      const maxJugadores = isSeniorCategory ? 12 : 14;
 
       // 1. Find the Auth user created during registration
       const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
@@ -104,6 +107,20 @@ Deno.serve(async (req) => {
               <p style="color: #475569; line-height: 1.6; font-size: 14px;">
                 El equipo <strong>${teamName}</strong> (${division}) ha sido oficialmente aprobado para el <strong>II Torneo Balonmano Playa Muskiz</strong>.
               </p>
+              <p style="color: #334155; line-height: 1.65; font-size: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin: 14px 0 0;">
+                <strong>Importante:</strong> debes entrar en la <strong>gestión de responsables</strong> (panel web del torneo, enlace más abajo) e <strong>ir completando la plantilla</strong>: datos de cada jugador/a y la subida de <strong>DNI</strong> y <strong>seguro</strong> cuando los tengas. No dejes todo para el último día.
+              </p>
+
+              <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0 20px;">
+                <div style="background:#ecfdf5; border:1px solid #bbf7d0; border-radius:10px; padding:10px 12px;">
+                  <p style="margin:0; color:#15803d; font-size:11px; text-transform:uppercase; font-weight:700;">Estado</p>
+                  <p style="margin:4px 0 0; color:#0f172a; font-size:16px; font-weight:700;">Aprobado</p>
+                </div>
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px;">
+                  <p style="margin:0; color:#64748b; font-size:11px; text-transform:uppercase; font-weight:700;">Categoría</p>
+                  <p style="margin:4px 0 0; color:#0f172a; font-size:16px; font-weight:700;">${division}</p>
+                </div>
+              </div>
               
               <!-- Credentials Box -->
               <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #22c55e; border-radius: 8px; padding: 20px; margin: 24px 0;">
@@ -129,14 +146,41 @@ Deno.serve(async (req) => {
               <p style="color: #94a3b8; font-size: 12px; text-align: center;">
                 O usa tus credenciales directamente en: <a href="https://torneomuskizbmplaya.es/manager-login" style="color: #0d9488;">torneomuskizbmplaya.es/manager-login</a>
               </p>
+
+              <div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #d97706; border-radius: 10px; padding: 16px 18px; margin: 20px 0;">
+                <h4 style="margin: 0 0 8px; color: #92400e; font-size: 14px;">📅 Plazo para la plantilla</h4>
+                <p style="margin: 0; color: #78350f; font-size: 14px; line-height: 1.65;">
+                  El <strong>último día para tener subidos todos los jugadores en el sistema es el 2 de junio de 2026</strong>.
+                  <strong>No se harán excepciones</strong> pasada esa fecha: no se admitirán altas ni cambios de plantilla fuera de lo que marque la organización.
+                </p>
+              </div>
+
+              <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px 18px; margin: 16px 0;">
+                <h4 style="margin: 0 0 10px; color: #1e40af; font-size: 14px;">👥 Cupo de jugadores en pista</h4>
+                <ul style="margin: 0; padding-left: 18px; color: #1e3a8a; font-size: 13px; line-height: 1.75;">
+                  <li><strong>Mínimo 6 jugadores</strong> en la plantilla.</li>
+                  <li><strong>Máximo de jugadores según categoría:</strong> en <strong>Senior</strong> (masculino y femenino) hasta <strong>12</strong>; en el <strong>resto de categorías</strong> hasta <strong>14</strong>.</li>
+                  <li>Tu equipo está inscrito en <strong>${divisionStr || 'N/D'}</strong> → el cupo que te aplica es de <strong>hasta ${maxJugadores} jugadores</strong>.</li>
+                </ul>
+              </div>
+
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px 18px; margin: 16px 0;">
+                <h4 style="margin: 0 0 10px; color: #166534; font-size: 14px;">🛡️ Entrenador y oficiales de mesa</h4>
+                <p style="margin: 0; color: #14532d; font-size: 13px; line-height: 1.75;">
+                  Además de los jugadores, en el mismo panel debes dar de alta:
+                  <strong>1 entrenador/a</strong> (rol Entrenador) y <strong>2 oficiales de mesa</strong> (rol Oficial).
+                  Estas <strong>3 personas no cuentan</strong> dentro del cupo máximo de jugadores indicado arriba.
+                </p>
+              </div>
               
-              <!-- Next Steps -->
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 24px 0;">
-                <h4 style="margin: 0 0 8px; color: #334155; font-size: 13px;">📋 Próximos Pasos:</h4>
-                <ol style="margin: 0; padding-left: 20px; color: #475569; font-size: 13px; line-height: 1.8;">
-                  <li>Accede al panel de responsable con tus credenciales</li>
-                  <li>Añade los jugadores de tu equipo (nombre, dorsal, posición)</li>
-                  <li>Sube la documentación de cada jugador (DNI y seguro deportivo)</li>
+                <h4 style="margin: 0 0 8px; color: #334155; font-size: 13px;">📋 Resumen de pasos en el panel de responsables</h4>
+                <ol style="margin: 0; padding-left: 20px; color: #475569; font-size: 13px; line-height: 1.85;">
+                  <li>Entra en <strong>Gestión de responsables</strong> con el botón de arriba o en <a href="https://torneomuskizbmplaya.es/manager-login" style="color:#0d9488;">manager-login</a>.</li>
+                  <li>Completa la ficha del equipo y <strong>registra jugadores</strong> (nombre, dorsal, posición) poco a poco.</li>
+                  <li>Sube <strong>DNI y seguro</strong> de cada jugador y espera la validación del organizador.</li>
+                  <li>Añade <strong>1 entrenador</strong> y <strong>2 oficiales</strong> con sus roles; no ocupan plaza de jugador.</li>
+                  <li>Respeta el <strong>mínimo 6</strong> y el <strong>máximo ${maxJugadores}</strong> jugadores para tu categoría, y el plazo del <strong>2 de junio de 2026</strong>.</li>
                 </ol>
               </div>
             </div>
