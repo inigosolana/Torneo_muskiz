@@ -198,7 +198,7 @@ const App: React.FC = () => {
         intervalMins: 30,
         courts: ['Pista Central', 'Pista 2', 'Pista 3'],
         lunchBreak: true,
-        customPrompt: 'Generar fase de grupos y eliminatorias para todas las categorías.'
+        customPrompt: 'Generar fase de grupos y fase final (solo gran final) para todas las categorías.'
       });
       if (newMatches.length > 0) {
         updateMatches(newMatches);

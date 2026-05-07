@@ -9,6 +9,72 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function escHtml(s: unknown): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+type BasketTeam = {
+  name?: string | null;
+  division?: string | null;
+  city?: string | null;
+  fee?: number | null;
+};
+
+function groupTeamsByDivision(teams: BasketTeam[]): [string, BasketTeam[]][] {
+  const m = new Map<string, BasketTeam[]>();
+  for (const t of teams) {
+    const d = String(t.division ?? "Sin categoría");
+    if (!m.has(d)) m.set(d, []);
+    m.get(d)!.push(t);
+  }
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], "es"));
+}
+
+function buildBasketTableHtml(teams: BasketTeam[]): string {
+  const bodyRows = groupTeamsByDivision(teams).map(([division, list]) => {
+    const namesHtml = list.map((t) => {
+      const city = t.city ? ` <span style="color:#64748b;font-size:12px;">(${escHtml(t.city)})</span>` : "";
+      return `<span style="display:inline-block;margin:2px 8px 2px 0;"><strong>${escHtml(t.name)}</strong>${city}</span>`;
+    }).join("");
+    const subtotal = list.reduce((s, t) => s + (Number(t.fee) || 0), 0);
+    return `<tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;width:32%;font-weight:700;color:#0f172a;">${escHtml(division)}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;color:#334155;line-height:1.5;">${namesHtml}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;text-align:right;white-space:nowrap;font-weight:700;color:#0f172a;">${subtotal}€</td>
+    </tr>`;
+  }).join("");
+  const total = teams.reduce((s, t) => s + (Number(t.fee) || 0), 0);
+  return `
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px 18px;margin:18px 0;">
+      <p style="margin:0 0 4px;font-size:13px;font-weight:800;color:#14532d;text-transform:uppercase;">Inscripción conjunta — resumen por categoría</p>
+      <p style="margin:0 0 14px;font-size:12px;color:#166534;">Un solo pago y un mismo justificante para todos los equipos.</p>
+      <table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
+        <thead><tr style="background:#ecfdf5;">
+          <th style="padding:8px 12px;text-align:left;font-size:11px;color:#166534;">Categoría</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;color:#166534;">Equipos</th>
+          <th style="padding:8px 12px;text-align:right;font-size:11px;color:#166534;">Subtotal</th>
+        </tr></thead>
+        <tbody>${bodyRows}</tbody>
+        <tfoot><tr style="background:#ecfdf5;">
+          <td colspan="2" style="padding:12px;text-align:right;font-weight:800;color:#14532d;">Total inscripción</td>
+          <td style="padding:12px;text-align:right;font-weight:900;color:#047857;font-size:18px;">${total}€</td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+}
+
+function buildSingleTeamListHtml(teams: BasketTeam[]): string {
+  return teams.map((t: BasketTeam) =>
+    `<li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+      <strong>${escHtml(t.name)}</strong>${t.city ? ` <span style="color: #666;">(${escHtml(t.city)})</span>` : ""}
+      <br><span style="font-size: 0.85em; color: #0d9488;">${escHtml(t.division)} — ${Number(t.fee) || 0}€</span>
+    </li>`
+  ).join("");
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -35,15 +101,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Build dynamic team list HTML
-    const teamListHtml = teams.map((t: { name: string; division: string; city: string; fee: number }) =>
-      `<li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
-        <strong>${t.name}</strong> <span style="color: #666;">(${t.city})</span>
-        <br><span style="font-size: 0.85em; color: #0d9488;">📋 ${t.division} — ${t.fee}€</span>
-      </li>`
-    ).join('');
-
+    const basketTeams = teams as BasketTeam[];
     const totalFee = teams.reduce((sum: number, t: { fee: number }) => sum + t.fee, 0);
+    const managerResumeInner = teams.length > 1
+      ? buildBasketTableHtml(basketTeams)
+      : `<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0;">
+              <h3 style="margin: 0 0 12px; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Equipo inscrito</h3>
+              <ul style="list-style: none; padding: 0; margin: 0;">${buildSingleTeamListHtml(basketTeams)}</ul>
+              <div style="margin-top: 12px; padding-top: 12px; border-top: 2px solid #e2e8f0; text-align: right;">
+                <span style="font-size: 18px; font-weight: bold; color: #0d9488;">Total: ${totalFee}€</span>
+              </div>
+            </div>`;
 
     // --- 1. EMAIL AL RESPONSABLE (Comprobante) ---
     const managerEmailBody = {
@@ -76,14 +144,7 @@ Deno.serve(async (req) => {
               </div>
             </div>
             
-            <!-- Team List -->
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0;">
-              <h3 style="margin: 0 0 12px; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Equipos Inscritos</h3>
-              <ul style="list-style: none; padding: 0; margin: 0;">${teamListHtml}</ul>
-              <div style="margin-top: 12px; padding-top: 12px; border-top: 2px solid #e2e8f0; text-align: right;">
-                <span style="font-size: 18px; font-weight: bold; color: #0d9488;">Total: ${totalFee}€</span>
-              </div>
-            </div>
+            ${managerResumeInner}
             
             <!-- Warning Box -->
             <div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 20px 0;">
@@ -107,10 +168,9 @@ Deno.serve(async (req) => {
       `,
     };
 
-    // --- 2. EMAIL AL ADMINISTRADOR (Aviso) ---
     const teamSummaryForAdmin = teams.map((t: { name: string; division: string }) =>
-      `<strong>${t.name}</strong> (${t.division})`
-    ).join(', ');
+      `<strong>${escHtml(t.name)}</strong> (${escHtml(t.division)})`
+    ).join(", ");
 
     const adminEmailBody = {
       from: FROM_EMAIL,
@@ -144,13 +204,19 @@ Deno.serve(async (req) => {
               </tr>
               <tr style="border-bottom: 1px solid #e2e8f0;">
                 <td style="padding: 10px; font-weight: bold; color: #64748b; font-size: 13px;">Equipos</td>
-                <td style="padding: 10px; color: #1e293b;">${teamSummaryForAdmin}</td>
+                <td style="padding: 10px; color: #1e293b;">${
+                  teams.length > 1
+                    ? `${teams.length} equipos — mismo justificante (detalle por categoría debajo)`
+                    : teamSummaryForAdmin
+                }</td>
               </tr>
               <tr>
                 <td style="padding: 10px; font-weight: bold; color: #64748b; font-size: 13px;">Método</td>
                 <td style="padding: 10px; color: #1e293b;">Transferencia Bancaria</td>
               </tr>
             </table>
+
+            ${teams.length > 1 ? buildBasketTableHtml(basketTeams) : ""}
 
             <div style="text-align: center;">
               <a href="https://torneomuskizbmplaya.es/admin" style="background: #111827; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block;">

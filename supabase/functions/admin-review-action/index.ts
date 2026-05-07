@@ -401,7 +401,21 @@ async function sendBulkRegistrationAdminReceipt(
   }
   const actionLabel = action === "approve" ? "APROBADA" : "DENEGADA";
   const reasonBlock = action === "reject" ? `<p><strong>Motivo:</strong> ${rejectionReason ?? "No informado"}</p>` : "";
-  const teamList = teams.map((t) => `<li>${t.name ?? "N/D"} (${t.division ?? "N/D"})</li>`).join("");
+  const groups = new Map<string, string[]>();
+  for (const t of teams) {
+    const d = String(t.division ?? "Sin categoría");
+    if (!groups.has(d)) groups.set(d, []);
+    groups.get(d)!.push(String(t.name ?? "N/D"));
+  }
+  const groupedTeamsHtml = [...groups.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "es"))
+    .map(([div, names]) =>
+      `<div style="margin-bottom:14px;border-left:3px solid #0d9488;padding-left:12px;">
+        <p style="margin:0 0 6px;font-weight:700;color:#0f172a;">${escHtmlTelegram(div)} <span style="font-size:12px;color:#64748b;">(${names.length} equipo${names.length === 1 ? "" : "s"})</span></p>
+        <ul style="margin:0;padding-left:18px;color:#334155;">${names.map((n) => `<li>${escHtmlTelegram(n)}</li>`).join("")}</ul>
+      </div>`
+    )
+    .join("");
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -418,8 +432,8 @@ async function sendBulkRegistrationAdminReceipt(
             <h2 style="margin:0 0 10px;">Comprobante de revisión (inscripción conjunta)</h2>
             <p><strong>Resultado:</strong> ${actionLabel}</p>
             <p><strong>Responsable:</strong> ${registration.manager_name ?? "N/D"} (${registration.manager_email ?? "N/D"})</p>
-            <p><strong>Equipos:</strong></p>
-            <ul>${teamList}</ul>
+            <p><strong>Resumen por categoría</strong> (misma inscripción / un solo justificante):</p>
+            ${groupedTeamsHtml}
             ${reasonBlock}
           </div>
         `,
@@ -854,6 +868,7 @@ Deno.serve(async (req) => {
           .from("teams")
           .update({
             status: "approved",
+            payment_status: "PAID",
             payment_feedback: null,
           })
           .select("id")
@@ -936,7 +951,11 @@ Deno.serve(async (req) => {
         }
         const { error: upErr } = await supabase
           .from("teams")
-          .update({ status: "approved", payment_feedback: null })
+          .update({
+            status: "approved",
+            payment_status: "PAID",
+            payment_feedback: null,
+          })
           .in("id", pendingTeamIds);
         if (upErr) throw upErr;
 

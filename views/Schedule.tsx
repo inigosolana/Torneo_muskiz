@@ -256,22 +256,21 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, categoryLimi
                                                 <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
                                                     <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Todos los equipos juegan en grupos</li>
                                                     <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span><strong>Mínimo 3 partidos garantizados</strong> por equipo</li>
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Los mejores de cada grupo pasan a eliminatorias</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Los mejores de cada grupo pasan a la fase final</li>
                                                 </ul>
                                             </div>
 
-                                            {/* Fase Eliminatoria */}
+                                            {/* Fase final */}
                                             <div className="bg-secondary/5 border border-secondary/20 rounded-2xl p-6 space-y-3">
                                                 <div className="flex items-center gap-3 mb-2">
                                                     <div className="size-10 rounded-full bg-secondary/20 flex items-center justify-center">
                                                         <span className="material-symbols-outlined text-secondary">emoji_events</span>
                                                     </div>
-                                                    <h4 className="font-bold text-slate-900 dark:text-white uppercase text-sm tracking-wider">Fase Eliminatoria</h4>
+                                                    <h4 className="font-bold text-slate-900 dark:text-white uppercase text-sm tracking-wider">Fase final</h4>
                                                 </div>
                                                 <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-secondary text-base mt-0.5">check_circle</span>Sistema de eliminación directa</li>
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-secondary text-base mt-0.5">check_circle</span>Cuartos, semifinales y final</li>
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-secondary text-base mt-0.5">check_circle</span>Partido por el tercer y cuarto puesto</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-secondary text-base mt-0.5">check_circle</span>Un único partido decisivo por categoría</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-secondary text-base mt-0.5">check_circle</span>Solo la gran final: sin cuartos ni semifinales</li>
                                                 </ul>
                                             </div>
                                         </div>

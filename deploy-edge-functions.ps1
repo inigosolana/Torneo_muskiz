@@ -17,6 +17,9 @@ Set-Location $PSScriptRoot
 
 Write-Host "Desplegando Edge Functions a proyecto $ProjectRef ..."
 
+# IA calendario (JWT verificado; el cliente envía sesión o anon key).
+npx --yes supabase@latest functions deploy generate-bracket --project-ref $ProjectRef
+
 # handle-rejection: dejar verificación JWT activa (coincide con el proyecto actual).
 npx --yes supabase@latest functions deploy handle-rejection --project-ref $ProjectRef
 
@@ -24,6 +27,7 @@ npx --yes supabase@latest functions deploy handle-rejection --project-ref $Proje
 $noJwt = @(
   "handle-approval",
   "webhook-registration",
+  "webhook-team-update",
   "telegram-bot-webhook",
   "admin-review-action"
 )

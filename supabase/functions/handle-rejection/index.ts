@@ -44,9 +44,37 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      const teamListHtml = bulkTeams.map((t) =>
-        `<li><strong>${escHtml(String(t.teamName ?? "Equipo"))}</strong> (${escHtml(String(t.division ?? "N/D"))})</li>`
-      ).join("");
+      const byDivision = new Map<string, string[]>();
+      for (const t of bulkTeams) {
+        const d = String(t.division ?? "N/D");
+        if (!byDivision.has(d)) byDivision.set(d, []);
+        byDivision.get(d)!.push(String(t.teamName ?? "Equipo"));
+      }
+      const basketRows = [...byDivision.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0], "es"))
+        .map(([div, names]) =>
+          `<tr>
+            <td style="padding:10px 12px;border-bottom:1px solid #fecaca;font-weight:700;color:#7f1d1d;">${escHtml(div)}</td>
+            <td style="padding:10px 12px;border-bottom:1px solid #fecaca;color:#450a0a;">${
+            names.map((n) => `<strong>${escHtml(n)}</strong>`).join(" · ")
+          }</td>
+            <td style="padding:10px 12px;border-bottom:1px solid #fecaca;text-align:right;font-weight:700;">${names.length}</td>
+          </tr>`
+        )
+        .join("");
+      const bulkBasketHtml =
+        `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:16px;margin:16px 0;">
+          <p style="margin:0 0 4px;font-size:12px;font-weight:800;color:#991b1b;text-transform:uppercase;">Misma inscripción — resumen por categoría</p>
+          <p style="margin:0 0 12px;font-size:12px;color:#7f1d1d;">Todos los equipos de la tabla formaban parte del mismo alta conjunto.</p>
+          <table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px;background:#fff;border:1px solid #fecaca;border-radius:8px;">
+            <thead><tr style="background:#fee2e2;">
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:#991b1b;">Categoría</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:#991b1b;">Equipos</th>
+              <th style="padding:8px 12px;text-align:right;font-size:11px;color:#991b1b;">Nº</th>
+            </tr></thead>
+            <tbody>${basketRows}</tbody>
+          </table>
+        </div>`;
       emailBody = {
         from: FROM_EMAIL,
         to: managerEmail,
@@ -61,9 +89,9 @@ Deno.serve(async (req) => {
           <div style="padding: 28px 24px;">
             <h2 style="color: #1e293b; margin: 0 0 8px;">Hola, ${escHtml(managerName)}</h2>
             <p style="color: #475569; line-height: 1.6; font-size: 14px;">
-              La inscripción conjunta de los siguientes equipos ha sido <strong style="color: #dc2626;">declinada</strong> por el administrador del torneo:
+              La inscripción conjunta ha sido <strong style="color: #dc2626;">declinada</strong> por el administrador del torneo. Detalle por categoría:
             </p>
-            <ul style="color:#334155; line-height:1.65;">${teamListHtml}</ul>
+            ${bulkBasketHtml}
             <div style="background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 24px 0;">
               <h3 style="margin: 0 0 8px; color: #991b1b; font-size: 13px; text-transform: uppercase;">📝 Motivo</h3>
               <p style="margin: 0; color: #7f1d1d; font-size: 15px; line-height: 1.6; font-style: italic;">

@@ -6,30 +6,16 @@ interface TournamentBracketProps {
 }
 
 export const TournamentBracket: React.FC<TournamentBracketProps> = ({ matches }) => {
-    // A simplified bracket rendering matches grouped by stages.
-    // In a real scenario we'd separate them by category and round, but for this generic component 
-    // we will display a mock flexible bracket based on the current scheduled/finished match list.
+    const finalMatch =
+        matches.find((m) => (m.round || '').toLowerCase().includes('final')) ??
+        matches[matches.length - 1];
+
     return (
         <div className="w-full overflow-x-auto py-8">
-            <div className="min-w-[800px] flex gap-12 justify-center items-center">
-                {/* Placeholder layout for bracket rounds */}
-                <div className="flex flex-col gap-8 w-64 relative">
-                    <h3 className="text-center font-bold text-slate-500 mb-4 uppercase tracking-widest text-xs">Cuartos de Final</h3>
-                    {[0, 1, 2, 3].map(i => (
-                        <MatchCard key={i} match={matches[i]} />
-                    ))}
-                </div>
-
-                <div className="flex flex-col gap-24 w-64 relative">
-                    <h3 className="text-center font-bold text-slate-500 mb-4 uppercase tracking-widest text-xs">Semifinales</h3>
-                    {[4, 5].map(i => (
-                        <MatchCard key={i} match={matches[i]} />
-                    ))}
-                </div>
-
-                <div className="flex flex-col gap-8 w-64 relative">
-                    <h3 className="text-center font-bold text-primary mb-4 uppercase tracking-widest text-xs">Gran Final</h3>
-                    <MatchCard match={matches[6]} />
+            <div className="flex justify-center items-start px-4">
+                <div className="flex flex-col gap-6 w-full max-w-md">
+                    <h3 className="text-center font-bold text-primary uppercase tracking-widest text-xs">Gran final</h3>
+                    <MatchCard match={finalMatch} />
                 </div>
             </div>
         </div>

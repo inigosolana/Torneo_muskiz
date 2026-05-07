@@ -43,7 +43,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
         intervalMins: 30,
         courtsInput: 'Pista Central, Pista 2, Pista 3',
         lunchBreak: true,
-        customPrompt: 'Crea 2 grupos de 4 equipos para la fase de grupos Cadete y una liguilla única para Senior.'
+        customPrompt: 'Fase de grupos por categoría y solo la gran final (sin cuartos ni semifinales). Reparte horarios y pistas sin solapes.'
     });
 
     // Acta Management State
@@ -521,9 +521,33 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     };
 
     const handleApproveTeam = async (team: Team) => {
-        if (confirm(`¿Aprobar definitivamente al equipo ${team.name}? Esto creará su cuenta de acceso y enviará el email de bienvenida.`)) {
-            onUpdateTeam({ ...team, status: 'approved', paymentStatus: 'PAID', paymentFeedback: '' });
+        if (!confirm(`¿Aprobar definitivamente al equipo ${team.name}? Esto activará el acceso y enviará el email de bienvenida.`)) {
+            return;
+        }
+        try {
+            const updated = { ...team, status: 'approved' as const, paymentStatus: 'PAID' as const, paymentFeedback: '' };
+            await onUpdateTeam(updated);
+            const { data, error } = await supabase.functions.invoke('handle-approval', {
+                body: {
+                    teamName: team.name,
+                    managerName: team.managerName,
+                    managerEmail: team.managerEmail,
+                    division: team.division,
+                },
+            });
+            if (error) {
+                toast.error('Equipo guardado como aprobado, pero falló el envío del correo. Invoca handle-approval o revisa alertas.');
+                console.error('handle-approval invoke:', error);
+                return;
+            }
+            if (data && typeof data === 'object' && 'error' in data && (data as { error?: string }).error) {
+                toast.error(`Correo de aprobación: ${(data as { error: string }).error}`);
+                return;
+            }
             toast.success('Equipo aprobado e email de bienvenida enviado.');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Error al aprobar';
+            toast.error(msg);
         }
     };
 

@@ -99,9 +99,37 @@ Deno.serve(async (req) => {
     let emailBody: { from: string; to: string; subject: string; html: string };
 
     if (bulkRegistrationApproval && bulkTeams.length > 0) {
-      const teamListHtml = bulkTeams.map((t) =>
-        `<li><strong>${escAttr(String(t.teamName ?? "Equipo"))}</strong> (${escAttr(String(t.division ?? "N/D"))})</li>`
-      ).join("");
+      const byDivision = new Map<string, string[]>();
+      for (const t of bulkTeams) {
+        const d = String(t.division ?? "N/D");
+        if (!byDivision.has(d)) byDivision.set(d, []);
+        byDivision.get(d)!.push(String(t.teamName ?? "Equipo"));
+      }
+      const basketRows = [...byDivision.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0], "es"))
+        .map(([div, names]) =>
+          `<tr>
+            <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f172a;">${escAttr(div)}</td>
+            <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#334155;">${
+            names.map((n) => `<strong>${escAttr(n)}</strong>`).join(" · ")
+          }</td>
+            <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;">${names.length}</td>
+          </tr>`
+        )
+        .join("");
+      const bulkBasketHtml =
+        `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px;margin:16px 0;">
+          <p style="margin:0 0 4px;font-size:12px;font-weight:800;color:#14532d;text-transform:uppercase;">Misma inscripción — resumen por categoría</p>
+          <p style="margin:0 0 12px;font-size:12px;color:#166534;">Todos los equipos de la tabla comparten el mismo alta y justificante (como una sola cesta).</p>
+          <table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
+            <thead><tr style="background:#ecfdf5;">
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:#166534;">Categoría</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:#166534;">Equipos</th>
+              <th style="padding:8px 12px;text-align:right;font-size:11px;color:#166534;">Nº</th>
+            </tr></thead>
+            <tbody>${basketRows}</tbody>
+          </table>
+        </div>`;
       emailBody = {
         from: FROM_EMAIL,
         to: managerEmail,
@@ -116,9 +144,9 @@ Deno.serve(async (req) => {
           <div style="padding: 28px 24px;">
             <h2 style="color: #1e293b; margin: 0 0 8px;">¡Enhorabuena, ${escAttr(String(managerName))}!</h2>
             <p style="color: #475569; line-height: 1.6; font-size: 14px;">
-              Los siguientes equipos han sido aprobados para el <strong>II Torneo Balonmano Playa Muskiz</strong>:
+              Los equipos de tu inscripción han sido aprobados para el <strong>II Torneo Balonmano Playa Muskiz</strong>:
             </p>
-            <ul style="color:#334155; line-height:1.65;">${teamListHtml}</ul>
+            ${bulkBasketHtml}
             <p style="color: #334155; line-height: 1.65; font-size: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin: 14px 0 0;">
               <strong>Importante:</strong> entra en la <strong>gestión de responsables</strong> y completa la plantilla de <strong>cada equipo</strong> (jugadores, DNI y seguro). El cupo máximo de jugadores en pista depende de la categoría de cada equipo (Senior: hasta 12; otras categorías: hasta 14).
             </p>
