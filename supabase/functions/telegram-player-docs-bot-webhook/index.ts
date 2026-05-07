@@ -2,7 +2,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const BOT_TOKEN = Deno.env.get("TELEGRAM_NOTIFICATIONS_BOT_TOKEN")?.trim();
+/** Bot solo documentación jugadores (DNI/seguro). Equipos/inscripciones: `telegram-bot-webhook`. */
+const BOT_TOKEN = Deno.env.get("PLAYER_DOCS_TELEGRAM_BOT_TOKEN")?.trim();
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
 const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
@@ -41,7 +42,7 @@ async function sendOpsAlert(message: string, details: string, severity: "warning
       method: "POST",
       headers: internalFnHeaders(),
       body: JSON.stringify({
-        source: "backend.telegram-bot-webhook",
+        source: "backend.telegram-player-docs-bot-webhook",
         severity,
         message,
         details: details.slice(0, 1500),
@@ -54,7 +55,7 @@ async function sendOpsAlert(message: string, details: string, severity: "warning
 
 async function sendTelegramMessage(chatId: number, text: string): Promise<boolean> {
   if (!BOT_TOKEN) {
-    await sendOpsAlert("Bot sin TELEGRAM_NOTIFICATIONS_BOT_TOKEN", "No se puede enviar respuesta al usuario.", "error");
+    await sendOpsAlert("Bot sin PLAYER_DOCS_TELEGRAM_BOT_TOKEN", "No se puede enviar respuesta al usuario.", "error");
     return false;
   }
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -81,7 +82,7 @@ async function sendTelegramMessage(chatId: number, text: string): Promise<boolea
 async function answerCallbackQuery(callbackId: string, text: string, showAlert = false): Promise<void> {
   if (!BOT_TOKEN) {
     await sendOpsAlert(
-      "Bot sin TELEGRAM_NOTIFICATIONS_BOT_TOKEN",
+      "Bot sin PLAYER_DOCS_TELEGRAM_BOT_TOKEN",
       "answerCallbackQuery no se ha podido enviar.",
       "error",
     );
@@ -459,10 +460,10 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
     ? `@${fromUser.username}`
     : (fromUser?.first_name ?? "admin");
 
-  if (parsed.kind === "player-doc") {
+  if (parsed.kind !== "player-doc") {
     await answerCallbackQuery(
       callbackId,
-      "Este bot es solo para equipos e inscripciones. Revisa DNI/seguro en el bot de jugadores.",
+      "Este bot solo sirve para DNI/seguro de jugadores. Equipos e inscripciones: usa el bot de equipos.",
       true,
     );
     return;
@@ -604,8 +605,8 @@ Deno.serve(async (req) => {
     if (!SUPABASE_URL || !BOT_TOKEN) {
       if (SUPABASE_URL && !BOT_TOKEN) {
         void sendOpsAlert(
-          "Falta TELEGRAM_NOTIFICATIONS_BOT_TOKEN",
-          "telegram-bot-webhook no puede responder en Telegram.",
+          "Falta PLAYER_DOCS_TELEGRAM_BOT_TOKEN",
+          "telegram-player-docs-bot-webhook no puede responder en Telegram.",
           "critical",
         );
       }
@@ -659,11 +660,11 @@ Deno.serve(async (req) => {
     // Si hay denegación pendiente para este (chat, user), usamos el texto como motivo.
     const pending = await getPendingRejection(String(chatId), String(userId));
     if (pending) {
-      if (pending.entity === "player-doc") {
+      if (pending.entity !== "player-doc") {
         await clearPendingRejection(String(chatId), String(userId));
         await sendTelegramMessage(
           chatId,
-          "La denegación de DNI/seguro se hace desde el bot de documentación de jugadores. Vuelve a pulsar Denegar en ese bot.",
+          "Este bot solo procesa denegaciones de documentación de jugador. Para equipos o inscripciones, usa el bot de equipos.",
         );
         return new Response(JSON.stringify({ ok: true, skipped: true }), {
           status: 200,
@@ -713,43 +714,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const queryRes = await fetch(`${SUPABASE_URL}/functions/v1/telegram-admin-query`, {
-      method: "POST",
-      headers: internalFnHeaders(),
-      body: JSON.stringify({ chatId, userId, text }),
-    });
-    const queryJson: Record<string, unknown> = await queryRes.json().catch(() => ({}));
-
-    if (!queryRes.ok) {
-      const errText = typeof queryJson.error === "string"
-        ? queryJson.error
-        : JSON.stringify(queryJson).slice(0, 400);
-      // No alertar 403: consultas no autorizadas son habituales
-      if (queryRes.status === 401 || queryRes.status >= 500) {
-        await sendOpsAlert(
-          "telegram-admin-query respondió error",
-          `http=${queryRes.status} chatId=${chatId} userId=${userId} text=${text.slice(0, 120)} detail=${errText}`,
-          "error",
-        );
-      }
-    }
-
-    const reply = queryRes.ok
-      ? String(queryJson?.message ?? queryJson?.error ?? "No pude procesar la consulta.")
-      : queryRes.status === 403
-      ? String(queryJson?.message ?? "No autorizado para consultas.")
-      : queryRes.status === 401
-      ? "Error de autenticación con el servidor. El equipo ha sido notificado."
-      : `Error interno (${queryRes.status}). Si persiste, el equipo ya ha recibido alerta.`;
-
-    const sent = await sendTelegramMessage(chatId, reply);
-    if (!sent && queryRes.ok) {
-      await sendOpsAlert(
-        "No se pudo entregar la respuesta al usuario en Telegram",
-        `chatId=${chatId} (sendMessage falló; la consulta sí respondió ok)`,
-        "warning",
-      );
-    }
+    // Consultas tipo “cuántos equipos…” solo en el bot de equipos.
+    await sendTelegramMessage(
+      chatId,
+      "Este bot es solo para revisar documentación de jugadores (DNI/seguro). Consultas de equipos, plazas o inscripciones: escribe en el bot de equipos/inscripciones.",
+    );
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -757,7 +726,7 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    await sendOpsAlert("Excepción en telegram-bot-webhook", msg, "error");
+    await sendOpsAlert("Excepción en telegram-player-docs-bot-webhook", msg, "error");
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

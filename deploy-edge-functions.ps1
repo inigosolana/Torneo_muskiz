@@ -29,6 +29,7 @@ $noJwt = @(
   "webhook-registration",
   "webhook-team-update",
   "telegram-bot-webhook",
+  "telegram-player-docs-bot-webhook",
   "admin-review-action",
   "notify-player-doc-manager-email"
 )

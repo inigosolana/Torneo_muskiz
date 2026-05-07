@@ -9,6 +9,7 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
 const TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("TELEGRAM_VIEWER_CHAT_IDS");
 const TELEGRAM_NOTIFICATIONS_BOT_TOKEN = Deno.env.get("TELEGRAM_NOTIFICATIONS_BOT_TOKEN");
+const PLAYER_DOCS_TELEGRAM_BOT_TOKEN = Deno.env.get("PLAYER_DOCS_TELEGRAM_BOT_TOKEN")?.trim();
 const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 const HANDLE_APPROVAL_URL = `${SUPABASE_URL}/functions/v1/handle-approval`;
 const HANDLE_REJECTION_URL = `${SUPABASE_URL}/functions/v1/handle-rejection`;
@@ -43,11 +44,13 @@ async function sendTelegramHtmlToChats(
   html: string,
   context: string,
   replyMarkup?: Record<string, unknown>,
+  botTokenOverride?: string | null,
 ): Promise<void> {
-  if (!TELEGRAM_NOTIFICATIONS_BOT_TOKEN || chatIds.length === 0) return;
+  const token = (botTokenOverride ?? TELEGRAM_NOTIFICATIONS_BOT_TOKEN)?.trim();
+  if (!token || chatIds.length === 0) return;
   await Promise.all(chatIds.map(async (chatId) => {
     try {
-      const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_NOTIFICATIONS_BOT_TOKEN}/sendMessage`, {
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -573,7 +576,21 @@ async function sendPlayerDocReviewTelegram(
       { text: "🔁 Deshacer (volver a PENDING)", callback_data: `p:u:${docKey}:${playerId}` },
     ]],
   };
-  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html, `${docType}-${action}`, undoMarkup);
+  if (!PLAYER_DOCS_TELEGRAM_BOT_TOKEN) {
+    await sendOpsAlert(
+      "warning",
+      "PLAYER_DOCS_TELEGRAM_BOT_TOKEN sin configurar",
+      "No se envía resumen de revisión DNI/seguro al Telegram del bot de jugadores.",
+    );
+    return;
+  }
+  await sendTelegramHtmlToChats(
+    parseChatIds(TELEGRAM_ADMIN_CHAT_IDS),
+    html,
+    `${docType}-${action}`,
+    undoMarkup,
+    PLAYER_DOCS_TELEGRAM_BOT_TOKEN,
+  );
 
   // 2) n8n: solo viewer.
   if (N8N_WH_URL && TELEGRAM_VIEWER_CHAT_IDS) {
@@ -1100,17 +1117,21 @@ Deno.serve(async (req) => {
           if (tu?.name) teamNameUndo = tu.name;
         }
         const docLabelUndo = docType === "dni" ? "DNI" : "Seguro";
-        await sendTelegramHtmlToChats(
-          parseChatIds(TELEGRAM_ADMIN_CHAT_IDS),
-          [
-            `🔁 <b>${docLabelUndo} VUELVE A PENDING</b>`,
-            ``,
-            `👤 <b>${escHtmlTelegram(playerNameUndo)}</b>`,
-            `🏐 ${escHtmlTelegram(teamNameUndo)}`,
-            `<i>Se ha deshecho la última revisión. Pendiente de validar otra vez.</i>`,
-          ].join("\n"),
-          `${docType}-undo`,
-        );
+        if (PLAYER_DOCS_TELEGRAM_BOT_TOKEN) {
+          await sendTelegramHtmlToChats(
+            parseChatIds(TELEGRAM_ADMIN_CHAT_IDS),
+            [
+              `🔁 <b>${docLabelUndo} VUELVE A PENDING</b>`,
+              ``,
+              `👤 <b>${escHtmlTelegram(playerNameUndo)}</b>`,
+              `🏐 ${escHtmlTelegram(teamNameUndo)}`,
+              `<i>Se ha deshecho la última revisión. Pendiente de validar otra vez.</i>`,
+            ].join("\n"),
+            `${docType}-undo`,
+            undefined,
+            PLAYER_DOCS_TELEGRAM_BOT_TOKEN,
+          );
+        }
         return htmlResponse(renderActionPage({
           title: "Revisión deshecha",
           subtitle: `${docType.toUpperCase()} vuelve a PENDING (${id}).`,

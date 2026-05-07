@@ -11,7 +11,6 @@ const ACTION_BASE_URL = `${SUPABASE_URL}/functions/v1/admin-review-action`;
 const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 const TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("TELEGRAM_VIEWER_CHAT_IDS");
 const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
-const TELEGRAM_NOTIFICATIONS_BOT_TOKEN = Deno.env.get("TELEGRAM_NOTIFICATIONS_BOT_TOKEN");
 const PLAYER_DOCS_TELEGRAM_BOT_TOKEN = Deno.env.get("PLAYER_DOCS_TELEGRAM_BOT_TOKEN");
 const PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS");
 
@@ -220,25 +219,58 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Envío DIRECTO al bot principal (KOLOSAURIOS) con botones callback_data.
-    // Aprobar/denegar se ejecuta dentro de Telegram, sin abrir navegador.
+    // Staff: bot dedicado a documentación de jugadores (no mezclar con equipos/inscripciones).
+    const docAdminBotToken = Deno.env.get("PLAYER_DOCS_TELEGRAM_BOT_TOKEN")?.trim();
     const adminChatList = parseChatIds(TELEGRAM_ADMIN_CHAT_IDS);
-    if (TELEGRAM_NOTIFICATIONS_BOT_TOKEN && adminChatList.length > 0 && inlineKeyboardActions.length > 0) {
-      await Promise.all(adminChatList.map(async (chatId) => {
+    if (adminChatList.length > 0 && inlineKeyboardActions.length > 0) {
+      if (!docAdminBotToken) {
         try {
-          const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_NOTIFICATIONS_BOT_TOKEN}/sendMessage`, {
+          await fetch(OPS_ALERT_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              chat_id: String(chatId),
-              text: messageHtml,
-              parse_mode: "HTML",
-              disable_web_page_preview: true,
-              reply_markup: { inline_keyboard: inlineKeyboardActions },
+              source: "backend.webhook-player-documents",
+              severity: "error",
+              message: "PLAYER_DOCS_TELEGRAM_BOT_TOKEN no configurado",
+              details:
+                "Configura el secret PLAYER_DOCS_TELEGRAM_BOT_TOKEN (bot de jugadores) y el webhook telegram-player-docs-bot-webhook en ese bot.",
             }),
           });
-          if (!res.ok) {
-            const body = await res.text();
+        } catch {
+          // ignore
+        }
+      } else {
+        await Promise.all(adminChatList.map(async (chatId) => {
+          try {
+            const res = await fetch(`https://api.telegram.org/bot${docAdminBotToken}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: String(chatId),
+                text: messageHtml,
+                parse_mode: "HTML",
+                disable_web_page_preview: true,
+                reply_markup: { inline_keyboard: inlineKeyboardActions },
+              }),
+            });
+            if (!res.ok) {
+              const body = await res.text();
+              try {
+                await fetch(OPS_ALERT_URL, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    source: "backend.webhook-player-documents",
+                    severity: "error",
+                    message: "Telegram sendMessage doc jugador falló",
+                    details: `chat=${chatId} http=${res.status} body=${body.slice(0, 400)} player=${record.id}`,
+                  }),
+                });
+              } catch {
+                // ignore alert failures
+              }
+            }
+          } catch (err) {
             try {
               await fetch(OPS_ALERT_URL, {
                 method: "POST",
@@ -246,31 +278,16 @@ Deno.serve(async (req) => {
                 body: JSON.stringify({
                   source: "backend.webhook-player-documents",
                   severity: "error",
-                  message: "Telegram sendMessage doc jugador falló",
-                  details: `chat=${chatId} http=${res.status} body=${body.slice(0, 400)} player=${record.id}`,
+                  message: "Telegram direct send excepción (doc jugador)",
+                  details: err instanceof Error ? err.message : String(err),
                 }),
               });
             } catch {
               // ignore alert failures
             }
           }
-        } catch (err) {
-          try {
-            await fetch(OPS_ALERT_URL, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                source: "backend.webhook-player-documents",
-                severity: "error",
-                message: "Telegram direct send excepción (doc jugador)",
-                details: err instanceof Error ? err.message : String(err),
-              }),
-            });
-          } catch {
-            // ignore alert failures
-          }
-        }
-      }));
+        }));
+      }
     }
     if (PLAYER_DOCS_TELEGRAM_BOT_TOKEN && hasChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS)) {
       const viewerChats = parseChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS);
