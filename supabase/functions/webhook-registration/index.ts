@@ -9,6 +9,7 @@ const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
 const ACTION_BASE_URL = `${SUPABASE_URL}/functions/v1/admin-review-action`;
 const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
+const TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("TELEGRAM_VIEWER_CHAT_IDS");
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,6 +17,10 @@ const corsHeaders = {
 };
 
 const encoder = new TextEncoder();
+
+function hasChatIds(value?: string | null): value is string {
+  return Boolean(value && value.split(",").map((v) => v.trim()).filter(Boolean).length > 0);
+}
 
 async function signAction(payload: string): Promise<string> {
   const key = await crypto.subtle.importKey(
@@ -316,6 +321,23 @@ Deno.serve(async (req) => {
             message: `NUEVA INSCRIPCION RECIBIDA\n\nResponsable: ${managerName}\nCorreo: ${managerEmail}\nTelefono: ${managerPhone}\nEquipos: ${teams.length}\n\nACCIONES RAPIDAS:\n${teamActionsTelegram.join("\n\n")}`,
           }),
         });
+        if (hasChatIds(TELEGRAM_VIEWER_CHAT_IDS)) {
+          await fetch(n8nWebhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              eventType: "team-registration",
+              managerName,
+              managerEmail,
+              managerPhone,
+              teamsCount: teams.length,
+              teamSummaryLines,
+              adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
+              telegramButtons: [],
+              message: `NUEVA INSCRIPCION (SOLO LECTURA)\n\nResponsable: ${managerName}\nCorreo: ${managerEmail}\nTelefono: ${managerPhone}\nEquipos: ${teams.length}\n\nResumen:\n${teamSummaryLines.map((line) => `- ${line}`).join("\n")}`,
+            }),
+          });
+        }
         console.log('n8n webhook sent from webhook-registration');
       } catch (n8nError) {
         console.warn('n8n webhook failed (ignored):', n8nError);

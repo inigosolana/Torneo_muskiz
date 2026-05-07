@@ -9,8 +9,21 @@ const ADMIN_EMAIL = "torneomuskizbmplaya@gmail.com";
 const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 const ACTION_BASE_URL = `${SUPABASE_URL}/functions/v1/admin-review-action`;
 const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
+const TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("TELEGRAM_VIEWER_CHAT_IDS");
+const PLAYER_DOCS_TELEGRAM_BOT_TOKEN = Deno.env.get("PLAYER_DOCS_TELEGRAM_BOT_TOKEN");
+const PLAYER_DOCS_TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("PLAYER_DOCS_TELEGRAM_ADMIN_CHAT_IDS");
+const PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS");
 
 const encoder = new TextEncoder();
+
+function hasChatIds(value?: string | null): value is string {
+  return Boolean(value && value.split(",").map((v) => v.trim()).filter(Boolean).length > 0);
+}
+
+function parseChatIds(value?: string | null): number[] {
+  if (!value) return [];
+  return value.split(",").map((v) => Number(v.trim())).filter((n) => Number.isFinite(n));
+}
 
 async function signAction(payload: string): Promise<string> {
   const key = await crypto.subtle.importKey(
@@ -130,6 +143,55 @@ Deno.serve(async (req) => {
           message: messageText,
         }),
       });
+      if (hasChatIds(TELEGRAM_VIEWER_CHAT_IDS)) {
+        await fetch(n8nWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventType: "player-documents",
+            managerName: team?.manager_name ?? "Responsable",
+            managerEmail: team?.manager_email ?? "N/D",
+            managerPhone: team?.manager_phone ?? "N/D",
+            teamsCount: 0,
+            adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
+            telegramButtons: [],
+            message: `NUEVO DOCUMENTO PENDIENTE (SOLO LECTURA)\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nDocumentos:\n${docLinesTelegram.map((line) => line.replace(/Aprobar:.*\nDenegar:.*\n?/g, "")).join("\n\n")}`,
+          }),
+        });
+      }
+    }
+
+    // Optional second Telegram bot dedicated to player documents
+    if (PLAYER_DOCS_TELEGRAM_BOT_TOKEN && hasChatIds(PLAYER_DOCS_TELEGRAM_ADMIN_CHAT_IDS)) {
+      const docBotChats = parseChatIds(PLAYER_DOCS_TELEGRAM_ADMIN_CHAT_IDS);
+      const inline_keyboard = telegramButtons.map((btn) => [{ text: btn.text, url: btn.url }]);
+      for (const chatId of docBotChats) {
+        await fetch(`https://api.telegram.org/bot${PLAYER_DOCS_TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: messageText,
+            disable_web_page_preview: true,
+            reply_markup: inline_keyboard.length ? { inline_keyboard } : undefined,
+          }),
+        });
+      }
+    }
+    if (PLAYER_DOCS_TELEGRAM_BOT_TOKEN && hasChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS)) {
+      const viewerChats = parseChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS);
+      const readOnlyText = `NUEVO DOCUMENTO PENDIENTE (SOLO LECTURA)\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nDocumentos:\n${docLinesTelegram.map((line) => line.replace(/Aprobar:.*\nDenegar:.*\n?/g, "")).join("\n\n")}`;
+      for (const chatId of viewerChats) {
+        await fetch(`https://api.telegram.org/bot${PLAYER_DOCS_TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: readOnlyText,
+            disable_web_page_preview: true,
+          }),
+        });
+      }
     }
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });

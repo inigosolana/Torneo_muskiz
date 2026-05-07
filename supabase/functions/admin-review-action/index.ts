@@ -5,12 +5,28 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
 const N8N_WH_URL = Deno.env.get("N8N_WH_URL");
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
+const TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("TELEGRAM_VIEWER_CHAT_IDS");
 const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 const HANDLE_APPROVAL_URL = `${SUPABASE_URL}/functions/v1/handle-approval`;
 const HANDLE_REJECTION_URL = `${SUPABASE_URL}/functions/v1/handle-rejection`;
+const ADMIN_EMAIL = "torneomuskizbmplaya@gmail.com";
+const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 
 const encoder = new TextEncoder();
+
+function mergeChatIds(...values: Array<string | undefined>): string | null {
+  const unique = new Set<string>();
+  for (const value of values) {
+    if (!value) continue;
+    for (const id of value.split(",").map((v) => v.trim()).filter(Boolean)) {
+      unique.add(id);
+    }
+  }
+  const result = Array.from(unique);
+  return result.length > 0 ? result.join(",") : null;
+}
 
 function htmlResponse(html: string, status = 200) {
   return new Response(html, {
@@ -125,6 +141,79 @@ async function sendManagerEmail(action: "approve" | "reject", team: {
   }
 }
 
+async function sendAdminReceipt(action: "approve" | "reject", team: {
+  name?: string;
+  division?: string;
+  manager_name?: string;
+  manager_email?: string;
+}, rejectionReason?: string) {
+  if (!RESEND_API_KEY) return;
+  const actionLabel = action === "approve" ? "APROBADO" : "DENEGADO";
+  const reasonBlock = action === "reject" ? `<p><strong>Motivo:</strong> ${rejectionReason ?? "No informado"}</p>` : "";
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: FROM_EMAIL,
+        to: ADMIN_EMAIL,
+        subject: `Comprobante revisión equipo: ${actionLabel} - ${team.name ?? "Equipo"}`,
+        html: `
+          <div style="font-family:Segoe UI,Tahoma,sans-serif;max-width:620px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;padding:18px;">
+            <h2 style="margin:0 0 10px;">Comprobante de revisión</h2>
+            <p><strong>Resultado:</strong> ${actionLabel}</p>
+            <p><strong>Equipo:</strong> ${team.name ?? "N/D"}</p>
+            <p><strong>Categoría:</strong> ${team.division ?? "N/D"}</p>
+            <p><strong>Responsable:</strong> ${team.manager_name ?? "N/D"} (${team.manager_email ?? "N/D"})</p>
+            ${reasonBlock}
+          </div>
+        `,
+      }),
+    });
+  } catch {
+    // ignore admin receipt failures
+  }
+}
+
+async function sendTeamReviewTelegram(
+  supabase: ReturnType<typeof createClient>,
+  action: "approve" | "reject",
+  team: { name?: string; division?: string; manager_name?: string },
+) {
+  if (!N8N_WH_URL) return;
+  const capacity = await getCategoryCapacitySummary(supabase);
+  const categoryLine = capacity.find((c) => c.category === (team.division ?? "")) ??
+    { category: team.division ?? "N/D", remaining: 0, maxTeams: 0 };
+  const actionTitle = action === "approve" ? "EQUIPO APROBADO" : "EQUIPO DENEGADO";
+  const message = [
+    actionTitle,
+    "",
+    `Equipo: ${team.name ?? "N/D"}`,
+    `Categoría: ${team.division ?? "N/D"}`,
+    `Responsable: ${team.manager_name ?? "N/D"}`,
+    "",
+    `Plazas restantes en ${categoryLine.category}: ${categoryLine.remaining}/${categoryLine.maxTeams}`,
+    "(pendientes + aprobadas ocupan plaza)",
+  ].join("\n");
+
+  try {
+    await fetch(N8N_WH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventType: action === "approve" ? "team-approved" : "team-rejected",
+        adminChatIds: mergeChatIds(TELEGRAM_ADMIN_CHAT_IDS, TELEGRAM_VIEWER_CHAT_IDS),
+        message,
+      }),
+    });
+  } catch (notifyError) {
+    console.warn("No se pudo enviar resumen de plazas a Telegram:", notifyError);
+  }
+}
+
 async function sign(payload: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -216,7 +305,11 @@ Deno.serve(async (req) => {
 
   const expiresAt = Number(exp);
   if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
-    return redirectToAdmin("Enlace caducado", "La acción ya no está disponible, solicita un enlace nuevo.");
+    return htmlResponse(renderActionPage({
+      title: "Enlace caducado",
+      subtitle: "La acción ya no está disponible, solicita un enlace nuevo.",
+      success: false,
+    }), 410);
   }
 
   const payload = [entity, id, action, docType ?? "", exp].join("|");
@@ -323,6 +416,7 @@ Deno.serve(async (req) => {
           }), 400);
         }
         await sendManagerEmail("reject", currentTeam, rejectionReason);
+        await sendAdminReceipt("reject", currentTeam, rejectionReason);
         // Rechazado => pierde la plaza y debe volver a rellenar desde cero.
         // Eliminamos jugadores + equipo y, si procede, la cabecera de registro.
         const { error: playersDeleteError } = await supabase
@@ -376,37 +470,10 @@ Deno.serve(async (req) => {
           }));
         }
         await sendManagerEmail("approve", currentTeam);
+        await sendAdminReceipt("approve", currentTeam);
       }
 
-      if (action === "approve" && N8N_WH_URL) {
-        const capacity = await getCategoryCapacitySummary(supabase);
-        const updatedTeam = currentTeam;
-        const capacityLines = capacity.map((c) => `${c.category}: ${c.remaining}/${c.maxTeams} plazas libres`);
-        const message = [
-          "INSCRIPCION APROBADA",
-          "",
-          `Equipo: ${updatedTeam.name ?? "N/D"}`,
-          `Categoria: ${updatedTeam.division ?? "N/D"}`,
-          `Responsable: ${updatedTeam.manager_name ?? "N/D"}`,
-          "",
-          "PLAZAS DISPONIBLES POR CATEGORIA (pendientes + aprobadas ocupan plaza):",
-          ...capacityLines,
-        ].join("\n");
-
-        try {
-          await fetch(N8N_WH_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              eventType: "team-approved",
-              adminChatIds: TELEGRAM_ADMIN_CHAT_IDS,
-              message,
-            }),
-          });
-        } catch (notifyError) {
-          console.warn("No se pudo enviar resumen de plazas a Telegram:", notifyError);
-        }
-      }
+      await sendTeamReviewTelegram(supabase, action, currentTeam);
 
       return htmlResponse(renderActionPage({
         title: action === "approve" ? "Equipo aprobado" : "Equipo rechazado",
