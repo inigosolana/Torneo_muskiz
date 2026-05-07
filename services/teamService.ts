@@ -37,12 +37,14 @@ export const teamService = {
                 birthDate: p.birth_date,
                 number: p.number,
                 position: p.position,
+                role: (p.role as Player['role']) || 'PLAYER',
                 verified: p.verified,
                 dniStatus: p.dni_status,
                 insuranceStatus: p.insurance_status,
                 avatarUrl: p.avatar_url,
                 dniUrl: p.dni_url,
-                insuranceUrl: p.insurance_url
+                insuranceUrl: p.insurance_url,
+                signatureUrl: p.signature_url
             }))
         }));
     },
@@ -204,7 +206,10 @@ export const teamService = {
             })
             .eq('id', player.id);
 
-        if (error) console.error('Error updating player:', error);
+        if (error) {
+            console.error('Error updating player:', error);
+            throw new Error(error.message);
+        }
     },
 
     async deletePlayer(playerId: string): Promise<void> {

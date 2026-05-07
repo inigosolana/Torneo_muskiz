@@ -52,6 +52,7 @@ function renderActionPage(params: {
   success?: boolean;
   showForm?: boolean;
   formFieldsHtml?: string;
+  formActionUrl?: string;
   openInBrowserUrl?: string;
   urlHostMismatch?: { requestHost: string; expectedHost: string };
 }) {
@@ -61,6 +62,7 @@ function renderActionPage(params: {
     success = true,
     showForm = false,
     formFieldsHtml = "",
+    formActionUrl = "",
     openInBrowserUrl,
     urlHostMismatch,
   } = params;
@@ -99,7 +101,7 @@ function renderActionPage(params: {
       ${
         showForm
           ? `<p style="font-size:12px;color:#64748b;margin:0 0 12px;line-height:1.45;">Los avisos de consola «sandbox» / «Unsafe attempt» suelen ser del visor de Telegram o extensiones; el formulario no depende de JavaScript.</p>
-          <form method="POST" target="_blank" style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;">${formFieldsHtml}</form>`
+          <form method="POST" action="${formActionUrl ? escAttr(formActionUrl) : ""}" target="_blank" style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;">${formFieldsHtml}</form>`
           : `<div style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;color:#334155;">Puedes cerrar esta pestaña y volver a Telegram.</div>`
       }
     </div>
@@ -301,6 +303,7 @@ Deno.serve(async (req) => {
 
   const requestUrl = new URL(req.url);
   const fullPageUrl = requestUrl.href;
+  const formActionUrl = `${SUPABASE_URL}/functions/v1/admin-review-action`;
   let urlHostMismatch: { requestHost: string; expectedHost: string } | undefined;
   try {
     const configuredHost = new URL(SUPABASE_URL).hostname;
@@ -373,6 +376,7 @@ Deno.serve(async (req) => {
         subtitle: "Vas a aprobar esta inscripción. ¿Quieres continuar?",
         success: true,
         showForm: true,
+        formActionUrl,
         openInBrowserUrl: fullPageUrl,
         urlHostMismatch,
         formFieldsHtml: `
@@ -393,6 +397,7 @@ Deno.serve(async (req) => {
         subtitle: "Indica el motivo para enviarlo al responsable.",
         success: false,
         showForm: true,
+        formActionUrl,
         openInBrowserUrl: fullPageUrl,
         urlHostMismatch,
         formFieldsHtml: `
@@ -415,6 +420,7 @@ Deno.serve(async (req) => {
         subtitle: "Vas a actualizar el estado del documento del jugador.",
         success: action === "approve",
         showForm: true,
+        formActionUrl,
         openInBrowserUrl: fullPageUrl,
         urlHostMismatch,
         formFieldsHtml: `

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Team, Match, CategoryLimits, MatchReport, PlayerStat } from '../types';
+import { Team, Match, CategoryLimits, MatchReport, PlayerStat, Player } from '../types';
 import { generateBracketAI, generateSocialMediaPost } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
@@ -290,7 +290,17 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
     };
 
     // Main Navigation Tabs
-    const [activeTab, setActiveTab] = useState<'verification' | 'competition' | 'teams' | 'sponsors' | 'categories'>('verification');
+    const [activeTab, setActiveTab] = useState<'verification' | 'teamRoster' | 'competition' | 'teams' | 'sponsors' | 'categories'>('verification');
+    const [rosterSelectedTeamId, setRosterSelectedTeamId] = useState<string | null>(null);
+    const [rosterSearch, setRosterSearch] = useState('');
+    const [editingPlayerContext, setEditingPlayerContext] = useState<{ team: Team; player: Player } | null>(null);
+
+    useEffect(() => {
+        if (activeTab !== 'teamRoster') {
+            setRosterSelectedTeamId(null);
+        }
+    }, [activeTab]);
+
     // Competition Sub-tabs
     const [compSubTab, setCompSubTab] = useState<'calendar' | 'results' | 'standings'>('calendar');
 
@@ -310,6 +320,26 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
             return matchCategory && matchSex && matchPayment && matchStatus;
         });
     }, [teams, filterCategory, filterSex, filterPayment, filterStatus]);
+
+    const rosterTeamsFiltered = useMemo(() => {
+        let list = teams;
+        if (rosterSearch.trim()) {
+            const q = rosterSearch.toLowerCase();
+            list = list.filter(t =>
+                t.name.toLowerCase().includes(q) ||
+                t.division.toLowerCase().includes(q)
+            );
+        }
+        return list;
+    }, [teams, rosterSearch]);
+
+    const rosterDivisionOrder = useMemo(() => {
+        const fromDb = categories.map((c: { name: string }) => c.name);
+        const present = new Set(rosterTeamsFiltered.map(t => t.division));
+        const ordered = fromDb.filter((n: string) => present.has(n));
+        const extras = [...present].filter(d => !fromDb.includes(d)).sort();
+        return [...ordered, ...extras];
+    }, [categories, rosterTeamsFiltered]);
 
     // --- Standings Calculation (Moved up) ---
     const standings = useMemo(() => {
@@ -430,6 +460,20 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
             toast.success('Jugador eliminado correctamente');
         } catch (error) {
             toast.error('Error al eliminar el jugador');
+        }
+    };
+
+    const handleSavePlayerEdit = async () => {
+        if (!editingPlayerContext) return;
+        const { team, player } = editingPlayerContext;
+        try {
+            await teamService.updatePlayer(player);
+            const updatedPlayers = team.players.map(p => (p.id === player.id ? player : p));
+            onUpdateTeam({ ...team, players: updatedPlayers });
+            setEditingPlayerContext(null);
+            toast.success('Jugador actualizado');
+        } catch (e: any) {
+            toast.error(e?.message || 'Error al guardar jugador');
         }
     };
 
@@ -675,10 +719,16 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                         <span className="material-symbols-outlined text-lg">fact_check</span> Verificación
                     </button>
                     <button
+                        onClick={() => setActiveTab('teamRoster')}
+                        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'teamRoster' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
+                    >
+                        <span className="material-symbols-outlined text-lg">shield_person</span> Equipos
+                    </button>
+                    <button
                         onClick={() => setActiveTab('teams')}
                         className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'teams' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
                     >
-                        <span className="material-symbols-outlined text-lg">groups</span> Equipos y Pagos
+                        <span className="material-symbols-outlined text-lg">payments</span> Pagos e inscripciones
                     </button>
                     <button
                         onClick={() => setActiveTab('competition')}
@@ -874,6 +924,329 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                             </div>
                         </div>
                     )}
+
+                    {/* --- EQUIPOS (PLANTILLAS) TAB --- */}
+                    {activeTab === 'teamRoster' && (() => {
+                        const rosterTeam = rosterSelectedTeamId
+                            ? teams.find(t => t.id === rosterSelectedTeamId)
+                            : null;
+                        return (
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div>
+                                        <h3 className="font-bold text-lg text-slate-800">
+                                            {rosterTeam ? rosterTeam.name : 'Equipos por categoría'}
+                                        </h3>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            {rosterTeam
+                                                ? `${rosterTeam.division} · ${rosterTeam.players.length} jugador(es) inscritos`
+                                                : 'Elige un equipo para ver la plantilla y gestionar documentación.'}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {rosterTeam && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setRosterSelectedTeamId(null)}
+                                                className="text-xs font-bold px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center gap-1"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">arrow_back</span>
+                                                Volver
+                                            </button>
+                                        )}
+                                        {!rosterTeam && (
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar equipo o categoría..."
+                                                value={rosterSearch}
+                                                onChange={e => setRosterSearch(e.target.value)}
+                                                className="text-xs border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 outline-none focus:ring-1 focus:ring-primary min-w-[200px]"
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+
+                                {rosterTeam ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-slate-50 text-slate-500 font-medium uppercase text-xs">
+                                                <tr>
+                                                    <th className="px-6 py-4">Jugador</th>
+                                                    <th className="px-6 py-4">Rol</th>
+                                                    <th className="px-6 py-4">DNI</th>
+                                                    <th className="px-6 py-4">Seguro</th>
+                                                    <th className="px-6 py-4 text-right">Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {rosterTeam.players.map(player => (
+                                                    <tr
+                                                        key={player.id}
+                                                        className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
+                                                    >
+                                                        <td className="px-6 py-4 font-bold text-slate-800">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="size-8 rounded-full bg-slate-200 overflow-hidden shrink-0">
+                                                                    {player.avatarUrl && (
+                                                                        <img
+                                                                            src={player.avatarUrl}
+                                                                            alt=""
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                    )}
+                                                                </div>
+                                                                <div>
+                                                                    <div>{player.name}</div>
+                                                                    {player.surnames && (
+                                                                        <div className="text-xs font-normal text-slate-500">
+                                                                            {player.surnames}
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
+                                                                        #{player.number}
+                                                                        {player.position ? ` · ${player.position}` : ''}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-slate-600">
+                                                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                                                                {player.role}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                {player.dniUrl ? (
+                                                                    <a
+                                                                        href={player.dniUrl}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary rounded-lg text-[10px] font-bold hover:bg-primary/10 border border-primary/10"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-sm">
+                                                                            visibility
+                                                                        </span>{' '}
+                                                                        Ver
+                                                                    </a>
+                                                                ) : (
+                                                                    <span className="text-[10px] text-slate-400">Sin archivo</span>
+                                                                )}
+                                                                {player.dniStatus !== 'EMPTY' && player.dniStatus ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span
+                                                                            className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                                                                player.dniStatus === 'APPROVED'
+                                                                                    ? 'bg-green-100 text-green-700'
+                                                                                    : player.dniStatus === 'REJECTED'
+                                                                                      ? 'bg-red-100 text-red-700'
+                                                                                      : 'bg-amber-100 text-amber-700'
+                                                                            }`}
+                                                                        >
+                                                                            {player.dniStatus}
+                                                                        </span>
+                                                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    handleVerify(
+                                                                                        rosterTeam.id,
+                                                                                        player.id,
+                                                                                        'dni',
+                                                                                        'APPROVED'
+                                                                                    )
+                                                                                }
+                                                                                className="text-green-500 hover:bg-green-50 p-1 rounded"
+                                                                                title="Aprobar DNI"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-xs">
+                                                                                    check
+                                                                                </span>
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    handleVerify(
+                                                                                        rosterTeam.id,
+                                                                                        player.id,
+                                                                                        'dni',
+                                                                                        'REJECTED'
+                                                                                    )
+                                                                                }
+                                                                                className="text-red-500 hover:bg-red-50 p-1 rounded"
+                                                                                title="Rechazar DNI"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-xs">
+                                                                                    close
+                                                                                </span>
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-400">
+                                                                        Falta subir
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                {player.insuranceUrl ? (
+                                                                    <a
+                                                                        href={player.insuranceUrl}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary rounded-lg text-[10px] font-bold hover:bg-primary/10 border border-primary/10"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-sm">
+                                                                            visibility
+                                                                        </span>{' '}
+                                                                        Ver
+                                                                    </a>
+                                                                ) : (
+                                                                    <span className="text-[10px] text-slate-400">Sin archivo</span>
+                                                                )}
+                                                                {player.insuranceStatus !== 'EMPTY' && player.insuranceStatus ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span
+                                                                            className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                                                                player.insuranceStatus === 'APPROVED'
+                                                                                    ? 'bg-green-100 text-green-700'
+                                                                                    : player.insuranceStatus === 'REJECTED'
+                                                                                      ? 'bg-red-100 text-red-700'
+                                                                                      : 'bg-amber-100 text-amber-700'
+                                                                            }`}
+                                                                        >
+                                                                            {player.insuranceStatus}
+                                                                        </span>
+                                                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    handleVerify(
+                                                                                        rosterTeam.id,
+                                                                                        player.id,
+                                                                                        'insurance',
+                                                                                        'APPROVED'
+                                                                                    )
+                                                                                }
+                                                                                className="text-green-500 hover:bg-green-50 p-1 rounded"
+                                                                                title="Aprobar seguro"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-xs">
+                                                                                    check
+                                                                                </span>
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    handleVerify(
+                                                                                        rosterTeam.id,
+                                                                                        player.id,
+                                                                                        'insurance',
+                                                                                        'REJECTED'
+                                                                                    )
+                                                                                }
+                                                                                className="text-red-500 hover:bg-red-50 p-1 rounded"
+                                                                                title="Rechazar seguro"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-xs">
+                                                                                    close
+                                                                                </span>
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-400">
+                                                                        Falta subir
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right whitespace-nowrap">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setEditingPlayerContext({
+                                                                        team: rosterTeam,
+                                                                        player: { ...player },
+                                                                    })
+                                                                }
+                                                                className="p-2 text-slate-400 hover:text-primary transition-colors"
+                                                                title="Editar jugador"
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">edit</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    handleDeletePlayerAdmin(rosterTeam.id, player.id)
+                                                                }
+                                                                className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                                                                title="Eliminar jugador"
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">delete</span>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {rosterTeam.players.length === 0 && (
+                                                    <tr>
+                                                        <td
+                                                            colSpan={5}
+                                                            className="px-6 py-12 text-center text-slate-500 text-sm"
+                                                        >
+                                                            Este equipo aún no tiene jugadores inscritos.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="p-6 space-y-8 max-h-[70vh] overflow-y-auto">
+                                        {rosterDivisionOrder.map(div => {
+                                            const divTeams = rosterTeamsFiltered.filter(t => t.division === div);
+                                            if (divTeams.length === 0) return null;
+                                            return (
+                                                <div key={div}>
+                                                    <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-3">
+                                                        {div}
+                                                    </h4>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                        {divTeams.map(team => (
+                                                            <button
+                                                                key={team.id}
+                                                                type="button"
+                                                                onClick={() => setRosterSelectedTeamId(team.id)}
+                                                                className="text-left p-4 rounded-xl border border-slate-200 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                                                            >
+                                                                <p className="font-bold text-slate-800">{team.name}</p>
+                                                                <p className="text-xs text-slate-500 mt-1">
+                                                                    {team.city} · {team.players.length} jugador(es)
+                                                                </p>
+                                                                <p className="text-[10px] font-bold uppercase mt-2 text-slate-400">
+                                                                    {team.status === 'approved'
+                                                                        ? 'Aprobado'
+                                                                        : team.status === 'pending'
+                                                                          ? 'Pendiente'
+                                                                          : 'Rechazado'}
+                                                                </p>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {rosterTeamsFiltered.length === 0 && (
+                                            <p className="text-center text-slate-500 py-12 text-sm">
+                                                No hay equipos que coincidan con la búsqueda.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     {/* --- TEAMS TAB --- */}
                     {activeTab === 'teams' && (
@@ -1694,6 +2067,203 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                     </button>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- EDIT PLAYER MODAL --- */}
+            {editingPlayerContext && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-slate-800 to-slate-900 text-white">
+                            <h3 className="font-bold text-lg flex items-center gap-2">
+                                <span className="material-symbols-outlined">person_edit</span> Editar jugador
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setEditingPlayerContext(null)}
+                                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                            >
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+                            <p className="text-xs text-slate-500">
+                                Equipo:{' '}
+                                <span className="font-bold text-slate-700">{editingPlayerContext.team.name}</span>
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                                        Nombre
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editingPlayerContext.player.name}
+                                        onChange={e =>
+                                            setEditingPlayerContext({
+                                                ...editingPlayerContext,
+                                                player: { ...editingPlayerContext.player, name: e.target.value },
+                                            })
+                                        }
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                                    />
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                                        Apellidos
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editingPlayerContext.player.surnames ?? ''}
+                                        onChange={e =>
+                                            setEditingPlayerContext({
+                                                ...editingPlayerContext,
+                                                player: {
+                                                    ...editingPlayerContext.player,
+                                                    surnames: e.target.value,
+                                                },
+                                            })
+                                        }
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                                        DNI / NIF
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editingPlayerContext.player.dniNumber ?? ''}
+                                        onChange={e =>
+                                            setEditingPlayerContext({
+                                                ...editingPlayerContext,
+                                                player: {
+                                                    ...editingPlayerContext.player,
+                                                    dniNumber: e.target.value,
+                                                },
+                                            })
+                                        }
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                                        Fecha nacimiento
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={editingPlayerContext.player.birthDate ?? ''}
+                                        onChange={e =>
+                                            setEditingPlayerContext({
+                                                ...editingPlayerContext,
+                                                player: {
+                                                    ...editingPlayerContext.player,
+                                                    birthDate: e.target.value,
+                                                },
+                                            })
+                                        }
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                                        Dorsal
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={editingPlayerContext.player.number}
+                                        onChange={e =>
+                                            setEditingPlayerContext({
+                                                ...editingPlayerContext,
+                                                player: {
+                                                    ...editingPlayerContext.player,
+                                                    number: parseInt(e.target.value, 10) || 0,
+                                                },
+                                            })
+                                        }
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                                        Posición
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editingPlayerContext.player.position ?? ''}
+                                        onChange={e =>
+                                            setEditingPlayerContext({
+                                                ...editingPlayerContext,
+                                                player: {
+                                                    ...editingPlayerContext.player,
+                                                    position: e.target.value,
+                                                },
+                                            })
+                                        }
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Rol</label>
+                                    <select
+                                        value={editingPlayerContext.player.role}
+                                        onChange={e =>
+                                            setEditingPlayerContext({
+                                                ...editingPlayerContext,
+                                                player: {
+                                                    ...editingPlayerContext.player,
+                                                    role: e.target.value as Player['role'],
+                                                },
+                                            })
+                                        }
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                                    >
+                                        <option value="PLAYER">Jugador</option>
+                                        <option value="COACH">Entrenador</option>
+                                        <option value="OFFICIAL">Oficial</option>
+                                    </select>
+                                </div>
+                                <div className="flex items-center gap-2 pt-6">
+                                    <input
+                                        id="player-verified"
+                                        type="checkbox"
+                                        checked={editingPlayerContext.player.verified}
+                                        onChange={e =>
+                                            setEditingPlayerContext({
+                                                ...editingPlayerContext,
+                                                player: {
+                                                    ...editingPlayerContext.player,
+                                                    verified: e.target.checked,
+                                                },
+                                            })
+                                        }
+                                        className="rounded border-slate-300"
+                                    />
+                                    <label htmlFor="player-verified" className="text-sm text-slate-700">
+                                        Jugador verificado (general)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setEditingPlayerContext(null)}
+                                className="px-6 py-2.5 rounded-lg font-bold text-slate-500 hover:bg-slate-200 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSavePlayerEdit}
+                                className="px-6 py-2.5 rounded-lg font-bold bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-lg flex items-center gap-2"
+                            >
+                                <span className="material-symbols-outlined text-sm">save</span>
+                                Guardar
+                            </button>
                         </div>
                     </div>
                 </div>

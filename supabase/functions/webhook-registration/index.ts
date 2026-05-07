@@ -38,7 +38,14 @@ async function buildTeamActionUrl(teamId: string, action: "approve" | "reject"):
   const exp = String(Date.now() + 1000 * 60 * 60 * 24 * 2);
   const payload = ["team", teamId, action, "", exp].join("|");
   const token = await signAction(payload);
-  return `${ACTION_BASE_URL}?entity=team&id=${teamId}&action=${action}&exp=${exp}&token=${token}`;
+  const q = new URLSearchParams({
+    entity: "team",
+    id: teamId,
+    action,
+    exp,
+    token,
+  });
+  return `${ACTION_BASE_URL}?${q.toString()}`;
 }
 
 Deno.serve(async (req) => {

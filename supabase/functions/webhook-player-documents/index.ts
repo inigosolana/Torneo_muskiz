@@ -37,11 +37,30 @@ async function signAction(payload: string): Promise<string> {
   return btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+function escHtmlTelegram(s: string): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escUrlAttr(s: string): string {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 async function buildDocActionUrl(playerId: string, docType: "dni" | "insurance", action: "approve" | "reject"): Promise<string> {
   const exp = String(Date.now() + 1000 * 60 * 60 * 24 * 2);
   const payload = ["player-doc", playerId, action, docType, exp].join("|");
   const token = await signAction(payload);
-  return `${ACTION_BASE_URL}?entity=player-doc&id=${playerId}&docType=${docType}&action=${action}&exp=${exp}&token=${token}`;
+  const q = new URLSearchParams({
+    entity: "player-doc",
+    id: playerId,
+    docType,
+    action,
+    exp,
+    token,
+  });
+  return `${ACTION_BASE_URL}?${q.toString()}`;
 }
 
 Deno.serve(async (req) => {
@@ -109,6 +128,51 @@ Deno.serve(async (req) => {
       ? `NUEVO JUGADOR REGISTRADO\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nEstado DNI: ${record.dni_status ?? "EMPTY"}\nEstado Seguro: ${record.insurance_status ?? "EMPTY"}`
       : `NUEVO DOCUMENTO PENDIENTE\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nACCIONES:\n${docLinesTelegram.join("\n\n")}`;
 
+    const messageHtml = isNewPlayer
+      ? [
+        "<b>👤 Nuevo jugador registrado</b>",
+        "",
+        `<b>Jugador:</b> ${escHtmlTelegram(record.name)}`,
+        `<b>Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
+        `<b>Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
+        `<b>Correo:</b> <code>${escHtmlTelegram(team?.manager_email ?? "N/D")}</code>`,
+        "",
+        `🪪 <b>DNI:</b> ${escHtmlTelegram(record.dni_status ?? "EMPTY")}`,
+        `🛡️ <b>Seguro:</b> ${escHtmlTelegram(record.insurance_status ?? "EMPTY")}`,
+      ].join("\n")
+      : [
+        "<b>📄 Documentación pendiente de revisión</b>",
+        "",
+        `<b>Jugador:</b> ${escHtmlTelegram(record.name)}`,
+        `<b>Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
+        `<b>Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
+        `<b>Correo:</b> <code>${escHtmlTelegram(team?.manager_email ?? "N/D")}</code>`,
+        ...(becamePendingDni
+          ? [
+            "",
+            "━━━━━━━━━━━━━━━━",
+            "",
+            "<b>🪪 DNI</b>",
+            record.dni_url
+              ? `<a href="${escUrlAttr(record.dni_url)}">📎 Abrir documento DNI</a>`
+              : "<i>Sin archivo adjunto</i>",
+            "<i>Botones: aprobar / denegar este documento.</i>",
+          ]
+          : []),
+        ...(becamePendingInsurance
+          ? [
+            "",
+            "━━━━━━━━━━━━━━━━",
+            "",
+            "<b>🛡️ Seguro médico / federativo</b>",
+            record.insurance_url
+              ? `<a href="${escUrlAttr(record.insurance_url)}">📎 Abrir documento seguro</a>`
+              : "<i>Sin archivo adjunto</i>",
+            "<i>Botones: aprobar / denegar este documento.</i>",
+          ]
+          : []),
+      ].join("\n");
+
     await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -172,14 +236,18 @@ Deno.serve(async (req) => {
     // Optional second Telegram bot dedicated to player documents
     if (PLAYER_DOCS_TELEGRAM_BOT_TOKEN && hasChatIds(PLAYER_DOCS_TELEGRAM_ADMIN_CHAT_IDS)) {
       const docBotChats = parseChatIds(PLAYER_DOCS_TELEGRAM_ADMIN_CHAT_IDS);
-      const inline_keyboard = telegramButtons.map((btn) => [{ text: btn.text, url: btn.url }]);
+      const inline_keyboard: { text: string; url: string }[][] = [];
+      for (let i = 0; i < telegramButtons.length; i += 2) {
+        inline_keyboard.push(telegramButtons.slice(i, i + 2).map((btn) => ({ text: btn.text, url: btn.url })));
+      }
       for (const chatId of docBotChats) {
         await fetch(`https://api.telegram.org/bot${PLAYER_DOCS_TELEGRAM_BOT_TOKEN}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chat_id: chatId,
-            text: messageText,
+            text: messageHtml,
+            parse_mode: "HTML",
             disable_web_page_preview: true,
             reply_markup: inline_keyboard.length ? { inline_keyboard } : undefined,
           }),
@@ -188,16 +256,40 @@ Deno.serve(async (req) => {
     }
     if (PLAYER_DOCS_TELEGRAM_BOT_TOKEN && hasChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS)) {
       const viewerChats = parseChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS);
-      const readOnlyText = isNewPlayer
-        ? `NUEVO JUGADOR REGISTRADO (SOLO LECTURA)\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nEstado DNI: ${record.dni_status ?? "EMPTY"}\nEstado Seguro: ${record.insurance_status ?? "EMPTY"}`
-        : `NUEVO DOCUMENTO PENDIENTE (SOLO LECTURA)\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nDocumentos:\n${docLinesTelegram.map((line) => line.replace(/Aprobar:.*\nDenegar:.*\n?/g, "")).join("\n\n")}`;
+      const readOnlyHtml = isNewPlayer
+        ? [
+          "<b>👤 Nuevo jugador</b> <i>(solo lectura)</i>",
+          "",
+          `<b>Jugador:</b> ${escHtmlTelegram(record.name)}`,
+          `<b>Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
+          `<b>Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
+          `<b>Correo:</b> <code>${escHtmlTelegram(team?.manager_email ?? "N/D")}</code>`,
+          "",
+          `🪪 DNI: <b>${escHtmlTelegram(record.dni_status ?? "EMPTY")}</b>`,
+          `🛡️ Seguro: <b>${escHtmlTelegram(record.insurance_status ?? "EMPTY")}</b>`,
+        ].join("\n")
+        : [
+          "<b>📄 Documentación</b> <i>(solo lectura)</i>",
+          "",
+          `<b>Jugador:</b> ${escHtmlTelegram(record.name)}`,
+          `<b>Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
+          `<b>Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
+          `<b>Correo:</b> <code>${escHtmlTelegram(team?.manager_email ?? "N/D")}</code>`,
+          ...(becamePendingDni && record.dni_url
+            ? ["", `<b>🪪 DNI</b> — <a href="${escUrlAttr(record.dni_url)}">ver archivo</a>`]
+            : []),
+          ...(becamePendingInsurance && record.insurance_url
+            ? ["", `<b>🛡️ Seguro</b> — <a href="${escUrlAttr(record.insurance_url)}">ver archivo</a>`]
+            : []),
+        ].join("\n");
       for (const chatId of viewerChats) {
         await fetch(`https://api.telegram.org/bot${PLAYER_DOCS_TELEGRAM_BOT_TOKEN}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chat_id: chatId,
-            text: readOnlyText,
+            text: readOnlyHtml,
+            parse_mode: "HTML",
             disable_web_page_preview: true,
           }),
         });

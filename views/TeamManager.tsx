@@ -341,7 +341,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                         </button>
                                         <label className="flex items-center gap-1 px-3 py-2 bg-slate-50 dark:bg-white/5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors cursor-pointer">
                                             <span className="material-symbols-outlined text-sm">upload_file</span> CSV
-                                            <input type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+                                            <input type="file" name="csvImport" id="csv-import-roster" accept=".csv" className="hidden" onChange={handleCsvUpload} />
                                         </label>
                                     </div>
                                 </div>
@@ -387,8 +387,8 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                         </div>
                                                     </div>
 
-                                                    {/* INSURANCE */}
-                                                    {player.role === 'PLAYER' && (
+                                                    {/* INSURANCE — tras recarga, role debe venir del API; si falta, asumimos jugador */}
+                                                    {(player.role ?? 'PLAYER') === 'PLAYER' && (
                                                         <div className="flex flex-col items-center gap-1">
                                                             <button 
                                                                 onClick={() => handleDocumentUpload(player.id, 'insurance')}
@@ -426,7 +426,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                 {canAddMore && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className={`relative border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center transition-all ${isAnalyzing ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary hover:bg-slate-50'}`}>
-                                            <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} />
+                                            <input type="file" name="dniScan" id="dni-scan-upload" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} />
                                             {isAnalyzing ? (
                                                 <div className="animate-pulse flex flex-col items-center gap-2">
                                                     <span className="material-symbols-outlined text-3xl text-primary animate-spin">autorenew</span>
