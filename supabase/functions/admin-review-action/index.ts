@@ -18,9 +18,10 @@ const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 /** Cabeceras para invocar otras Edge Functions del mismo proyecto (JWT verification activada). */
 function internalSupabaseFnHeaders(extra?: Record<string, string>): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json", ...extra };
-  if (SUPABASE_SERVICE_ROLE_KEY) {
-    h.Authorization = `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`;
-    h.apikey = SUPABASE_SERVICE_ROLE_KEY;
+  const key = SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (key) {
+    h.Authorization = `Bearer ${key}`;
+    h.apikey = key;
   }
   return h;
 }
@@ -776,7 +777,7 @@ Deno.serve(async (req) => {
   // Ejecutamos las acciones firmadas en un solo GET tanto para team como player-doc.
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.trim());
 
     if (entity === "team") {
       if (action !== "approve" && action !== "reject" && action !== "undo") {
