@@ -38,7 +38,7 @@ function internalFnHeaders(): Record<string, string> {
 async function sendOpsAlert(message: string, details: string, severity: "warning" | "error" = "error") {
   if (!SUPABASE_URL) return;
   try {
-    await fetch(`${SUPABASE_URL}/functions/v1/notify-ops-alert`, {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-ops-alert`, {
       method: "POST",
       headers: internalFnHeaders(),
       body: JSON.stringify({
@@ -48,8 +48,12 @@ async function sendOpsAlert(message: string, details: string, severity: "warning
         details: details.slice(0, 1500),
       }),
     });
-  } catch {
-    // no bloquear el webhook si el alert falla
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      console.error(`[sendOpsAlert] notify-ops-alert http=${res.status} body=${t.slice(0, 400)} msg=${message}`);
+    }
+  } catch (e) {
+    console.error("[sendOpsAlert] notify-ops-alert fetch error", e);
   }
 }
 
@@ -602,6 +606,22 @@ Deno.serve(async (req) => {
   }
 
   try {
+    if (req.method === "GET") {
+      const base = SUPABASE_URL?.replace(/\/$/, "") ?? "";
+      const webhookUrl = base ? `${base}/functions/v1/telegram-player-docs-bot-webhook` : null;
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          function: "telegram-player-docs-bot-webhook",
+          botTokenConfigured: Boolean(Deno.env.get("PLAYER_DOCS_TELEGRAM_BOT_TOKEN")?.trim()),
+          setWebhookUrl: webhookUrl,
+          hint_es:
+            "Registra esta URL con setWebhook en el MISMO bot que envía los avisos de DNI/seguro (PLAYER_DOCS_TELEGRAM_BOT_TOKEN). Si no, los botones inline no ejecutan nada.",
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     if (!SUPABASE_URL || !BOT_TOKEN) {
       if (SUPABASE_URL && !BOT_TOKEN) {
         void sendOpsAlert(
@@ -624,8 +644,12 @@ Deno.serve(async (req) => {
 
     const update = await req.json();
 
-    // Botones inline (aprobar/denegar equipo o documento) -> ejecutar dentro de Telegram.
+    // Botones inline (DNI/seguro) -> ejecutar dentro de Telegram.
     if (update?.callback_query) {
+      console.log(
+        "[telegram-player-docs-bot-webhook] callback",
+        String(update.callback_query?.data ?? "").slice(0, 120),
+      );
       await handleCallbackQuery(update.callback_query);
       return new Response(JSON.stringify({ ok: true, type: "callback_query" }), {
         status: 200,

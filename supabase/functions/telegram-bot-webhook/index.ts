@@ -37,7 +37,7 @@ function internalFnHeaders(): Record<string, string> {
 async function sendOpsAlert(message: string, details: string, severity: "warning" | "error" = "error") {
   if (!SUPABASE_URL) return;
   try {
-    await fetch(`${SUPABASE_URL}/functions/v1/notify-ops-alert`, {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-ops-alert`, {
       method: "POST",
       headers: internalFnHeaders(),
       body: JSON.stringify({
@@ -47,8 +47,12 @@ async function sendOpsAlert(message: string, details: string, severity: "warning
         details: details.slice(0, 1500),
       }),
     });
-  } catch {
-    // no bloquear el webhook si el alert falla
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      console.error(`[sendOpsAlert] notify-ops-alert http=${res.status} body=${t.slice(0, 400)} msg=${message}`);
+    }
+  } catch (e) {
+    console.error("[sendOpsAlert] notify-ops-alert fetch error", e);
   }
 }
 
