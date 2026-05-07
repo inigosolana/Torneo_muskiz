@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-const FROM_EMAIL = "admin@torneomuskizbmplaya.es";
+const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,6 +17,20 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.log('[handle-approval] Request received');
+
+    if (!RESEND_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('[handle-approval] Missing environment variables', {
+        hasResend: Boolean(RESEND_API_KEY),
+        hasSupabaseUrl: Boolean(SUPABASE_URL),
+        hasServiceRole: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+      });
+      return new Response(JSON.stringify({ error: 'Faltan variables de entorno requeridas.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { teamName, managerName, managerEmail, division } = await req.json();
 
     if (!managerEmail || !teamName) {
@@ -26,7 +40,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseAdmin = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // 1. Find the Auth user created during registration
     const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
@@ -61,12 +75,16 @@ Deno.serve(async (req) => {
       email: managerEmail,
       options: { redirectTo: 'https://torneomuskizbmplaya.es/manager-login' }
     });
+    if (linkError) {
+      console.error('[handle-approval] Error generating magic link', linkError);
+    }
 
     const magicLink = linkData?.properties?.action_link || 'https://torneomuskizbmplaya.es/manager-login';
+    console.log('[handle-approval] Magic link prepared', { managerEmail, hasMagicLink: Boolean(linkData?.properties?.action_link) });
 
     // 5. Send approval email with credentials
     const emailBody = {
-      from: `Torneo Muskiz <${FROM_EMAIL}>`,
+      from: FROM_EMAIL,
       to: managerEmail,
       subject: `✅ ¡Inscripción Aprobada! — ${teamName} — II Torneo Muskiz`,
       html: `
@@ -139,6 +157,15 @@ Deno.serve(async (req) => {
     });
 
     const resData = await res.json();
+    if (!res.ok) {
+      console.error('[handle-approval] Resend error', { status: res.status, resData });
+      return new Response(JSON.stringify({ error: 'Error enviando correo de aprobación.', details: resData }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 502,
+      });
+    }
+
+    console.log('[handle-approval] Approval email sent successfully', { managerEmail, teamName });
 
     return new Response(JSON.stringify({ success: true, email: resData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

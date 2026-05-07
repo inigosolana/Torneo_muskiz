@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const ADMIN_EMAIL = "torneomuskizbmplaya@gmail.com";
-const FROM_EMAIL = "admin@torneomuskizbmplaya.es";
+const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,6 +16,16 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.log("[notify-registration] Request received");
+
+    if (!RESEND_API_KEY) {
+      console.error("[notify-registration] Missing RESEND_API_KEY environment variable");
+      return new Response(JSON.stringify({ error: "Falta configuración de correo (RESEND_API_KEY)." }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { teams, managerName, managerEmail } = await req.json();
 
     if (!managerEmail || !teams || teams.length === 0) {
@@ -37,7 +47,7 @@ Deno.serve(async (req) => {
 
     // --- 1. EMAIL AL RESPONSABLE (Comprobante) ---
     const managerEmailBody = {
-      from: `Torneo Muskiz <${FROM_EMAIL}>`,
+      from: FROM_EMAIL,
       to: managerEmail,
       subject: `📋 Inscripción Recibida — II Torneo Muskiz Beach Handball`,
       html: `
@@ -92,7 +102,7 @@ Deno.serve(async (req) => {
     ).join(', ');
 
     const adminEmailBody = {
-      from: `Torneo Muskiz <${FROM_EMAIL}>`,
+      from: FROM_EMAIL,
       to: ADMIN_EMAIL,
       subject: `🚨 NUEVA INSCRIPCIÓN: ${managerName} — ${teams.length} equipo(s)`,
       html: `
@@ -128,6 +138,8 @@ Deno.serve(async (req) => {
       `,
     };
 
+    console.log(`[notify-registration] Sending emails in parallel. Manager: ${managerEmail}, Admin: ${ADMIN_EMAIL}, Teams: ${teams.length}`);
+
     // Send both emails in parallel
     const [managerRes, adminRes] = await Promise.all([
       fetch('https://api.resend.com/emails', {
@@ -144,6 +156,59 @@ Deno.serve(async (req) => {
 
     const managerResult = await managerRes.json();
     const adminResult = await adminRes.json();
+
+    if (!managerRes.ok || !adminRes.ok) {
+      console.error("[notify-registration] Resend error", {
+        managerStatus: managerRes.status,
+        managerResult,
+        adminStatus: adminRes.status,
+        adminResult,
+      });
+
+      return new Response(JSON.stringify({
+        error: "Error enviando correos con Resend.",
+        managerStatus: managerRes.status,
+        adminStatus: adminRes.status,
+        managerResult,
+        adminResult,
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log("[notify-registration] Emails sent successfully");
+
+    const n8nWebhookUrl = Deno.env.get('N8N_WH_URL');
+    if (n8nWebhookUrl) {
+      try {
+        console.log("[notify-registration] Triggering n8n WhatsApp webhook");
+        const n8nRes = await fetch(n8nWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            managerName,
+            teamsCount: teams.length,
+            message: "¡Nueva inscripción recibida!",
+          }),
+        });
+
+        if (!n8nRes.ok) {
+          const n8nBody = await n8nRes.text();
+          console.warn("[notify-registration] n8n webhook responded with non-2xx", {
+            status: n8nRes.status,
+            body: n8nBody,
+          });
+        } else {
+          console.log("[notify-registration] n8n webhook delivered successfully");
+        }
+      } catch (n8nError) {
+        // n8n failures must not fail registration notifications.
+        console.warn("[notify-registration] n8n webhook failed (ignored)", n8nError);
+      }
+    } else {
+      console.warn("[notify-registration] N8N_WH_URL not configured, skipping WhatsApp webhook");
+    }
 
     return new Response(JSON.stringify({ 
       success: true, 

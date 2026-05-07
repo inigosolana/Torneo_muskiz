@@ -48,6 +48,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               className="flex items-center gap-4 cursor-pointer group"
             >
               <div className="flex items-center gap-2">
+                <img src="/logo_torneo.png" alt="Muskiz Beach Cup" className="h-10 w-auto object-contain transition-transform group-hover:scale-105" />
                 <img src="/logo_muskiz.png" alt="Muskiz Eskubaloia" className="h-10 w-auto object-contain transition-transform group-hover:scale-105" />
                 <img src="/logo_kolosaurios.png" alt="Kolosaurios" className="h-10 w-auto object-contain transition-transform group-hover:scale-105" />
               </div>

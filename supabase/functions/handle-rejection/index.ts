@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-const FROM_EMAIL = "admin@torneomuskizbmplaya.es";
+const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,6 +14,16 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.log('[handle-rejection] Request received');
+
+    if (!RESEND_API_KEY) {
+      console.error('[handle-rejection] Missing RESEND_API_KEY environment variable');
+      return new Response(JSON.stringify({ error: 'Falta configuración de correo (RESEND_API_KEY).' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { teamName, managerName, managerEmail, division, rejectionReason } = await req.json();
 
     if (!managerEmail || !teamName || !rejectionReason) {
@@ -24,7 +34,7 @@ Deno.serve(async (req) => {
     }
 
     const emailBody = {
-      from: `Torneo Muskiz <${FROM_EMAIL}>`,
+      from: FROM_EMAIL,
       to: managerEmail,
       subject: `❌ Inscripción Declinada — ${teamName} — II Torneo Muskiz`,
       html: `
@@ -91,6 +101,19 @@ Deno.serve(async (req) => {
     });
 
     const resData = await res.json();
+    if (!res.ok) {
+      console.error('[handle-rejection] Resend error', { status: res.status, resData });
+      return new Response(JSON.stringify({ error: 'Error enviando correo de rechazo.', details: resData }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 502,
+      });
+    }
+
+    console.log('[handle-rejection] Rejection email sent successfully', {
+      managerEmail,
+      teamName,
+      hasReason: Boolean(rejectionReason),
+    });
 
     return new Response(JSON.stringify({ success: true, email: resData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
