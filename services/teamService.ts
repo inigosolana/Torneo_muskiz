@@ -128,7 +128,10 @@ export const teamService = {
             })
             .eq('id', team.id);
 
-        if (error) console.error('Error updating team:', error);
+        if (error) {
+            console.error('Error updating team:', error);
+            throw new Error(error.message);
+        }
     },
 
     async deleteTeam(teamId: string): Promise<void> {

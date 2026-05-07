@@ -16,6 +16,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     const navigate = useNavigate();
     const [selectedTeamId, setSelectedTeamId] = useState<string>(teams.length > 0 ? teams[0].id : '');
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [isUploadingTeamLogo, setIsUploadingTeamLogo] = useState(false);
 
     useEffect(() => {
         if (teams.length > 0 && !selectedTeamId) {
@@ -268,6 +269,40 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         reader.readAsText(file);
     };
 
+    const handleTeamLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+
+        const ok = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        if (!ok.includes(file.type)) {
+            toast.error('Usa una imagen JPG, PNG, WebP o GIF');
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            toast.error('El escudo debe pesar como máximo 2 MB');
+            return;
+        }
+
+        setIsUploadingTeamLogo(true);
+        const tid = toast.loading('Subiendo escudo...');
+        try {
+            const ext = file.name.split('.').pop() || 'png';
+            const path = `team-logos/${selectedTeam.id}/logo_${Date.now()}.${ext}`;
+            const { error: uploadError } = await supabase.storage.from('public-assets').upload(path, file);
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage.from('public-assets').getPublicUrl(path);
+            await onUpdateTeam({ ...selectedTeam, logoUrl: publicUrl });
+            toast.success('Escudo del equipo actualizado', { id: tid });
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            toast.error(`No se pudo subir el escudo: ${msg}`, { id: tid });
+        } finally {
+            setIsUploadingTeamLogo(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-background-dark p-6 lg:p-12">
             <div className="max-w-6xl mx-auto space-y-8">
@@ -287,17 +322,43 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                         <button onClick={() => navigate('/registration')} className="text-primary font-bold hover:underline text-sm">+ Nuevo Equipo</button>
                     </div>
 
-                    <div className="flex flex-col items-center">
-                        <div className="size-20 rounded-full bg-white dark:bg-surface-dark p-1 shadow-lg border border-slate-100 dark:border-white/10 overflow-hidden group relative">
+                    <div className="flex flex-col items-center gap-1">
+                        <label className="relative size-20 rounded-full bg-white dark:bg-surface-dark p-1 shadow-lg border border-slate-100 dark:border-white/10 overflow-hidden group cursor-pointer ring-offset-2 ring-offset-slate-50 dark:ring-offset-background-dark hover:ring-2 hover:ring-primary/40 transition-all">
                             {selectedTeam.logoUrl ? (
-                                <img src={selectedTeam.logoUrl} className="w-full h-full object-contain" alt="Logo" />
+                                <img src={selectedTeam.logoUrl} className="w-full h-full object-contain" alt="Logo del equipo" />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-slate-300">
                                     <span className="material-symbols-outlined text-4xl">shield</span>
                                 </div>
                             )}
-                        </div>
-                        <span className="text-[10px] font-black text-slate-400 mt-2 uppercase tracking-widest">Logo Equipo</span>
+                            <div
+                                className={`absolute inset-0 flex flex-col items-center justify-center bg-slate-900/55 text-white transition-opacity ${
+                                    isUploadingTeamLogo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                }`}
+                            >
+                                {isUploadingTeamLogo ? (
+                                    <span className="material-symbols-outlined text-2xl animate-spin">progress_activity</span>
+                                ) : (
+                                    <>
+                                        <span className="material-symbols-outlined text-xl">add_a_photo</span>
+                                        <span className="text-[8px] font-bold uppercase mt-0.5 px-1 text-center leading-tight">Cambiar</span>
+                                    </>
+                                )}
+                            </div>
+                            <input
+                                type="file"
+                                name="teamLogo"
+                                id="team-logo-upload"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                className="sr-only"
+                                disabled={isUploadingTeamLogo}
+                                onChange={handleTeamLogoUpload}
+                            />
+                        </label>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logo Equipo</span>
+                        <span className="text-[9px] text-slate-500 dark:text-slate-400 max-w-[140px] text-center leading-tight">
+                            Pulsa el escudo para subir imagen (máx. 2 MB)
+                        </span>
                     </div>
                 </div>
 

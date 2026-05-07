@@ -174,8 +174,14 @@ const App: React.FC = () => {
   };
 
   const updateTeam = async (updatedTeam: Team) => {
-    await teamService.updateTeam(updatedTeam);
-    setTeams(prev => prev.map(t => t.id === updatedTeam.id ? updatedTeam : t));
+    try {
+      await teamService.updateTeam(updatedTeam);
+      setTeams(prev => prev.map(t => t.id === updatedTeam.id ? updatedTeam : t));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al guardar el equipo';
+      toast.error(msg);
+      throw e;
+    }
   };
 
   const updateMatches = async (newMatches: Match[]) => {
