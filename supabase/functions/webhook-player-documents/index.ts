@@ -44,10 +44,6 @@ function escHtmlTelegram(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function escUrlAttr(s: string): string {
-  return String(s ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
-
 async function buildDocActionUrl(playerId: string, docType: "dni" | "insurance", action: "approve" | "reject"): Promise<string> {
   const exp = String(Date.now() + 1000 * 60 * 60 * 24 * 2);
   const payload = ["player-doc", playerId, action, docType, exp].join("|");
@@ -86,9 +82,21 @@ Deno.serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { data: team } = await supabase
       .from("teams")
-      .select("name, manager_name, manager_email")
+      .select("name, manager_name, manager_email, registration_id")
       .eq("id", record.team_id)
       .single();
+
+    let managerPhoneDisplay = "N/D";
+    if (team?.registration_id) {
+      const { data: reg } = await supabase
+        .from("registrations")
+        .select("manager_phone")
+        .eq("id", team.registration_id)
+        .maybeSingle();
+      if (reg?.manager_phone && String(reg.manager_phone).trim()) {
+        managerPhoneDisplay = String(reg.manager_phone).trim();
+      }
+    }
 
     const docSections: string[] = [];
     const docLinesTelegram: string[] = [];
@@ -104,9 +112,9 @@ Deno.serve(async (req) => {
         </div>
       `);
       docLinesTelegram.push(`DNI\nAprobar: ${approve}\nDenegar: ${reject}\nDocumento: ${record.dni_url || "No adjunto"}`);
+      if (record.dni_url) telegramButtons.push({ text: "Ver DNI", url: record.dni_url });
       telegramButtons.push({ text: "Aprobar DNI", url: approve });
       telegramButtons.push({ text: "Denegar DNI", url: reject });
-      if (record.dni_url) telegramButtons.push({ text: "Ver DNI", url: record.dni_url });
     }
     if (becamePendingInsurance) {
       const approve = await buildDocActionUrl(record.id, "insurance", "approve");
@@ -119,58 +127,52 @@ Deno.serve(async (req) => {
         </div>
       `);
       docLinesTelegram.push(`SEGURO\nAprobar: ${approve}\nDenegar: ${reject}\nDocumento: ${record.insurance_url || "No adjunto"}`);
+      if (record.insurance_url) telegramButtons.push({ text: "Ver seguro", url: record.insurance_url });
       telegramButtons.push({ text: "Aprobar seguro", url: approve });
       telegramButtons.push({ text: "Denegar seguro", url: reject });
-      if (record.insurance_url) telegramButtons.push({ text: "Ver seguro", url: record.insurance_url });
     }
 
     const messageText = isNewPlayer
       ? `NUEVO JUGADOR REGISTRADO\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nEstado DNI: ${record.dni_status ?? "EMPTY"}\nEstado Seguro: ${record.insurance_status ?? "EMPTY"}`
       : `NUEVO DOCUMENTO PENDIENTE\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nACCIONES:\n${docLinesTelegram.join("\n\n")}`;
 
+    const phoneLine = managerPhoneDisplay === "N/D"
+      ? "N/D"
+      : escHtmlTelegram(managerPhoneDisplay);
+
+    /** Tarjeta corta tipo panel admin: sin URLs largas (van en los botones). */
     const messageHtml = isNewPlayer
       ? [
-        "<b>👤 Nuevo jugador registrado</b>",
+        "<b>📄 DOCUMENTACIÓN DE JUGADOR</b>",
+        "<i>Nuevo jugador en plantilla</i>",
         "",
-        `<b>Jugador:</b> ${escHtmlTelegram(record.name)}`,
-        `<b>Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
-        `<b>Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
-        `<b>Correo:</b> <code>${escHtmlTelegram(team?.manager_email ?? "N/D")}</code>`,
+        `<b>👤 Jugador:</b> ${escHtmlTelegram(record.name)}`,
+        `<b>🏐 Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
+        `<b>👔 Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
+        `<b>📧 Correo:</b> ${escHtmlTelegram(team?.manager_email ?? "N/D")}`,
+        `<b>📱 Teléfono:</b> ${phoneLine}`,
         "",
         `🪪 <b>DNI:</b> ${escHtmlTelegram(record.dni_status ?? "EMPTY")}`,
         `🛡️ <b>Seguro:</b> ${escHtmlTelegram(record.insurance_status ?? "EMPTY")}`,
+        "",
+        "<i>Pulsa los botones si hay documentos pendientes de revisión.</i>",
       ].join("\n")
       : [
-        "<b>📄 Documentación pendiente de revisión</b>",
+        "<b>📄 DOCUMENTACIÓN DE JUGADOR</b>",
+        "<i>Pendiente de revisión</i>",
         "",
-        `<b>Jugador:</b> ${escHtmlTelegram(record.name)}`,
-        `<b>Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
-        `<b>Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
-        `<b>Correo:</b> <code>${escHtmlTelegram(team?.manager_email ?? "N/D")}</code>`,
-        ...(becamePendingDni
-          ? [
-            "",
-            "━━━━━━━━━━━━━━━━",
-            "",
-            "<b>🪪 DNI</b>",
-            record.dni_url
-              ? `<a href="${escUrlAttr(record.dni_url)}">📎 Abrir documento DNI</a>`
-              : "<i>Sin archivo adjunto</i>",
-            "<i>Botones: aprobar / denegar este documento.</i>",
-          ]
-          : []),
+        `<b>👤 Jugador:</b> ${escHtmlTelegram(record.name)}`,
+        `<b>🏐 Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
+        `<b>👔 Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
+        `<b>📧 Correo:</b> ${escHtmlTelegram(team?.manager_email ?? "N/D")}`,
+        `<b>📱 Teléfono:</b> ${phoneLine}`,
+        "",
+        ...(becamePendingDni ? [`🪪 <b>DNI</b> · <code>PENDING</code> · usa los botones de abajo.`] : []),
         ...(becamePendingInsurance
-          ? [
-            "",
-            "━━━━━━━━━━━━━━━━",
-            "",
-            "<b>🛡️ Seguro médico / federativo</b>",
-            record.insurance_url
-              ? `<a href="${escUrlAttr(record.insurance_url)}">📎 Abrir documento seguro</a>`
-              : "<i>Sin archivo adjunto</i>",
-            "<i>Botones: aprobar / denegar este documento.</i>",
-          ]
+          ? [`🛡️ <b>Seguro</b> · <code>PENDING</code> · usa los botones de abajo.`]
           : []),
+        "",
+        "<i>Pulsa los botones para revisar documentos.</i>",
       ].join("\n");
 
     await fetch("https://api.resend.com/emails", {
@@ -198,9 +200,12 @@ Deno.serve(async (req) => {
       }),
     });
 
+    // Por defecto NO notificamos jugadores por n8n (evita duplicar con el otro bot / mensaje con URLs).
+    // Pon N8N_NOTIFY_PLAYER_DOCUMENTS=true en secrets si necesitas también WhatsApp u otro flujo n8n.
     const n8nWebhookUrl = Deno.env.get("N8N_WH_URL");
+    const notifyPlayerDocsToN8n = Deno.env.get("N8N_NOTIFY_PLAYER_DOCUMENTS") === "true";
     const adminChatIds = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
-    if (n8nWebhookUrl) {
+    if (n8nWebhookUrl && notifyPlayerDocsToN8n) {
       await fetch(n8nWebhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -208,7 +213,7 @@ Deno.serve(async (req) => {
           eventType: "player-documents",
           managerName: team?.manager_name ?? "Responsable",
           managerEmail: team?.manager_email ?? "N/D",
-          managerPhone: "N/D",
+          managerPhone: managerPhoneDisplay,
           teamsCount: 0,
           adminChatIds,
           telegramButtons,
@@ -223,7 +228,7 @@ Deno.serve(async (req) => {
             eventType: "player-documents",
             managerName: team?.manager_name ?? "Responsable",
             managerEmail: team?.manager_email ?? "N/D",
-            managerPhone: "N/D",
+            managerPhone: managerPhoneDisplay,
             teamsCount: 0,
             adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
             telegramButtons: [],
@@ -258,29 +263,27 @@ Deno.serve(async (req) => {
       const viewerChats = parseChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS);
       const readOnlyHtml = isNewPlayer
         ? [
-          "<b>👤 Nuevo jugador</b> <i>(solo lectura)</i>",
+          "<b>📄 DOCUMENTACIÓN DE JUGADOR</b> <i>(solo lectura)</i>",
           "",
-          `<b>Jugador:</b> ${escHtmlTelegram(record.name)}`,
-          `<b>Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
-          `<b>Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
-          `<b>Correo:</b> <code>${escHtmlTelegram(team?.manager_email ?? "N/D")}</code>`,
+          `<b>👤 Jugador:</b> ${escHtmlTelegram(record.name)}`,
+          `<b>🏐 Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
+          `<b>👔 Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
+          `<b>📧 Correo:</b> ${escHtmlTelegram(team?.manager_email ?? "N/D")}`,
+          `<b>📱 Teléfono:</b> ${phoneLine}`,
           "",
           `🪪 DNI: <b>${escHtmlTelegram(record.dni_status ?? "EMPTY")}</b>`,
           `🛡️ Seguro: <b>${escHtmlTelegram(record.insurance_status ?? "EMPTY")}</b>`,
         ].join("\n")
         : [
-          "<b>📄 Documentación</b> <i>(solo lectura)</i>",
+          "<b>📄 DOCUMENTACIÓN DE JUGADOR</b> <i>(solo lectura)</i>",
           "",
-          `<b>Jugador:</b> ${escHtmlTelegram(record.name)}`,
-          `<b>Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
-          `<b>Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
-          `<b>Correo:</b> <code>${escHtmlTelegram(team?.manager_email ?? "N/D")}</code>`,
-          ...(becamePendingDni && record.dni_url
-            ? ["", `<b>🪪 DNI</b> — <a href="${escUrlAttr(record.dni_url)}">ver archivo</a>`]
-            : []),
-          ...(becamePendingInsurance && record.insurance_url
-            ? ["", `<b>🛡️ Seguro</b> — <a href="${escUrlAttr(record.insurance_url)}">ver archivo</a>`]
-            : []),
+          `<b>👤 Jugador:</b> ${escHtmlTelegram(record.name)}`,
+          `<b>🏐 Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
+          `<b>👔 Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
+          `<b>📧 Correo:</b> ${escHtmlTelegram(team?.manager_email ?? "N/D")}`,
+          `<b>📱 Teléfono:</b> ${phoneLine}`,
+          ...(becamePendingDni ? ["", "🪪 <b>DNI</b> · pendiente de revisión por staff."] : []),
+          ...(becamePendingInsurance ? ["", "🛡️ <b>Seguro</b> · pendiente de revisión por staff."] : []),
         ].join("\n");
       for (const chatId of viewerChats) {
         await fetch(`https://api.telegram.org/bot${PLAYER_DOCS_TELEGRAM_BOT_TOKEN}/sendMessage`, {
