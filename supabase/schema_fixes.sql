@@ -5,12 +5,20 @@
 alter type public.payment_status add value if not exists 'WAITING_VALIDATION';
 alter type public.payment_status add value if not exists 'EXPIRED';
 
+-- 1b) Link registrations to auth user (same responsible, several batches).
+alter table public.registrations add column if not exists auth_user_id uuid references auth.users(id) on delete set null;
+
+comment on column public.registrations.auth_user_id is 'auth.users del responsable; varias inscripciones pueden compartir el mismo usuario.';
+
 -- 2) Atomic registration+teams insert to avoid orphan registrations.
+drop function if exists public.create_registration_with_teams(text, text, text, jsonb);
+
 create or replace function public.create_registration_with_teams(
   p_manager_name text,
   p_manager_email text,
   p_manager_phone text,
-  p_teams jsonb
+  p_teams jsonb,
+  p_auth_user_id uuid default null
 )
 returns setof public.teams
 language plpgsql
@@ -24,8 +32,8 @@ begin
     raise exception 'At least one team is required';
   end if;
 
-  insert into public.registrations (manager_name, manager_email, manager_phone)
-  values (p_manager_name, p_manager_email, p_manager_phone)
+  insert into public.registrations (manager_name, manager_email, manager_phone, auth_user_id)
+  values (p_manager_name, p_manager_email, p_manager_phone, p_auth_user_id)
   returning id into v_registration_id;
 
   return query
@@ -70,5 +78,24 @@ begin
 end;
 $$;
 
-revoke all on function public.create_registration_with_teams(text, text, text, jsonb) from public;
-grant execute on function public.create_registration_with_teams(text, text, text, jsonb) to anon, authenticated, service_role;
+revoke all on function public.create_registration_with_teams(text, text, text, jsonb, uuid) from public;
+grant execute on function public.create_registration_with_teams(text, text, text, jsonb, uuid) to anon, authenticated, service_role;
+
+-- 3) Same physical phone → must reuse same manager email (ties to one Auth account).
+create or replace function public.registration_emails_for_phone(p_phone text)
+returns setof text
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select distinct lower(trim(manager_email))
+  from public.registrations
+  where length(regexp_replace(coalesce(p_phone, ''), '[^0-9]', '', 'g')) >= 9
+    and regexp_replace(coalesce(manager_phone, ''), '[^0-9]', '', 'g') = regexp_replace(coalesce(p_phone, ''), '[^0-9]', '', 'g');
+$$;
+
+revoke all on function public.registration_emails_for_phone(text) from public;
+grant execute on function public.registration_emails_for_phone(text) to anon, authenticated, service_role;
+
+comment on function public.registration_emails_for_phone(text) is 'Inscripción: correos ya usados con ese teléfono (comparación solo dígitos).';

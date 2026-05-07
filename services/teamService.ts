@@ -52,7 +52,11 @@ export const teamService = {
         return teams.length > 0 ? teams[0] : null;
     },
 
-    async registerTeams(newTeams: Partial<Team>[], receiptFile?: File | null): Promise<Team[]> {
+    async registerTeams(
+        newTeams: Partial<Team>[],
+        receiptFile?: File | null,
+        authUserId?: string | null
+    ): Promise<Team[]> {
         // Upload receipt file once if provided
         let receiptUrl: string | undefined;
         if (receiptFile) {
@@ -92,6 +96,7 @@ export const teamService = {
             p_manager_email: newTeams[0].managerEmail || null,
             p_manager_phone: newTeams[0].managerPhone || null,
             p_teams: insertData,
+            p_auth_user_id: authUserId ?? null,
         });
 
         if (error) {

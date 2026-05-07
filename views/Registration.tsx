@@ -12,9 +12,20 @@ interface TeamEntry {
 }
 
 interface RegistrationProps {
-    onRegister: (teams: Team[], receiptFile: File) => void;
+    onRegister: (teams: Team[], receiptFile: File, meta?: { authUserId: string | null }) => void | Promise<void>;
     teams: Team[];
     categoryLimits: CategoryLimits;
+}
+
+function isDuplicateSignupError(error: { code?: string; message?: string }): boolean {
+    const code = error.code ?? '';
+    const msg = (error.message ?? '').toLowerCase();
+    return (
+        code === 'user_already_exists' ||
+        msg.includes('user already registered') ||
+        msg.includes('already registered') ||
+        msg.includes('already been registered')
+    );
 }
 
 const RESERVATION_MINUTES = 15;
@@ -77,7 +88,12 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
 
     // Completion state
     const [isCompleted, setIsCompleted] = useState(false);
-    const [generatedCredentials, setGeneratedCredentials] = useState<{ email: string; password: string } | null>(null);
+    const [completionInfo, setCompletionInfo] = useState<{
+        email: string;
+        isNewAccount: boolean;
+        /** Solo se muestra en pantalla para cuentas nuevas (una vez). */
+        chosenPassword?: string;
+    } | null>(null);
 
     // Persist draft to sessionStorage whenever key fields change
     useEffect(() => {
@@ -189,22 +205,67 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
         }
 
         try {
-            // 1. Sign up the manager in Supabase Auth
+            const email = managerEmail.trim();
             const managerFullName = `${managerName} ${managerSurnames}`.trim();
 
-            const { error: authError } = await supabase.auth.signUp({
-                email: managerEmail,
-                password: password,
-                options: {
-                    data: {
-                        full_name: managerFullName
+            const phoneDigits = managerPhone.replace(/\D/g, '');
+            if (phoneDigits.length >= 9) {
+                const { data: existingEmails, error: phoneLookupError } = await supabase.rpc('registration_emails_for_phone', {
+                    p_phone: managerPhone,
+                });
+                if (phoneLookupError) {
+                    console.error('registration_emails_for_phone', phoneLookupError);
+                } else {
+                    const raw = Array.isArray(existingEmails) ? existingEmails : [];
+                    const uniq = [...new Set(raw.map((e) => String(e).toLowerCase().trim()))].filter(Boolean);
+                    const inputEmail = email.toLowerCase();
+                    if (uniq.length === 1 && uniq[0] !== inputEmail) {
+                        alert(
+                            `Este teléfono ya está asociado al correo ${uniq[0]}. Debes usar ese mismo correo y su contraseña (la de esa cuenta) para seguir como el mismo responsable.`
+                        );
+                        return;
+                    }
+                    if (uniq.length > 1) {
+                        alert(
+                            'Este teléfono figura con varios correos distintos en el sistema. Contacta con la organización para aclararlo.'
+                        );
+                        return;
                     }
                 }
+            }
+
+            let authUserId: string | null = null;
+            let isNewAccount = true;
+
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: { full_name: managerFullName },
+                },
             });
 
-            if (authError) throw authError;
+            if (signUpError) {
+                if (isDuplicateSignupError(signUpError)) {
+                    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                        email,
+                        password,
+                    });
+                    if (signInError) {
+                        throw new Error(
+                            'Contraseña incorrecta o no coincide con esta cuenta. Este correo ya está registrado como responsable: usa la misma contraseña que para el panel. Si la cambiaste con «He olvidado mi contraseña», escribe la nueva.'
+                        );
+                    }
+                    authUserId = signInData.user?.id ?? null;
+                    isNewAccount = false;
+                } else {
+                    throw signUpError;
+                }
+            } else {
+                authUserId = signUpData.user?.id ?? null;
+                isNewAccount = true;
+            }
 
-            // 2. Prepare teams without password
             const newTeams: Team[] = cart.map(entry => ({
                 id: `team-${Date.now()}-${Math.random().toString(36).slice(2)}`,
                 name: entry.name,
@@ -216,24 +277,28 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                 fee: entry.fee,
                 players: [],
                 managerName: managerFullName,
-                managerEmail: managerEmail,
+                managerEmail: email,
                 managerPhone: managerPhone,
-                status: 'pending' as const
+                status: 'pending' as const,
             }));
 
             const finalReceipt = receiptFile ?? new File(['payment-receipt'], 'payment_receipt.pdf', { type: 'application/pdf' });
-            await onRegister(newTeams, finalReceipt);
+            await onRegister(newTeams, finalReceipt, { authUserId });
 
             sessionStorage.removeItem('reg_draft');
+            setCompletionInfo(
+                isNewAccount
+                    ? { email, isNewAccount: true, chosenPassword: password }
+                    : { email, isNewAccount: false }
+            );
             setIsCompleted(true);
-            setGeneratedCredentials({ email: managerEmail, password: password });
         } catch (error: any) {
             alert('Error en el registro: ' + error.message);
         }
     };
 
     // --- Completed state ---
-    if (isCompleted && generatedCredentials) {
+    if (isCompleted && completionInfo) {
         return (
             <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 flex justify-center animate-in fade-in">
                 <div className="w-full max-w-lg">
@@ -257,21 +322,34 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                         <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-6 text-left space-y-3 mb-6">
                             <h3 className="font-bold text-blue-900 dark:text-blue-100 text-sm uppercase flex items-center gap-2">
                                 <span className="material-symbols-outlined text-base">key</span>
-                                Tus Credenciales de Responsable
+                                {completionInfo.isNewAccount ? 'Tus credenciales de responsable' : 'Tu cuenta de responsable'}
                             </h3>
                             <div className="space-y-2">
                                 <div>
                                     <span className="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase">Email (usuario):</span>
-                                    <p className="font-mono text-sm text-blue-800 dark:text-blue-200 bg-blue-100 dark:bg-blue-900/40 px-3 py-1.5 rounded-md mt-1">{generatedCredentials.email}</p>
+                                    <p className="font-mono text-sm text-blue-800 dark:text-blue-200 bg-blue-100 dark:bg-blue-900/40 px-3 py-1.5 rounded-md mt-1">{completionInfo.email}</p>
                                 </div>
-                                <div>
-                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase">Contraseña:</span>
-                                    <p className="font-mono text-sm text-blue-800 dark:text-blue-200 bg-blue-100 dark:bg-blue-900/40 px-3 py-1.5 rounded-md mt-1">{generatedCredentials.password}</p>
-                                </div>
+                                {completionInfo.isNewAccount && completionInfo.chosenPassword ? (
+                                    <div>
+                                        <span className="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase">Contraseña elegida:</span>
+                                        <p className="font-mono text-sm text-blue-800 dark:text-blue-200 bg-blue-100 dark:bg-blue-900/40 px-3 py-1.5 rounded-md mt-1">{completionInfo.chosenPassword}</p>
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-blue-800 dark:text-blue-200 leading-relaxed">
+                                        Ya tenías cuenta con este correo: solo existe <strong>una contraseña</strong> por email. Sigue usando la misma que para el panel
+                                        (o la nueva si la cambiaste con «He olvidado mi contraseña»). No hace falta crear otra.
+                                    </p>
+                                )}
                             </div>
-                            <p className="text-[10px] text-blue-500 mt-2">
-                                ⚠️ Guarda estas credenciales. Las necesitarás para acceder al panel de gestión y añadir jugadores a tus equipos.
-                            </p>
+                            {completionInfo.isNewAccount ? (
+                                <p className="text-[10px] text-blue-500 mt-2">
+                                    Guarda estas credenciales. Las necesitarás para acceder al panel de gestión y añadir jugadores a tus equipos.
+                                </p>
+                            ) : (
+                                <p className="text-[10px] text-blue-500 mt-2">
+                                    Para inscribir más equipos más adelante, usa otra vez este formulario con el mismo email y tu contraseña actual.
+                                </p>
+                            )}
                         </div>
 
                         <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-left mb-6">
@@ -365,7 +443,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                             <div className={`size-8 rounded-full flex items-center justify-center font-bold ${managerEmail ? 'bg-primary text-background-dark' : 'bg-slate-100 text-slate-500'}`}>1</div>
                             <h3 className="font-bold text-lg text-slate-900 dark:text-white">Datos del Responsable</h3>
                         </div>
-                        <p className="text-xs text-slate-500 mb-4">Serás el responsable de todos los equipos que inscribas. Con estas credenciales podrás acceder al panel de gestión para añadir jugadores.</p>
+                        <p className="text-xs text-slate-500 mb-4">Serás el responsable de todos los equipos que inscribas. El correo y la contraseña son <strong>una sola cuenta</strong>: la misma sirve para todas tus inscripciones y para el panel cuando el admin apruebe los equipos.</p>
                         <div className="space-y-4">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
@@ -393,14 +471,22 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                     <input type="tel" value={managerPhone} onChange={e => setManagerPhone(e.target.value)}
                                         className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                                         placeholder="+34 600 123 456" />
+                                    <p className="text-[11px] text-slate-500 mt-1.5 leading-snug">
+                                        Si vuelves a inscribir equipos como el mismo responsable, usa el <strong>mismo teléfono y el mismo correo</strong>; el sistema exige que coincidan con la primera inscripción (y entonces la contraseña es la de esa cuenta).
+                                    </p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña *</label>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña de la cuenta *</label>
                                     <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                                         className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                                        placeholder="********" />
+                                        placeholder="********" autoComplete="new-password" />
+                                    <p className="text-[11px] text-slate-500 mt-1.5 leading-snug">
+                                        <strong>Primera vez:</strong> elige una contraseña y guárdala.
+                                        <br />
+                                        <strong>Ya te inscribiste antes:</strong> escribe tu contraseña <em>actual</em> (si la cambiaste al recuperar el acceso, usa la nueva). No puedes tener dos contraseñas distintas para el mismo correo.
+                                    </p>
                                 </div>
                             </div>
                         </div>
