@@ -10,8 +10,9 @@ const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 const ACTION_BASE_URL = `${SUPABASE_URL}/functions/v1/admin-review-action`;
 const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 const TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("TELEGRAM_VIEWER_CHAT_IDS");
+const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
+const TELEGRAM_NOTIFICATIONS_BOT_TOKEN = Deno.env.get("TELEGRAM_NOTIFICATIONS_BOT_TOKEN");
 const PLAYER_DOCS_TELEGRAM_BOT_TOKEN = Deno.env.get("PLAYER_DOCS_TELEGRAM_BOT_TOKEN");
-const PLAYER_DOCS_TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("PLAYER_DOCS_TELEGRAM_ADMIN_CHAT_IDS");
 const PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS");
 
 const encoder = new TextEncoder();
@@ -100,7 +101,8 @@ Deno.serve(async (req) => {
 
     const docSections: string[] = [];
     const docLinesTelegram: string[] = [];
-    const telegramButtons: Array<{ text: string; url: string }> = [];
+    // inline_keyboard para Telegram: callback_data evita abrir el navegador.
+    const inlineKeyboardActions: Array<Array<{ text: string; url?: string; callback_data?: string }>> = [];
     if (becamePendingDni) {
       const approve = await buildDocActionUrl(record.id, "dni", "approve");
       const reject = await buildDocActionUrl(record.id, "dni", "reject");
@@ -111,10 +113,14 @@ Deno.serve(async (req) => {
           <a href="${reject}" style="display:inline-block; background:#b91c1c; color:#fff; text-decoration:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:700;">Denegar DNI</a>
         </div>
       `);
-      docLinesTelegram.push(`DNI\nAprobar: ${approve}\nDenegar: ${reject}\nDocumento: ${record.dni_url || "No adjunto"}`);
-      if (record.dni_url) telegramButtons.push({ text: "Ver DNI", url: record.dni_url });
-      telegramButtons.push({ text: "Aprobar DNI", url: approve });
-      telegramButtons.push({ text: "Denegar DNI", url: reject });
+      docLinesTelegram.push(`DNI\nDocumento: ${record.dni_url || "No adjunto"}`);
+      if (record.dni_url) {
+        inlineKeyboardActions.push([{ text: "📄 Ver DNI", url: String(record.dni_url) }]);
+      }
+      inlineKeyboardActions.push([
+        { text: "✅ Aprobar DNI", callback_data: `p:a:d:${record.id}` },
+        { text: "❌ Denegar DNI", callback_data: `p:r:d:${record.id}` },
+      ]);
     }
     if (becamePendingInsurance) {
       const approve = await buildDocActionUrl(record.id, "insurance", "approve");
@@ -126,15 +132,15 @@ Deno.serve(async (req) => {
           <a href="${reject}" style="display:inline-block; background:#b91c1c; color:#fff; text-decoration:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:700;">Denegar seguro</a>
         </div>
       `);
-      docLinesTelegram.push(`SEGURO\nAprobar: ${approve}\nDenegar: ${reject}\nDocumento: ${record.insurance_url || "No adjunto"}`);
-      if (record.insurance_url) telegramButtons.push({ text: "Ver seguro", url: record.insurance_url });
-      telegramButtons.push({ text: "Aprobar seguro", url: approve });
-      telegramButtons.push({ text: "Denegar seguro", url: reject });
+      docLinesTelegram.push(`SEGURO\nDocumento: ${record.insurance_url || "No adjunto"}`);
+      if (record.insurance_url) {
+        inlineKeyboardActions.push([{ text: "📄 Ver seguro", url: String(record.insurance_url) }]);
+      }
+      inlineKeyboardActions.push([
+        { text: "✅ Aprobar seguro", callback_data: `p:a:i:${record.id}` },
+        { text: "❌ Denegar seguro", callback_data: `p:r:i:${record.id}` },
+      ]);
     }
-
-    const messageText = isNewPlayer
-      ? `NUEVO JUGADOR REGISTRADO\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nEstado DNI: ${record.dni_status ?? "EMPTY"}\nEstado Seguro: ${record.insurance_status ?? "EMPTY"}`
-      : `NUEVO DOCUMENTO PENDIENTE\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nACCIONES:\n${docLinesTelegram.join("\n\n")}`;
 
     const phoneLine = managerPhoneDisplay === "N/D"
       ? "N/D"
@@ -200,12 +206,10 @@ Deno.serve(async (req) => {
       }),
     });
 
-    // Por defecto NO notificamos jugadores por n8n (evita duplicar con el otro bot / mensaje con URLs).
-    // Pon N8N_NOTIFY_PLAYER_DOCUMENTS=true en secrets si necesitas también WhatsApp u otro flujo n8n.
+    // n8n: solo a chat read-only (sin botones), nunca al chat admin para evitar duplicados.
     const n8nWebhookUrl = Deno.env.get("N8N_WH_URL");
     const notifyPlayerDocsToN8n = Deno.env.get("N8N_NOTIFY_PLAYER_DOCUMENTS") === "true";
-    const adminChatIds = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
-    if (n8nWebhookUrl && notifyPlayerDocsToN8n) {
+    if (n8nWebhookUrl && notifyPlayerDocsToN8n && hasChatIds(TELEGRAM_VIEWER_CHAT_IDS)) {
       await fetch(n8nWebhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -215,49 +219,30 @@ Deno.serve(async (req) => {
           managerEmail: team?.manager_email ?? "N/D",
           managerPhone: managerPhoneDisplay,
           teamsCount: 0,
-          adminChatIds,
-          telegramButtons,
-          message: messageText,
+          adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
+          telegramButtons: [],
+          message: `NUEVO DOCUMENTO PENDIENTE (SOLO LECTURA)\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nDocumentos:\n${docLinesTelegram.join("\n\n")}`,
         }),
       });
-      if (hasChatIds(TELEGRAM_VIEWER_CHAT_IDS)) {
-        await fetch(n8nWebhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            eventType: "player-documents",
-            managerName: team?.manager_name ?? "Responsable",
-            managerEmail: team?.manager_email ?? "N/D",
-            managerPhone: managerPhoneDisplay,
-            teamsCount: 0,
-            adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
-            telegramButtons: [],
-            message: `NUEVO DOCUMENTO PENDIENTE (SOLO LECTURA)\n\nJugador: ${record.name}\nEquipo: ${team?.name ?? "N/D"}\nResponsable: ${team?.manager_name ?? "N/D"}\nCorreo: ${team?.manager_email ?? "N/D"}\n\nDocumentos:\n${docLinesTelegram.map((line) => line.replace(/Aprobar:.*\nDenegar:.*\n?/g, "")).join("\n\n")}`,
-          }),
-        });
-      }
     }
 
-    // Optional second Telegram bot dedicated to player documents
-    if (PLAYER_DOCS_TELEGRAM_BOT_TOKEN && hasChatIds(PLAYER_DOCS_TELEGRAM_ADMIN_CHAT_IDS)) {
-      const docBotChats = parseChatIds(PLAYER_DOCS_TELEGRAM_ADMIN_CHAT_IDS);
-      const inline_keyboard: { text: string; url: string }[][] = [];
-      for (let i = 0; i < telegramButtons.length; i += 2) {
-        inline_keyboard.push(telegramButtons.slice(i, i + 2).map((btn) => ({ text: btn.text, url: btn.url })));
-      }
-      for (const chatId of docBotChats) {
-        await fetch(`https://api.telegram.org/bot${PLAYER_DOCS_TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    // Envío DIRECTO al bot principal (KOLOSAURIOS) con botones callback_data.
+    // Aprobar/denegar se ejecuta dentro de Telegram, sin abrir navegador.
+    const adminChatList = parseChatIds(TELEGRAM_ADMIN_CHAT_IDS);
+    if (TELEGRAM_NOTIFICATIONS_BOT_TOKEN && adminChatList.length > 0 && inlineKeyboardActions.length > 0) {
+      await Promise.all(adminChatList.map((chatId) =>
+        fetch(`https://api.telegram.org/bot${TELEGRAM_NOTIFICATIONS_BOT_TOKEN}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            chat_id: chatId,
+            chat_id: String(chatId),
             text: messageHtml,
             parse_mode: "HTML",
             disable_web_page_preview: true,
-            reply_markup: inline_keyboard.length ? { inline_keyboard } : undefined,
+            reply_markup: { inline_keyboard: inlineKeyboardActions },
           }),
-        });
-      }
+        })
+      ));
     }
     if (PLAYER_DOCS_TELEGRAM_BOT_TOKEN && hasChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS)) {
       const viewerChats = parseChatIds(PLAYER_DOCS_TELEGRAM_VIEWER_CHAT_IDS);

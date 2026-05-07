@@ -10,6 +10,8 @@ const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
 const ACTION_BASE_URL = `${SUPABASE_URL}/functions/v1/admin-review-action`;
 const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 const TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("TELEGRAM_VIEWER_CHAT_IDS");
+const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
+const TELEGRAM_NOTIFICATIONS_BOT_TOKEN = Deno.env.get("TELEGRAM_NOTIFICATIONS_BOT_TOKEN");
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,6 +22,18 @@ const encoder = new TextEncoder();
 
 function hasChatIds(value?: string | null): value is string {
   return Boolean(value && value.split(",").map((v) => v.trim()).filter(Boolean).length > 0);
+}
+
+function parseChatIds(value?: string | null): string[] {
+  if (!value) return [];
+  return value.split(",").map((v) => v.trim()).filter(Boolean);
+}
+
+function escHtmlTelegram(s: unknown): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 async function signAction(payload: string): Promise<string> {
@@ -145,26 +159,7 @@ Deno.serve(async (req) => {
       })
     );
 
-    const teamActionsTelegram = await Promise.all(
-      teams.map(async (t: any) => {
-        const approveUrl = await buildTeamActionUrl(t.id, "approve");
-        const rejectUrl = await buildTeamActionUrl(t.id, "reject");
-        return `- ${t.name} (${t.division})\n  Aprobar: ${approveUrl}\n  Denegar: ${rejectUrl}\n  Justificante: ${t.receipt_url || "No adjunto"}`;
-      })
-    );
     const teamSummaryLines = teams.map((t: any) => `${t.name} (${t.division})`);
-    const telegramButtons = await Promise.all(
-      teams.map(async (t: any) => {
-        const approveUrl = await buildTeamActionUrl(t.id, "approve");
-        const rejectUrl = await buildTeamActionUrl(t.id, "reject");
-        return {
-          teamName: `${t.name} (${t.division})`,
-          approveUrl,
-          rejectUrl,
-          receiptUrl: t.receipt_url || null,
-        };
-      }),
-    );
 
     // --- 1. EMAIL AL RESPONSABLE (Comprobante) ---
     const managerEmailBody = {
@@ -309,9 +304,60 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Envío DIRECTO al bot principal (KOLOSAURIOS) con botones callback_data,
+    // para que aprobar/denegar se ejecute dentro de Telegram (sin abrir navegador).
+    const adminChatList = parseChatIds(TELEGRAM_ADMIN_CHAT_IDS);
+    if (TELEGRAM_NOTIFICATIONS_BOT_TOKEN && adminChatList.length > 0) {
+      const adminMessageHtml = [
+        "<b>🚨 NUEVA INSCRIPCIÓN</b>",
+        "<i>Pendiente de revisión</i>",
+        "",
+        `<b>👤 Responsable:</b> ${escHtmlTelegram(managerName)}`,
+        `<b>📧 Correo:</b> ${escHtmlTelegram(managerEmail)}`,
+        `<b>📱 Teléfono:</b> ${escHtmlTelegram(managerPhone)}`,
+        `<b>💰 Importe total:</b> ${totalFee}€`,
+        "",
+        "<b>Equipos:</b>",
+        ...teams.map((t: any) =>
+          `• <b>${escHtmlTelegram(t.name)}</b> (${escHtmlTelegram(t.division)}) — ${t.fee}€${t.city ? ` · ${escHtmlTelegram(t.city)}` : ""}`
+        ),
+        "",
+        "<i>Pulsa los botones para aprobar o denegar.</i>",
+      ].join("\n");
+
+      const inline_keyboard: Array<Array<Record<string, string>>> = [];
+      for (const t of teams) {
+        if (t.receipt_url) {
+          inline_keyboard.push([{ text: `📄 Ver justificante (${t.name})`, url: String(t.receipt_url) }]);
+        }
+        inline_keyboard.push([
+          { text: `✅ ${t.name}`, callback_data: `t:a:${t.id}` },
+          { text: `❌ ${t.name}`, callback_data: `t:r:${t.id}` },
+        ]);
+      }
+
+      try {
+        await Promise.all(adminChatList.map((chatId) =>
+          fetch(`https://api.telegram.org/bot${TELEGRAM_NOTIFICATIONS_BOT_TOKEN}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: adminMessageHtml,
+              parse_mode: "HTML",
+              disable_web_page_preview: true,
+              reply_markup: { inline_keyboard },
+            }),
+          })
+        ));
+      } catch (telegramError) {
+        console.warn("Telegram direct send failed (ignored):", telegramError);
+      }
+    }
+
+    // n8n: solo informativo a chat read-only (sin botones), sin duplicar al chat de admins.
     const n8nWebhookUrl = Deno.env.get('N8N_WH_URL');
-    const adminChatIds = Deno.env.get('TELEGRAM_ADMIN_CHAT_IDS');
-    if (n8nWebhookUrl) {
+    if (n8nWebhookUrl && hasChatIds(TELEGRAM_VIEWER_CHAT_IDS)) {
       try {
         await fetch(n8nWebhookUrl, {
           method: 'POST',
@@ -323,29 +369,12 @@ Deno.serve(async (req) => {
             managerPhone,
             teamsCount: teams.length,
             teamSummaryLines,
-            adminChatIds,
-            telegramButtons,
-            message: `NUEVA INSCRIPCION RECIBIDA\n\nResponsable: ${managerName}\nCorreo: ${managerEmail}\nTelefono: ${managerPhone}\nEquipos: ${teams.length}\n\nACCIONES RAPIDAS:\n${teamActionsTelegram.join("\n\n")}`,
+            adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
+            telegramButtons: [],
+            message: `NUEVA INSCRIPCION (SOLO LECTURA)\n\nResponsable: ${managerName}\nCorreo: ${managerEmail}\nTelefono: ${managerPhone}\nEquipos: ${teams.length}\n\nResumen:\n${teamSummaryLines.map((line) => `- ${line}`).join("\n")}`,
           }),
         });
-        if (hasChatIds(TELEGRAM_VIEWER_CHAT_IDS)) {
-          await fetch(n8nWebhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              eventType: "team-registration",
-              managerName,
-              managerEmail,
-              managerPhone,
-              teamsCount: teams.length,
-              teamSummaryLines,
-              adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
-              telegramButtons: [],
-              message: `NUEVA INSCRIPCION (SOLO LECTURA)\n\nResponsable: ${managerName}\nCorreo: ${managerEmail}\nTelefono: ${managerPhone}\nEquipos: ${teams.length}\n\nResumen:\n${teamSummaryLines.map((line) => `- ${line}`).join("\n")}`,
-            }),
-          });
-        }
-        console.log('n8n webhook sent from webhook-registration');
+        console.log('n8n viewer webhook sent from webhook-registration');
       } catch (n8nError) {
         console.warn('n8n webhook failed (ignored):', n8nError);
       }
