@@ -16,6 +16,10 @@ const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 
 const encoder = new TextEncoder();
 
+function escAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
 function mergeChatIds(...values: Array<string | undefined>): string | null {
   const unique = new Set<string>();
   for (const value of values) {
@@ -48,6 +52,8 @@ function renderActionPage(params: {
   success?: boolean;
   showForm?: boolean;
   formFieldsHtml?: string;
+  openInBrowserUrl?: string;
+  urlHostMismatch?: { requestHost: string; expectedHost: string };
 }) {
   const {
     title,
@@ -55,6 +61,8 @@ function renderActionPage(params: {
     success = true,
     showForm = false,
     formFieldsHtml = "",
+    openInBrowserUrl,
+    urlHostMismatch,
   } = params;
   const color = success ? "#15803d" : "#b91c1c";
   const bg = success ? "#f0fdf4" : "#fef2f2";
@@ -68,12 +76,30 @@ function renderActionPage(params: {
   </head>
   <body style="font-family:Segoe UI,Tahoma,sans-serif;background:#f8fafc;padding:24px;">
     <div style="max-width:620px;margin:auto;background:white;border:1px solid #e2e8f0;border-radius:12px;padding:24px;">
+      ${
+        urlHostMismatch
+          ? `<div style="background:#fef2f2;border:1px solid #fecaca;padding:12px;border-radius:8px;margin:0 0 16px;color:#991b1b;font-size:13px;line-height:1.5;">
+            <strong>URL incorrecta.</strong> Este enlace usa <code style="background:#fee2e2;padding:2px 6px;border-radius:4px;">${escAttr(urlHostMismatch.requestHost)}</code>
+            pero el proyecto configurado es <code style="background:#fee2e2;padding:2px 6px;border-radius:4px;">${escAttr(urlHostMismatch.expectedHost)}</code>.
+            Corrige el secreto <code>SUPABASE_URL</code> en Edge Functions (debe ser <code>https://${escAttr(urlHostMismatch.expectedHost)}</code>) y pide un <strong>nuevo</strong> aviso en Telegram.
+          </div>`
+          : ""
+      }
       <h1 style="margin:0 0 8px;color:${color};font-size:22px;">${title}</h1>
       <p style="margin:0 0 16px;color:#334155;line-height:1.5;">${subtitle}</p>
       ${
+        showForm && openInBrowserUrl
+          ? `<p style="margin:0 0 12px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:13px;line-height:1.5;color:#1e40af;">
+            <strong>Desde Telegram:</strong> toca primero
+            <a href="${escAttr(openInBrowserUrl)}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;font-weight:800;">abrir en Chrome o Safari</a>
+            y confirma ahí. Al pulsar el botón, el envío se abre en <strong>nueva pestaña</strong> para evitar el visor embebido.
+          </p>`
+          : ""
+      }
+      ${
         showForm
-          ? `<p style="font-size:12px;color:#64748b;margin:0 0 12px;line-height:1.45;">Si entras desde <strong>Telegram</strong> y al pulsar el botón no ocurre nada, abre el enlace en el navegador del móvil (menú ⋮ → «Abrir en…» / «Abrir en Chrome»). Los mensajes de consola sobre «sandbox» suelen ser del visor interno o extensiones; esta página <strong>no usa JavaScript</strong> para enviar el formulario.</p>
-          <form method="POST" target="_top" style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;">${formFieldsHtml}</form>`
+          ? `<p style="font-size:12px;color:#64748b;margin:0 0 12px;line-height:1.45;">Los avisos de consola «sandbox» / «Unsafe attempt» suelen ser del visor de Telegram o extensiones; el formulario no depende de JavaScript.</p>
+          <form method="POST" target="_blank" style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;">${formFieldsHtml}</form>`
           : `<div style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;color:#334155;">Puedes cerrar esta pestaña y volver a Telegram.</div>`
       }
     </div>
@@ -273,6 +299,18 @@ Deno.serve(async (req) => {
     }), 500);
   }
 
+  const requestUrl = new URL(req.url);
+  const fullPageUrl = requestUrl.href;
+  let urlHostMismatch: { requestHost: string; expectedHost: string } | undefined;
+  try {
+    const configuredHost = new URL(SUPABASE_URL).hostname;
+    if (requestUrl.hostname !== configuredHost) {
+      urlHostMismatch = { requestHost: requestUrl.hostname, expectedHost: configuredHost };
+    }
+  } catch {
+    // ignore invalid SUPABASE_URL shape
+  }
+
   const isPost = req.method === "POST";
   let entity: string | null;
   let id: string | null;
@@ -335,6 +373,8 @@ Deno.serve(async (req) => {
         subtitle: "Vas a aprobar esta inscripción. ¿Quieres continuar?",
         success: true,
         showForm: true,
+        openInBrowserUrl: fullPageUrl,
+        urlHostMismatch,
         formFieldsHtml: `
           <input type="hidden" name="entity" value="${entity}" />
           <input type="hidden" name="id" value="${id}" />
@@ -353,6 +393,8 @@ Deno.serve(async (req) => {
         subtitle: "Indica el motivo para enviarlo al responsable.",
         success: false,
         showForm: true,
+        openInBrowserUrl: fullPageUrl,
+        urlHostMismatch,
         formFieldsHtml: `
           <input type="hidden" name="entity" value="${entity}" />
           <input type="hidden" name="id" value="${id}" />
@@ -373,6 +415,8 @@ Deno.serve(async (req) => {
         subtitle: "Vas a actualizar el estado del documento del jugador.",
         success: action === "approve",
         showForm: true,
+        openInBrowserUrl: fullPageUrl,
+        urlHostMismatch,
         formFieldsHtml: `
           <input type="hidden" name="entity" value="${entity}" />
           <input type="hidden" name="id" value="${id}" />
