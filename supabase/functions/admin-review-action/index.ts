@@ -11,23 +11,45 @@ const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 const encoder = new TextEncoder();
 const ADMIN_PANEL_URL = "https://torneomuskizbmplaya.es/admin";
 
-const html = (title: string, message: string, ok = true) => `<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${title}</title>
-  </head>
-  <body style="font-family:Segoe UI,Tahoma,sans-serif;background:#f8fafc;padding:24px;">
-    <div style="max-width:620px;margin:auto;background:white;border:1px solid #e2e8f0;border-radius:12px;padding:24px;">
-      <h1 style="margin:0 0 8px;color:${ok ? "#15803d" : "#b91c1c"};font-size:22px;">${title}</h1>
-      <p style="margin:0;color:#334155;line-height:1.5;">${message}</p>
-      <div style="margin-top:16px;">
-        <a href="${ADMIN_PANEL_URL}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:600;font-size:13px;">Abrir panel admin</a>
-      </div>
-    </div>
-  </body>
-</html>`;
+function redirectToAdmin(title: string, message: string) {
+  const redirectUrl = new URL(ADMIN_PANEL_URL);
+  redirectUrl.searchParams.set("review_title", title);
+  redirectUrl.searchParams.set("review_message", message);
+  return Response.redirect(redirectUrl.toString(), 302);
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const maybe = error as Record<string, unknown>;
+    const message = maybe.message ?? maybe.error_description ?? maybe.error;
+    if (typeof message === "string" && message.trim().length > 0) return message;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
+async function sendOpsAlert(severity: "info" | "warning" | "error" | "critical", message: string, details: string) {
+  try {
+    await fetch(OPS_ALERT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "backend.admin-review-action",
+        severity,
+        message,
+        details,
+      }),
+    });
+  } catch {
+    // ignore alert failures
+  }
+}
 
 async function sign(payload: string): Promise<string> {
   const key = await crypto.subtle.importKey(
@@ -75,10 +97,7 @@ async function getCategoryCapacitySummary(supabase: ReturnType<typeof createClie
 
 Deno.serve(async (req) => {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !REVIEW_ACTION_SECRET) {
-    return new Response(html("Configuración incompleta", "Faltan variables de entorno para ejecutar esta acción.", false), {
-      status: 500,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    });
+    return redirectToAdmin("Configuración incompleta", "Faltan variables de entorno para ejecutar esta acción.");
   }
 
   const url = new URL(req.url);
@@ -90,27 +109,18 @@ Deno.serve(async (req) => {
   const token = url.searchParams.get("token");
 
   if (!entity || !id || !action || !exp || !token) {
-    return new Response(html("Solicitud inválida", "Faltan parámetros obligatorios en el enlace.", false), {
-      status: 400,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    });
+    return redirectToAdmin("Solicitud inválida", "Faltan parámetros obligatorios en el enlace.");
   }
 
   const expiresAt = Number(exp);
   if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
-    return new Response(html("Enlace caducado", "La acción ya no está disponible, solicita un enlace nuevo.", false), {
-      status: 410,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    });
+    return redirectToAdmin("Enlace caducado", "La acción ya no está disponible, solicita un enlace nuevo.");
   }
 
   const payload = [entity, id, action, docType ?? "", exp].join("|");
   const expected = await sign(payload);
   if (expected !== token) {
-    return new Response(html("Token inválido", "No se ha podido verificar la firma del enlace.", false), {
-      status: 401,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    });
+    return redirectToAdmin("Token inválido", "No se ha podido verificar la firma del enlace.");
   }
 
   try {
@@ -125,10 +135,18 @@ Deno.serve(async (req) => {
         .from("teams")
         .select("id, name, division, manager_name, manager_phone, registration_id")
         .eq("id", id)
-        .single();
+        .maybeSingle();
       if (teamLookupError) throw teamLookupError;
       if (!currentTeam) {
-        throw new Error(`No se encontro el equipo para actualizar (${id}).`);
+        await sendOpsAlert(
+          "warning",
+          "Team action already processed or missing",
+          `entity=team; action=${action}; id=${id}`,
+        );
+        return redirectToAdmin(
+          "Acción ya procesada",
+          `Este equipo ya no existe o ya fue revisado (${id}). Puedes continuar en el panel admin.`,
+        );
       }
 
       if (action === "reject") {
@@ -173,7 +191,15 @@ Deno.serve(async (req) => {
           .eq("id", id);
         if (error) throw error;
         if (!updatedRows || updatedRows.length === 0) {
-          throw new Error(`No se encontro el equipo para actualizar (${id}).`);
+          await sendOpsAlert(
+            "warning",
+            "Team approve affected 0 rows",
+            `entity=team; action=${action}; id=${id}`,
+          );
+          return redirectToAdmin(
+            "Acción ya procesada",
+            `El equipo ya estaba revisado o no existe (${id}).`,
+          );
         }
       }
 
@@ -207,15 +233,11 @@ Deno.serve(async (req) => {
         }
       }
 
-      return new Response(
-        html(
-          action === "approve" ? "Equipo aprobado" : "Equipo rechazado",
-          action === "approve"
-            ? `La revisión del equipo se ha guardado correctamente (${id}).`
-            : `Equipo rechazado y eliminado (${id}). Para inscribirse, deberá rellenar de nuevo el formulario.`,
-          true,
-        ),
-        { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
+      return redirectToAdmin(
+        action === "approve" ? "Equipo aprobado" : "Equipo rechazado",
+        action === "approve"
+          ? `La revisión del equipo se ha guardado correctamente (${id}).`
+          : `Equipo rechazado y eliminado (${id}). Para inscribirse, deberá rellenar de nuevo el formulario.`,
       );
     }
 
@@ -236,42 +258,27 @@ Deno.serve(async (req) => {
 
       if (error) throw error;
       if (!data || data.length === 0) {
-        throw new Error(`No se encontro el jugador para actualizar (${id}).`);
+        await sendOpsAlert(
+          "warning",
+          "Player document action affected 0 rows",
+          `entity=player-doc; action=${action}; docType=${docType}; id=${id}`,
+        );
+        return redirectToAdmin(
+          "Acción ya procesada",
+          `El documento ya estaba revisado o el jugador no existe (${id}).`,
+        );
       }
 
       const label = docType === "dni" ? "DNI" : "seguro";
-      return new Response(
-        html(
-          action === "approve" ? `${label} aprobado` : `${label} rechazado`,
-          `La revisión del documento del jugador se ha guardado correctamente (${id}).`,
-          true,
-        ),
-        { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
+      return redirectToAdmin(
+        action === "approve" ? `${label} aprobado` : `${label} rechazado`,
+        `La revisión del documento del jugador se ha guardado correctamente (${id}).`,
       );
     }
 
-    return new Response(html("Entidad inválida", "El enlace no apunta a una revisión reconocida.", false), {
-      status: 400,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    });
+    return redirectToAdmin("Entidad inválida", "El enlace no apunta a una revisión reconocida.");
   } catch (error) {
-    try {
-      await fetch(OPS_ALERT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source: "backend.admin-review-action",
-          severity: "error",
-          message: "Error processing admin review action",
-          details: error instanceof Error ? error.message : String(error),
-        }),
-      });
-    } catch {
-      // ignore alert failures
-    }
-    return new Response(
-      html("Error al procesar acción", error instanceof Error ? error.message : String(error), false),
-      { status: 500, headers: { "Content-Type": "text/html; charset=utf-8" } },
-    );
+    await sendOpsAlert("error", "Error processing admin review action", getErrorMessage(error));
+    return redirectToAdmin("Error al procesar acción", getErrorMessage(error));
   }
 });

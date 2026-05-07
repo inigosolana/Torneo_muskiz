@@ -38,6 +38,7 @@ const App: React.FC = () => {
 
   // Matches Data
   const [matches, setMatches] = useState<Match[]>([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Auth Manager
   const [user, setUser] = useState<User | null>(null);
@@ -74,6 +75,7 @@ const App: React.FC = () => {
   // Load initial data
   useEffect(() => {
     const loadData = async () => {
+      setDataLoaded(false);
       // 1. Fetch Categories Limits from Supabase site_content
       const { data: limitsData } = await supabase
         .from('site_content')
@@ -90,6 +92,7 @@ const App: React.FC = () => {
       const dbMatches = await matchService.getMatches();
       setTeams(dbTeams);
       setMatches(dbMatches);
+      setDataLoaded(true);
     };
     loadData();
 
@@ -238,6 +241,24 @@ const App: React.FC = () => {
       return <Navigate to="/" replace />;
     }
 
+    if (allowedRole === 'manager') {
+      if (!dataLoaded) {
+        return (
+          <div className="min-h-screen flex items-center justify-center">
+            <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+          </div>
+        );
+      }
+
+      const hasApprovedTeam = teams.some(
+        (t) => t.managerEmail === user?.email && t.status === 'approved'
+      );
+
+      if (!hasApprovedTeam) {
+        return <Navigate to="/registration" replace />;
+      }
+    }
+
     return <>{children}</>;
   };
 
@@ -277,7 +298,7 @@ const App: React.FC = () => {
                   </button>
                 </div>
                 <TeamManager
-                  teams={teams.filter(t => t.managerEmail === user?.email)}
+                  teams={teams.filter(t => t.managerEmail === user?.email && t.status === 'approved')}
                   onUpdateTeam={updateTeam}
                 />
               </div>

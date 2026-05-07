@@ -19,22 +19,33 @@ export const ManagerLogin: React.FC = () => {
             toast.error('Email o contraseña incorrectos.');
             console.error('Auth error:', error.message);
         } else if (data.user) {
-            // Role & Approval Validation
+            // Role validation first
             const { data: profile } = await supabase
                 .from('profiles')
-                .select('role, approved')
+                .select('role')
                 .eq('id', data.user.id)
                 .single();
 
             if (profile?.role !== 'manager') {
                 await supabase.auth.signOut();
                 toast.error('Acceso denegado: Esta cuenta es de Staff.');
-            } else if (!profile.approved) {
-                await supabase.auth.signOut();
-                toast.error('Tu inscripción todavía está pendiente de validación por el administrador.');
             } else {
-                toast.success('Acceso concedido. Bienvenido a tu panel de gestión.');
-                navigate('/team-manager');
+                const { count: approvedTeams, error: approvedTeamsError } = await supabase
+                    .from('teams')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('manager_email', email)
+                    .eq('status', 'approved');
+
+                if (approvedTeamsError) {
+                    await supabase.auth.signOut();
+                    toast.error('No se pudo validar tus equipos aprobados. Intenta de nuevo.');
+                } else if (!approvedTeams || approvedTeams < 1) {
+                    await supabase.auth.signOut();
+                    toast.error('Aun no tienes ningun equipo aprobado. Cuando te autoricen el primero podras entrar al panel.');
+                } else {
+                    toast.success('Acceso concedido. Bienvenido a tu panel de gestión.');
+                    navigate('/team-manager');
+                }
             }
         }
 

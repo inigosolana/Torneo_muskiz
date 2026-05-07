@@ -60,7 +60,28 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
 
 
 
-    if (!selectedTeam) return <div className="p-12 text-center text-slate-500">Cargando equipo...</div>;
+    if (!selectedTeam) {
+        return (
+            <div className="min-h-screen bg-slate-50 dark:bg-background-dark p-6 lg:p-12">
+                <div className="max-w-3xl mx-auto">
+                    <div className="bg-white dark:bg-surface-dark rounded-2xl p-8 border border-slate-200 dark:border-white/10 text-center space-y-4">
+                        <span className="material-symbols-outlined text-5xl text-amber-500">hourglass_top</span>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Aun no tienes equipos autorizados</h2>
+                        <p className="text-slate-500 text-sm">
+                            Puedes inscribir mas equipos cuando quieras, pero solo apareceran aqui cuando el staff los apruebe.
+                        </p>
+                        <button
+                            onClick={() => navigate('/registration')}
+                            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-white font-bold hover:opacity-90 transition-opacity"
+                        >
+                            <span className="material-symbols-outlined text-sm">add</span>
+                            Inscribir nuevo equipo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     const currentPlayerCount = selectedTeam.players.filter(p => p.role === 'PLAYER').length;
     const maxPlayers = 12;
