@@ -72,7 +72,8 @@ function renderActionPage(params: {
       <p style="margin:0 0 16px;color:#334155;line-height:1.5;">${subtitle}</p>
       ${
         showForm
-          ? `<form method="POST" style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;">${formFieldsHtml}</form>`
+          ? `<p style="font-size:12px;color:#64748b;margin:0 0 12px;line-height:1.45;">Si entras desde <strong>Telegram</strong> y al pulsar el botón no ocurre nada, abre el enlace en el navegador del móvil (menú ⋮ → «Abrir en…» / «Abrir en Chrome»). Los mensajes de consola sobre «sandbox» suelen ser del visor interno o extensiones; esta página <strong>no usa JavaScript</strong> para enviar el formulario.</p>
+          <form method="POST" target="_top" style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;">${formFieldsHtml}</form>`
           : `<div style="background:${bg};border:1px solid #e2e8f0;border-radius:10px;padding:14px;color:#334155;">Puedes cerrar esta pestaña y volver a Telegram.</div>`
       }
     </div>
