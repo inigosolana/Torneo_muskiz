@@ -6,6 +6,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
 const N8N_WH_URL = Deno.env.get("N8N_WH_URL");
 const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
+const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 
 const encoder = new TextEncoder();
 const ADMIN_PANEL_URL = "https://torneomuskizbmplaya.es/admin";
@@ -254,6 +255,20 @@ Deno.serve(async (req) => {
       headers: { "Content-Type": "text/html; charset=utf-8" },
     });
   } catch (error) {
+    try {
+      await fetch(OPS_ALERT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "backend.admin-review-action",
+          severity: "error",
+          message: "Error processing admin review action",
+          details: error instanceof Error ? error.message : String(error),
+        }),
+      });
+    } catch {
+      // ignore alert failures
+    }
     return new Response(
       html("Error al procesar acción", error instanceof Error ? error.message : String(error), false),
       { status: 500, headers: { "Content-Type": "text/html; charset=utf-8" } },

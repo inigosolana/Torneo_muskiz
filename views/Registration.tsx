@@ -397,7 +397,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña</label>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña *</label>
                                     <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                                         className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                                         placeholder="********" />

@@ -65,7 +65,7 @@ export const teamService = {
             const { error: uploadError } = await supabase.storage.from('receipts').upload(fileName, receiptFile);
             if (uploadError) {
                 console.error('Error uploading receipt:', uploadError);
-                return [];
+                throw new Error(`Error subiendo justificante: ${uploadError.message}`);
             }
             const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(fileName);
             receiptUrl = urlData.publicUrl;
@@ -83,8 +83,12 @@ export const teamService = {
                 })
                 .select()
                 .single();
-            
-            if (!regError) regId = regData.id;
+
+            if (regError || !regData?.id) {
+                console.error('Error creating registration:', regError);
+                throw new Error(regError?.message || 'No se pudo crear el registro de inscripción');
+            }
+            regId = regData.id;
         }
 
         const insertData = newTeams.map(team => ({
@@ -104,7 +108,18 @@ export const teamService = {
 
         if (error) {
             console.error('Error registering teams:', error);
-            return [];
+            // Best-effort cleanup of orphan registration
+            if (regId) {
+                await supabase.from('registrations').delete().eq('id', regId);
+            }
+            throw new Error(`No se pudieron guardar los equipos: ${error.message}`);
+        }
+
+        if (!data || data.length === 0) {
+            if (regId) {
+                await supabase.from('registrations').delete().eq('id', regId);
+            }
+            throw new Error('No se guardó ningún equipo. Inténtalo de nuevo.');
         }
 
         return data.map((t: any) => ({ ...t, players: [] }));

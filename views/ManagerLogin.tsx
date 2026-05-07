@@ -47,12 +47,14 @@ export const ManagerLogin: React.FC = () => {
             return;
         }
 
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/manager-login`,
+        const { data, error } = await supabase.functions.invoke('request-manager-password-reset', {
+            body: { email },
         });
 
         if (error) {
             toast.error('Error: ' + error.message);
+        } else if ((data as any)?.error) {
+            toast.error((data as any).error);
         } else {
             toast.success('Se ha enviado un email de recuperación a tu correo.');
         }

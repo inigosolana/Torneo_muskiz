@@ -8,6 +8,7 @@ const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
 const ADMIN_EMAIL = "torneomuskizbmplaya@gmail.com";
 const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 const ACTION_BASE_URL = `${SUPABASE_URL}/functions/v1/admin-review-action`;
+const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 
 const encoder = new TextEncoder();
 
@@ -133,6 +134,20 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (error) {
+    try {
+      await fetch(OPS_ALERT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "backend.webhook-player-documents",
+          severity: "critical",
+          message: "Error in webhook-player-documents",
+          details: error instanceof Error ? error.message : String(error),
+        }),
+      });
+    } catch {
+      // ignore alert failures
+    }
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { status: 500 });
   }
 });

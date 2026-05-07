@@ -16,6 +16,7 @@ import { ManagerLogin } from './views/ManagerLogin';
 import { teamService, matchService } from './services/teamService';
 import { generateBracketAI } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
+import { reportOpsAlert } from './services/opsAlertService';
 import { Toaster, toast } from 'sonner';
 import type { User } from '@supabase/supabase-js';
 
@@ -155,6 +156,12 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Error registrando equipos:', error);
+      reportOpsAlert({
+        source: 'frontend.registration',
+        severity: 'error',
+        message: 'Error registrando equipos',
+        details: error?.message ? String(error.message) : 'Unknown registration error',
+      });
       toast.error(error.message || 'Error al registrar los equipos. Revisa los permisos.');
     }
   };
@@ -186,6 +193,12 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error(error);
+      reportOpsAlert({
+        source: 'frontend.bracket-generation',
+        severity: 'error',
+        message: 'Error generando cuadro con IA',
+        details: error instanceof Error ? error.message : String(error),
+      });
       toast.error("Error al generar los partidos");
     }
   };

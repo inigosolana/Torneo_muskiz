@@ -5,6 +5,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const N8N_WH_URL = Deno.env.get("N8N_WH_URL");
 const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
+const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 
 function buildMessage(lines: string[]) {
   return [
@@ -62,6 +63,20 @@ Deno.serve(async () => {
 
     return new Response(JSON.stringify({ success: true, categories: lines.length }), { status: 200 });
   } catch (error) {
+    try {
+      await fetch(OPS_ALERT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "backend.notify-category-capacity",
+          severity: "error",
+          message: "Error generating capacity report",
+          details: error instanceof Error ? error.message : String(error),
+        }),
+      });
+    } catch {
+      // ignore alert failures
+    }
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { status: 500 });
   }
 });

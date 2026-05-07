@@ -8,6 +8,7 @@ const ADMIN_EMAIL = "torneomuskizbmplaya@gmail.com";
 const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
 const ACTION_BASE_URL = `${SUPABASE_URL}/functions/v1/admin-review-action`;
+const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -318,6 +319,20 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('Error in webhook-registration:', error);
+    try {
+      await fetch(OPS_ALERT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'backend.webhook-registration',
+          severity: 'critical',
+          message: 'Error in webhook-registration',
+          details: error instanceof Error ? error.message : String(error),
+        }),
+      });
+    } catch {
+      // ignore alert failures
+    }
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
