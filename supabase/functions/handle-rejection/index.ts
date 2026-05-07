@@ -53,6 +53,17 @@ Deno.serve(async (req) => {
               Lamentamos informarte de que la inscripción del equipo <strong>${teamName}</strong> (${division}) 
               ha sido <strong style="color: #dc2626;">declinada</strong> por el administrador del torneo.
             </p>
+
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0 20px;">
+              <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:10px; padding:10px 12px;">
+                <p style="margin:0; color:#b91c1c; font-size:11px; text-transform:uppercase; font-weight:700;">Estado</p>
+                <p style="margin:4px 0 0; color:#0f172a; font-size:16px; font-weight:700;">Rechazada</p>
+              </div>
+              <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px;">
+                <p style="margin:0; color:#64748b; font-size:11px; text-transform:uppercase; font-weight:700;">Categoría</p>
+                <p style="margin:4px 0 0; color:#0f172a; font-size:16px; font-weight:700;">${division}</p>
+              </div>
+            </div>
             
             <!-- Rejection Reason Box -->
             <div style="background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 8px; padding: 20px; margin: 24px 0;">

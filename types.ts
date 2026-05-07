@@ -133,6 +133,7 @@ export interface Team {
   fee: number;
   managerName: string;
   managerEmail: string;
+  managerPhone?: string;
   paymentFeedback?: string;
   status: 'pending' | 'approved' | 'rejected';
 }

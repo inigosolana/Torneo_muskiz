@@ -64,6 +64,17 @@ Deno.serve(async (req) => {
             <p style="color: #475569; line-height: 1.6; font-size: 14px;">
               Hemos recibido correctamente tu solicitud de inscripción. Aquí tienes el resumen:
             </p>
+
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0 20px;">
+              <div style="background:#ecfeff; border:1px solid #a5f3fc; border-radius:10px; padding:10px 12px;">
+                <p style="margin:0; color:#0e7490; font-size:11px; text-transform:uppercase; font-weight:700;">Equipos</p>
+                <p style="margin:4px 0 0; color:#0f172a; font-size:18px; font-weight:700;">${teams.length}</p>
+              </div>
+              <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:10px 12px;">
+                <p style="margin:0; color:#15803d; font-size:11px; text-transform:uppercase; font-weight:700;">Importe total</p>
+                <p style="margin:4px 0 0; color:#0f172a; font-size:18px; font-weight:700;">${totalFee}€</p>
+              </div>
+            </div>
             
             <!-- Team List -->
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0;">
@@ -106,33 +117,46 @@ Deno.serve(async (req) => {
       to: ADMIN_EMAIL,
       subject: `🚨 NUEVA INSCRIPCIÓN: ${managerName} — ${teams.length} equipo(s)`,
       html: `
-        <div style="font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 600px; margin: auto; padding: 24px;">
-          <h2 style="color: #dc2626;">🚨 Nueva Inscripción Recibida</h2>
-          <p style="color: #475569; font-size: 14px;">Se ha registrado una nueva inscripción que requiere tu validación:</p>
-          
-          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 10px; font-weight: bold; color: #64748b; font-size: 13px;">Responsable</td>
-              <td style="padding: 10px; color: #1e293b;">${managerName} (${managerEmail})</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 10px; font-weight: bold; color: #64748b; font-size: 13px;">Equipos</td>
-              <td style="padding: 10px; color: #1e293b;">${teamSummaryForAdmin}</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 10px; font-weight: bold; color: #64748b; font-size: 13px;">Importe Total</td>
-              <td style="padding: 10px; color: #1e293b; font-weight: bold;">${totalFee}€</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px; font-weight: bold; color: #64748b; font-size: 13px;">Método</td>
-              <td style="padding: 10px; color: #1e293b;">Transferencia Bancaria</td>
-            </tr>
-          </table>
-          
-          <div style="text-align: center; margin: 28px 0;">
-            <a href="https://torneomuskizbmplaya.es/admin" style="background: #111827; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block;">
-              IR AL PANEL DE CONTROL →
-            </a>
+        <div style="font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 600px; margin: auto; background:#ffffff; border:1px solid #e2e8f0; border-radius: 16px; overflow:hidden;">
+          <div style="background: linear-gradient(135deg, #dc2626, #f97316); padding: 24px;">
+            <p style="margin:0; color:#fee2e2; font-size:12px; font-weight:600; letter-spacing:.5px; text-transform:uppercase;">Panel de administración</p>
+            <h2 style="margin:6px 0 0; color:#ffffff; font-size:22px;">🚨 Nueva inscripción recibida</h2>
+          </div>
+
+          <div style="padding: 20px 24px;">
+            <p style="margin:0 0 14px; color: #475569; font-size: 14px;">Se ha registrado una nueva inscripción que requiere validación:</p>
+
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px;">
+              <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px;">
+                <p style="margin:0; color:#64748b; font-size:11px; text-transform:uppercase; font-weight:700;">Nº equipos</p>
+                <p style="margin:4px 0 0; color:#0f172a; font-size:18px; font-weight:700;">${teams.length}</p>
+              </div>
+              <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px;">
+                <p style="margin:0; color:#64748b; font-size:11px; text-transform:uppercase; font-weight:700;">Importe</p>
+                <p style="margin:4px 0 0; color:#0f172a; font-size:18px; font-weight:700;">${totalFee}€</p>
+              </div>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; margin: 12px 0 20px;">
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px; font-weight: bold; color: #64748b; font-size: 13px;">Responsable</td>
+                <td style="padding: 10px; color: #1e293b;">${managerName} (${managerEmail})</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px; font-weight: bold; color: #64748b; font-size: 13px;">Equipos</td>
+                <td style="padding: 10px; color: #1e293b;">${teamSummaryForAdmin}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; font-weight: bold; color: #64748b; font-size: 13px;">Método</td>
+                <td style="padding: 10px; color: #1e293b;">Transferencia Bancaria</td>
+              </tr>
+            </table>
+
+            <div style="text-align: center;">
+              <a href="https://torneomuskizbmplaya.es/admin" style="background: #111827; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block;">
+                IR AL PANEL DE CONTROL →
+              </a>
+            </div>
           </div>
         </div>
       `,

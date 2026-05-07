@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-const FROM_EMAIL = "admin@torneomuskizbmplaya.es";
+const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,6 +17,13 @@ Deno.serve(async (req) => {
   }
 
   try {
+    if (!RESEND_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return new Response(JSON.stringify({ error: 'Faltan variables de entorno requeridas.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const payload = await req.json();
     console.log('Webhook payload received:', payload);
 
@@ -79,7 +86,7 @@ Deno.serve(async (req) => {
 
       // 5. Send approval email
       const emailBody = {
-        from: `Torneo Muskiz <${FROM_EMAIL}>`,
+        from: FROM_EMAIL,
         to: managerEmail,
         subject: `✅ ¡Inscripción Aprobada! — ${teamName} — II Torneo Muskiz`,
         html: `
@@ -164,7 +171,7 @@ Deno.serve(async (req) => {
       const rejectionReason = record.payment_feedback || 'No se ha especificado un motivo.';
 
       const emailBody = {
-        from: `Torneo Muskiz <${FROM_EMAIL}>`,
+        from: FROM_EMAIL,
         to: managerEmail,
         subject: `❌ Inscripción Declinada — ${teamName} — II Torneo Muskiz`,
         html: `

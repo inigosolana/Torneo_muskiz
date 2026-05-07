@@ -102,6 +102,17 @@ Deno.serve(async (req) => {
             <p style="color: #475569; line-height: 1.6; font-size: 14px;">
               El equipo <strong>${teamName}</strong> (${division}) ha sido oficialmente aprobado para el <strong>II Torneo Balonmano Playa Muskiz</strong>.
             </p>
+
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0 20px;">
+              <div style="background:#ecfdf5; border:1px solid #bbf7d0; border-radius:10px; padding:10px 12px;">
+                <p style="margin:0; color:#15803d; font-size:11px; text-transform:uppercase; font-weight:700;">Estado</p>
+                <p style="margin:4px 0 0; color:#0f172a; font-size:16px; font-weight:700;">Aprobado</p>
+              </div>
+              <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px;">
+                <p style="margin:0; color:#64748b; font-size:11px; text-transform:uppercase; font-weight:700;">Categoría</p>
+                <p style="margin:4px 0 0; color:#0f172a; font-size:16px; font-weight:700;">${division}</p>
+              </div>
+            </div>
             
             <!-- Credentials Box -->
             <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #22c55e; border-radius: 8px; padding: 20px; margin: 24px 0;">

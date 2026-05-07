@@ -49,6 +49,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
     // Manager info
     const [managerName, setManagerName] = useState(draftValid ? draft.managerName : '');
     const [managerEmail, setManagerEmail] = useState(draftValid ? draft.managerEmail : '');
+    const [managerPhone, setManagerPhone] = useState(draftValid ? draft.managerPhone : '');
     const [password, setPassword] = useState('');
 
     // Cart of teams to register
@@ -85,13 +86,13 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
             return;
         }
         const data = {
-            managerName, managerEmail,
+            managerName, managerEmail, managerPhone,
             cart, newTeamName, newTeamCity,
             selectedDivision, selectedPayment,
             reservationStart,
         };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
-    }, [managerName, managerEmail, cart, newTeamName, newTeamCity,
+    }, [managerName, managerEmail, managerPhone, cart, newTeamName, newTeamCity,
         selectedDivision, selectedPayment, reservationStart, isCompleted, expired]);
 
     // Timer effect
@@ -170,7 +171,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
     };
 
     const handleComplete = async () => {
-        if (!managerName || !managerEmail || !password) {
+        if (!managerName || !managerEmail || !managerPhone || !password) {
             alert('Por favor, completa los datos del responsable.');
             return;
         }
@@ -214,6 +215,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                 players: [],
                 managerName: managerName,
                 managerEmail: managerEmail,
+                managerPhone: managerPhone,
                 status: 'pending' as const
             }));
 
@@ -376,6 +378,14 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, c
                                         className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                                         placeholder="correo@ejemplo.com" />
                                 </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Teléfono *</label>
+                                    <input type="tel" value={managerPhone} onChange={e => setManagerPhone(e.target.value)}
+                                        className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                                        placeholder="+34 600 123 456" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Contraseña</label>
                                     <input type="password" value={password} onChange={e => setPassword(e.target.value)}

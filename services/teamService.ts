@@ -78,7 +78,8 @@ export const teamService = {
                 .from('registrations')
                 .insert({
                     manager_name: newTeams[0].managerName,
-                    manager_email: newTeams[0].managerEmail
+                    manager_email: newTeams[0].managerEmail,
+                    manager_phone: newTeams[0].managerPhone || null
                 })
                 .select()
                 .single();
