@@ -78,9 +78,16 @@ async function sendTelegramMessage(chatId: number, text: string): Promise<boolea
 }
 
 async function answerCallbackQuery(callbackId: string, text: string, showAlert = false): Promise<void> {
-  if (!BOT_TOKEN) return;
+  if (!BOT_TOKEN) {
+    await sendOpsAlert(
+      "Bot sin TELEGRAM_NOTIFICATIONS_BOT_TOKEN",
+      "answerCallbackQuery no se ha podido enviar.",
+      "error",
+    );
+    return;
+  }
   try {
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -89,15 +96,23 @@ async function answerCallbackQuery(callbackId: string, text: string, showAlert =
         show_alert: showAlert,
       }),
     });
-  } catch {
-    // ignore
+    if (!res.ok) {
+      const body = await res.text();
+      await sendOpsAlert(
+        "answerCallbackQuery falló",
+        `http=${res.status} body=${body.slice(0, 400)} text=${text.slice(0, 120)}`,
+        "warning",
+      );
+    }
+  } catch (e) {
+    await sendOpsAlert("answerCallbackQuery excepción", e instanceof Error ? e.message : String(e), "warning");
   }
 }
 
 async function editMessageReplyMarkup(chatId: number, messageId: number): Promise<void> {
   if (!BOT_TOKEN) return;
   try {
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageReplyMarkup`, {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageReplyMarkup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -106,15 +121,23 @@ async function editMessageReplyMarkup(chatId: number, messageId: number): Promis
         reply_markup: { inline_keyboard: [] },
       }),
     });
-  } catch {
-    // ignore
+    if (!res.ok) {
+      const body = await res.text();
+      await sendOpsAlert(
+        "editMessageReplyMarkup falló",
+        `http=${res.status} chat=${chatId} msg=${messageId} body=${body.slice(0, 400)}`,
+        "warning",
+      );
+    }
+  } catch (e) {
+    await sendOpsAlert("editMessageReplyMarkup excepción", e instanceof Error ? e.message : String(e), "warning");
   }
 }
 
 async function appendMessageFooter(chatId: number, messageId: number, footer: string): Promise<void> {
   if (!BOT_TOKEN) return;
   try {
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -126,8 +149,16 @@ async function appendMessageFooter(chatId: number, messageId: number, footer: st
         allow_sending_without_reply: true,
       }),
     });
-  } catch {
-    // ignore
+    if (!res.ok) {
+      const body = await res.text();
+      await sendOpsAlert(
+        "appendMessageFooter falló",
+        `http=${res.status} chat=${chatId} msg=${messageId} body=${body.slice(0, 400)}`,
+        "warning",
+      );
+    }
+  } catch (e) {
+    await sendOpsAlert("appendMessageFooter excepción", e instanceof Error ? e.message : String(e), "warning");
   }
 }
 
@@ -203,13 +234,24 @@ async function setPendingRejection(row: {
   source_message_id: number | null;
   source_chat_id: number | null;
 }): Promise<boolean> {
-  if (!supabaseAdmin) return false;
+  if (!supabaseAdmin) {
+    await sendOpsAlert(
+      "supabaseAdmin no disponible",
+      "Faltan SUPABASE_URL o SERVICE_ROLE; no se puede guardar denegación pendiente.",
+      "critical",
+    );
+    return false;
+  }
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
   const { error } = await supabaseAdmin
     .from("telegram_pending_rejections")
     .upsert({ ...row, expires_at: expiresAt }, { onConflict: "chat_id,user_id" });
   if (error) {
-    await sendOpsAlert("setPendingRejection falló", error.message, "error");
+    await sendOpsAlert(
+      "setPendingRejection falló",
+      `chat=${row.chat_id} user=${row.user_id} entity=${row.entity} id=${row.entity_id} err=${error.message}`,
+      "error",
+    );
     return false;
   }
   return true;
@@ -223,7 +265,15 @@ async function getPendingRejection(chatId: string, userId: string): Promise<Pend
     .eq("chat_id", chatId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (error || !data) return null;
+  if (error) {
+    await sendOpsAlert(
+      "getPendingRejection error de DB",
+      `chat=${chatId} user=${userId} err=${error.message}`,
+      "warning",
+    );
+    return null;
+  }
+  if (!data) return null;
   if (new Date(data.expires_at).getTime() < Date.now()) {
     await clearPendingRejection(chatId, userId);
     return null;
@@ -233,11 +283,18 @@ async function getPendingRejection(chatId: string, userId: string): Promise<Pend
 
 async function clearPendingRejection(chatId: string, userId: string): Promise<void> {
   if (!supabaseAdmin) return;
-  await supabaseAdmin
+  const { error } = await supabaseAdmin
     .from("telegram_pending_rejections")
     .delete()
     .eq("chat_id", chatId)
     .eq("user_id", userId);
+  if (error) {
+    await sendOpsAlert(
+      "clearPendingRejection error",
+      `chat=${chatId} user=${userId} err=${error.message}`,
+      "warning",
+    );
+  }
 }
 
 async function sendForceReplyPrompt(chatId: number, text: string): Promise<number | null> {
@@ -253,10 +310,19 @@ async function sendForceReplyPrompt(chatId: number, text: string): Promise<numbe
         reply_markup: { force_reply: true, selective: true, input_field_placeholder: "Motivo del rechazo" },
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = await res.text();
+      await sendOpsAlert(
+        "sendForceReplyPrompt falló",
+        `http=${res.status} chat=${chatId} body=${body.slice(0, 400)}`,
+        "error",
+      );
+      return null;
+    }
     const data = await res.json();
     return Number(data?.result?.message_id ?? 0) || null;
-  } catch {
+  } catch (e) {
+    await sendOpsAlert("sendForceReplyPrompt excepción", e instanceof Error ? e.message : String(e), "error");
     return null;
   }
 }
@@ -315,19 +381,43 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
   const chatId = Number(message?.chat?.id);
   const messageId = Number(message?.message_id);
 
-  if (!callbackId) return;
+  if (!callbackId) {
+    await sendOpsAlert(
+      "callback_query sin id",
+      `Callback recibido sin id de Telegram. data=${data} chat=${chatId} user=${fromId}`,
+      "warning",
+    );
+    return;
+  }
 
   const adminChatIds = parseChatIds(TELEGRAM_ADMIN_CHAT_IDS);
+  if (adminChatIds.length === 0) {
+    await sendOpsAlert(
+      "TELEGRAM_ADMIN_CHAT_IDS sin configurar",
+      "Los botones aprobar/denegar no están protegidos: configura TELEGRAM_ADMIN_CHAT_IDS.",
+      "warning",
+    );
+  }
   const isAuthorized = adminChatIds.length === 0
-    ? true // si no se han configurado chats admin, no bloqueamos (se pierde la protección)
+    ? true
     : adminChatIds.includes(String(chatId)) || adminChatIds.includes(fromId);
   if (!isAuthorized) {
+    await sendOpsAlert(
+      "Callback Telegram NO AUTORIZADO",
+      `chat=${chatId} user=${fromId} (@${fromUser?.username ?? "?"}) data=${data}`,
+      "warning",
+    );
     await answerCallbackQuery(callbackId, "❌ No autorizado.", true);
     return;
   }
 
   const parsed = parseCallbackData(data);
   if (!parsed) {
+    await sendOpsAlert(
+      "Callback con datos no reconocidos",
+      `data=${data} chat=${chatId} user=${fromId}`,
+      "warning",
+    );
     await answerCallbackQuery(callbackId, "Acción desconocida.", true);
     return;
   }
@@ -339,6 +429,11 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
   // DENEGAR: pedimos motivo en chat (flujo en dos pasos).
   if (parsed.action === "reject") {
     if (!supabaseAdmin) {
+      await sendOpsAlert(
+        "supabaseAdmin no disponible al pulsar Denegar",
+        "No se puede iniciar el flujo de denegación con motivo.",
+        "critical",
+      );
       await answerCallbackQuery(callbackId, "❌ Configuración incompleta.", true);
       return;
     }
@@ -367,7 +462,7 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
       source_chat_id: Number.isFinite(chatId) ? chatId : null,
     });
     if (!stored) {
-      await answerCallbackQuery(callbackId, "❌ No pude registrar la denegación.", true);
+      await answerCallbackQuery(callbackId, "❌ No pude registrar la denegación. Mira el canal de alertas.", true);
       return;
     }
     if (Number.isFinite(chatId) && Number.isFinite(messageId)) {
@@ -522,14 +617,19 @@ Deno.serve(async (req) => {
       }
       const fromUser = message?.from ?? null;
       const result = await processPendingRejection(pending, motivo, fromUser);
-      await clearPendingRejection(String(chatId), String(userId));
       if (!result.ok) {
-        await sendTelegramMessage(chatId, "❌ No pude completar la denegación. Vuelve a intentarlo.");
+        await sendOpsAlert(
+          "Denegación con motivo FALLÓ",
+          `entity=${pending.entity} id=${pending.entity_id} chat=${chatId} user=${userId} motivo=${motivo.slice(0, 200)}`,
+          "error",
+        );
+        await sendTelegramMessage(chatId, "❌ No pude completar la denegación. El equipo de alertas ha sido avisado. Vuelve a intentarlo en un momento.");
         return new Response(JSON.stringify({ ok: false }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      await clearPendingRejection(String(chatId), String(userId));
       const userLabel = fromUser?.username ? `@${fromUser.username}` : (fromUser?.first_name ?? "admin");
       const ackChatId = Number.isFinite(result.chatId) ? result.chatId : chatId;
       if (result.sourceMessageId && Number.isFinite(ackChatId)) {

@@ -27,20 +27,36 @@ function parseChatIds(value?: string | null): string[] {
   return value.split(",").map((v) => v.trim()).filter(Boolean);
 }
 
-async function sendTelegramHtmlToChats(chatIds: string[], html: string): Promise<void> {
+async function sendTelegramHtmlToChats(chatIds: string[], html: string, context: string): Promise<void> {
   if (!TELEGRAM_NOTIFICATIONS_BOT_TOKEN || chatIds.length === 0) return;
-  await Promise.all(chatIds.map((chatId) =>
-    fetch(`https://api.telegram.org/bot${TELEGRAM_NOTIFICATIONS_BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: html,
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      }),
-    }).catch(() => null)
-  ));
+  await Promise.all(chatIds.map(async (chatId) => {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_NOTIFICATIONS_BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: html,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        await sendOpsAlert(
+          "warning",
+          `Telegram resumen falló (${context})`,
+          `chat=${chatId} http=${res.status} body=${body.slice(0, 400)}`,
+        );
+      }
+    } catch (err) {
+      await sendOpsAlert(
+        "warning",
+        `Telegram resumen excepción (${context})`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }));
 }
 
 const encoder = new TextEncoder();
@@ -177,7 +193,14 @@ async function sendManagerEmail(action: "approve" | "reject", team: {
   manager_name?: string;
   manager_email?: string;
 }, rejectionReason?: string) {
-  if (!team.manager_email) return;
+  if (!team.manager_email) {
+    await sendOpsAlert(
+      "warning",
+      `Sin email del responsable para ${action} de equipo`,
+      `team=${team.name ?? "?"} division=${team.division ?? "?"}`,
+    );
+    return;
+  }
   const url = action === "approve" ? HANDLE_APPROVAL_URL : HANDLE_REJECTION_URL;
   const body = action === "approve"
     ? {
@@ -194,13 +217,25 @@ async function sendManagerEmail(action: "approve" | "reject", team: {
         rejectionReason: rejectionReason ?? "No cumple los requisitos de validación",
       };
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-  } catch {
-    // ignore email failures here
+    if (!res.ok) {
+      const text = await res.text();
+      await sendOpsAlert(
+        "error",
+        `Email al responsable de equipo falló (${action})`,
+        `team=${team.name ?? "?"} email=${team.manager_email} http=${res.status} body=${text.slice(0, 400)}`,
+      );
+    }
+  } catch (e) {
+    await sendOpsAlert(
+      "error",
+      `Email al responsable de equipo excepción (${action})`,
+      `team=${team.name ?? "?"} email=${team.manager_email} err=${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 
@@ -210,11 +245,18 @@ async function sendAdminReceipt(action: "approve" | "reject", team: {
   manager_name?: string;
   manager_email?: string;
 }, rejectionReason?: string) {
-  if (!RESEND_API_KEY) return;
+  if (!RESEND_API_KEY) {
+    await sendOpsAlert(
+      "warning",
+      "RESEND_API_KEY sin configurar",
+      "El admin no recibirá recibo de revisión de equipos.",
+    );
+    return;
+  }
   const actionLabel = action === "approve" ? "APROBADO" : "DENEGADO";
   const reasonBlock = action === "reject" ? `<p><strong>Motivo:</strong> ${rejectionReason ?? "No informado"}</p>` : "";
   try {
-    await fetch("https://api.resend.com/emails", {
+    const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -236,8 +278,20 @@ async function sendAdminReceipt(action: "approve" | "reject", team: {
         `,
       }),
     });
-  } catch {
-    // ignore admin receipt failures
+    if (!res.ok) {
+      const text = await res.text();
+      await sendOpsAlert(
+        "warning",
+        `Recibo admin equipo falló (${action})`,
+        `team=${team.name ?? "?"} http=${res.status} body=${text.slice(0, 400)}`,
+      );
+    }
+  } catch (e) {
+    await sendOpsAlert(
+      "warning",
+      `Recibo admin equipo excepción (${action})`,
+      e instanceof Error ? e.message : String(e),
+    );
   }
 }
 
@@ -274,12 +328,12 @@ async function sendTeamReviewTelegram(
   ].join("\n");
 
   // 1) Envío directo HTML al chat de admins (con tick).
-  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html);
+  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html, `team-${action}`);
 
   // 2) n8n: solo viewer/read-only para no duplicar.
   if (N8N_WH_URL && TELEGRAM_VIEWER_CHAT_IDS) {
     try {
-      await fetch(N8N_WH_URL, {
+      const res = await fetch(N8N_WH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -288,8 +342,19 @@ async function sendTeamReviewTelegram(
           message: plain,
         }),
       });
+      if (!res.ok) {
+        await sendOpsAlert(
+          "warning",
+          "n8n resumen equipo falló",
+          `http=${res.status} action=${action}`,
+        );
+      }
     } catch (notifyError) {
-      console.warn("No se pudo enviar resumen de plazas a Telegram:", notifyError);
+      await sendOpsAlert(
+        "warning",
+        "n8n resumen equipo excepción",
+        notifyError instanceof Error ? notifyError.message : String(notifyError),
+      );
     }
   }
 }
@@ -338,12 +403,12 @@ async function sendPlayerDocReviewTelegram(
   ].join("\n");
 
   // 1) Directo al chat admin (HTML con tick).
-  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html);
+  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html, `${docType}-${action}`);
 
   // 2) n8n: solo viewer.
   if (N8N_WH_URL && TELEGRAM_VIEWER_CHAT_IDS) {
     try {
-      await fetch(N8N_WH_URL, {
+      const res = await fetch(N8N_WH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -352,8 +417,19 @@ async function sendPlayerDocReviewTelegram(
           message: plain,
         }),
       });
+      if (!res.ok) {
+        await sendOpsAlert(
+          "warning",
+          "n8n resumen doc falló",
+          `http=${res.status} docType=${docType} action=${action}`,
+        );
+      }
     } catch (notifyError) {
-      console.warn("No se pudo enviar resumen de doc a Telegram:", notifyError);
+      await sendOpsAlert(
+        "warning",
+        "n8n resumen doc excepción",
+        notifyError instanceof Error ? notifyError.message : String(notifyError),
+      );
     }
   }
 }
@@ -365,7 +441,10 @@ async function sendPlayerDocAdminReceipt(
   team: { name?: string; division?: string; manager_name?: string; manager_email?: string },
   rejectionReason?: string,
 ) {
-  if (!RESEND_API_KEY) return;
+  if (!RESEND_API_KEY) {
+    await sendOpsAlert("warning", "RESEND_API_KEY sin configurar", "El admin no recibirá recibo de DNI/Seguro.");
+    return;
+  }
   const ok = action === "approve";
   const docLabel = docType === "dni" ? "DNI / identificación" : "Seguro médico o federativo";
   const tick = ok ? "✅" : "❌";
@@ -376,7 +455,7 @@ async function sendPlayerDocAdminReceipt(
        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;white-space:pre-wrap;">${rejectionReason ?? "No informado"}</div>`
     : "";
   try {
-    await fetch("https://api.resend.com/emails", {
+    const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -398,8 +477,20 @@ async function sendPlayerDocAdminReceipt(
         `,
       }),
     });
-  } catch {
-    // ignore
+    if (!res.ok) {
+      const text = await res.text();
+      await sendOpsAlert(
+        "warning",
+        `Recibo admin DNI/Seguro falló (${action})`,
+        `player=${playerName} doc=${docType} http=${res.status} body=${text.slice(0, 400)}`,
+      );
+    }
+  } catch (e) {
+    await sendOpsAlert(
+      "warning",
+      `Recibo admin DNI/Seguro excepción (${action})`,
+      e instanceof Error ? e.message : String(e),
+    );
   }
 }
 

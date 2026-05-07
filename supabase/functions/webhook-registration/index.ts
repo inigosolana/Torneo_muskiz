@@ -337,8 +337,8 @@ Deno.serve(async (req) => {
       }
 
       try {
-        await Promise.all(adminChatList.map((chatId) =>
-          fetch(`https://api.telegram.org/bot${TELEGRAM_NOTIFICATIONS_BOT_TOKEN}/sendMessage`, {
+        await Promise.all(adminChatList.map(async (chatId) => {
+          const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_NOTIFICATIONS_BOT_TOKEN}/sendMessage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -348,10 +348,41 @@ Deno.serve(async (req) => {
               disable_web_page_preview: true,
               reply_markup: { inline_keyboard },
             }),
-          })
-        ));
+          });
+          if (!res.ok) {
+            const body = await res.text();
+            try {
+              await fetch(OPS_ALERT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  source: 'backend.webhook-registration',
+                  severity: 'error',
+                  message: 'Telegram sendMessage equipo nuevo falló',
+                  details: `chat=${chatId} http=${res.status} body=${body.slice(0, 400)}`,
+                }),
+              });
+            } catch {
+              // ignore alert failures
+            }
+          }
+        }));
       } catch (telegramError) {
-        console.warn("Telegram direct send failed (ignored):", telegramError);
+        console.warn("Telegram direct send failed:", telegramError);
+        try {
+          await fetch(OPS_ALERT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: 'backend.webhook-registration',
+              severity: 'error',
+              message: 'Telegram direct send excepción (equipo nuevo)',
+              details: telegramError instanceof Error ? telegramError.message : String(telegramError),
+            }),
+          });
+        } catch {
+          // ignore alert failures
+        }
       }
     }
 
