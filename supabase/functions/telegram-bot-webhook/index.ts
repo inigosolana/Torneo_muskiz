@@ -273,7 +273,8 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
     const userLabel = fromUser?.username
       ? `@${fromUser.username}`
       : (fromUser?.first_name ?? "admin");
-    await appendMessageFooter(chatId, messageId, `${footer}\nPor: ${userLabel}`);
+    // Pequeño reply con "quién" lo hizo. La tarjeta-resumen completa la envía admin-review-action.
+    await appendMessageFooter(chatId, messageId, `${footer} · Por ${userLabel}`);
   }
 }
 

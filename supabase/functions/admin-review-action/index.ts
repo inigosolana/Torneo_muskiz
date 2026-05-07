@@ -8,11 +8,40 @@ const N8N_WH_URL = Deno.env.get("N8N_WH_URL");
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
 const TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("TELEGRAM_VIEWER_CHAT_IDS");
+const TELEGRAM_NOTIFICATIONS_BOT_TOKEN = Deno.env.get("TELEGRAM_NOTIFICATIONS_BOT_TOKEN");
 const OPS_ALERT_URL = `${SUPABASE_URL}/functions/v1/notify-ops-alert`;
 const HANDLE_APPROVAL_URL = `${SUPABASE_URL}/functions/v1/handle-approval`;
 const HANDLE_REJECTION_URL = `${SUPABASE_URL}/functions/v1/handle-rejection`;
 const ADMIN_EMAIL = "torneomuskizbmplaya@gmail.com";
 const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
+
+function escHtmlTelegram(s: unknown): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function parseChatIds(value?: string | null): string[] {
+  if (!value) return [];
+  return value.split(",").map((v) => v.trim()).filter(Boolean);
+}
+
+async function sendTelegramHtmlToChats(chatIds: string[], html: string): Promise<void> {
+  if (!TELEGRAM_NOTIFICATIONS_BOT_TOKEN || chatIds.length === 0) return;
+  await Promise.all(chatIds.map((chatId) =>
+    fetch(`https://api.telegram.org/bot${TELEGRAM_NOTIFICATIONS_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: html,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+    }).catch(() => null)
+  ));
+}
 
 const encoder = new TextEncoder();
 
@@ -217,13 +246,24 @@ async function sendTeamReviewTelegram(
   action: "approve" | "reject",
   team: { name?: string; division?: string; manager_name?: string },
 ) {
-  if (!N8N_WH_URL) return;
   const capacity = await getCategoryCapacitySummary(supabase);
   const categoryLine = capacity.find((c) => c.category === (team.division ?? "")) ??
     { category: team.division ?? "N/D", remaining: 0, maxTeams: 0 };
-  const actionTitle = action === "approve" ? "EQUIPO APROBADO" : "EQUIPO DENEGADO";
-  const message = [
-    actionTitle,
+  const ok = action === "approve";
+  const tick = ok ? "✅" : "❌";
+  const titleColor = ok ? "EQUIPO APROBADO" : "EQUIPO DENEGADO";
+  const html = [
+    `${tick} <b>${titleColor}</b>`,
+    "",
+    `<b>🏐 Equipo:</b> ${escHtmlTelegram(team.name ?? "N/D")}`,
+    `<b>🏷️ Categoría:</b> ${escHtmlTelegram(team.division ?? "N/D")}`,
+    `<b>👤 Responsable:</b> ${escHtmlTelegram(team.manager_name ?? "N/D")}`,
+    "",
+    `<b>🎟️ Plazas restantes en ${escHtmlTelegram(categoryLine.category)}:</b> ${categoryLine.remaining}/${categoryLine.maxTeams}`,
+    "<i>(pendientes + aprobadas ocupan plaza)</i>",
+  ].join("\n");
+  const plain = [
+    `${tick} ${titleColor}`,
     "",
     `Equipo: ${team.name ?? "N/D"}`,
     `Categoría: ${team.division ?? "N/D"}`,
@@ -233,18 +273,133 @@ async function sendTeamReviewTelegram(
     "(pendientes + aprobadas ocupan plaza)",
   ].join("\n");
 
+  // 1) Envío directo HTML al chat de admins (con tick).
+  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html);
+
+  // 2) n8n: solo viewer/read-only para no duplicar.
+  if (N8N_WH_URL && TELEGRAM_VIEWER_CHAT_IDS) {
+    try {
+      await fetch(N8N_WH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventType: action === "approve" ? "team-approved" : "team-rejected",
+          adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
+          message: plain,
+        }),
+      });
+    } catch (notifyError) {
+      console.warn("No se pudo enviar resumen de plazas a Telegram:", notifyError);
+    }
+  }
+}
+
+async function sendPlayerDocReviewTelegram(
+  supabase: ReturnType<typeof createClient>,
+  action: "approve" | "reject",
+  docType: "dni" | "insurance",
+  playerId: string,
+) {
+  const ok = action === "approve";
+  const tick = ok ? "✅" : "❌";
+  const docLabel = docType === "dni" ? "DNI" : "SEGURO";
+
+  const { data: player } = await supabase
+    .from("players")
+    .select("name, surnames, team_id")
+    .eq("id", playerId)
+    .maybeSingle();
+  if (!player) return;
+  const playerName = [player.name, player.surnames].filter(Boolean).join(" ").trim() || "Jugador";
+
+  const { data: team } = await supabase
+    .from("teams")
+    .select("name, division, manager_name, manager_email")
+    .eq("id", player.team_id)
+    .maybeSingle();
+
+  const html = [
+    `${tick} <b>${docLabel} ${ok ? "APROBADO" : "DENEGADO"}</b>`,
+    "",
+    `<b>👤 Jugador:</b> ${escHtmlTelegram(playerName)}`,
+    `<b>🏐 Equipo:</b> ${escHtmlTelegram(team?.name ?? "N/D")}`,
+    `<b>🏷️ Categoría:</b> ${escHtmlTelegram(team?.division ?? "N/D")}`,
+    `<b>👔 Responsable:</b> ${escHtmlTelegram(team?.manager_name ?? "N/D")}`,
+    `<b>📧 Correo:</b> ${escHtmlTelegram(team?.manager_email ?? "N/D")}`,
+  ].join("\n");
+  const plain = [
+    `${tick} ${docLabel} ${ok ? "APROBADO" : "DENEGADO"}`,
+    "",
+    `Jugador: ${playerName}`,
+    `Equipo: ${team?.name ?? "N/D"}`,
+    `Categoría: ${team?.division ?? "N/D"}`,
+    `Responsable: ${team?.manager_name ?? "N/D"}`,
+    `Correo: ${team?.manager_email ?? "N/D"}`,
+  ].join("\n");
+
+  // 1) Directo al chat admin (HTML con tick).
+  await sendTelegramHtmlToChats(parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), html);
+
+  // 2) n8n: solo viewer.
+  if (N8N_WH_URL && TELEGRAM_VIEWER_CHAT_IDS) {
+    try {
+      await fetch(N8N_WH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventType: action === "approve" ? "player-doc-approved" : "player-doc-rejected",
+          adminChatIds: TELEGRAM_VIEWER_CHAT_IDS,
+          message: plain,
+        }),
+      });
+    } catch (notifyError) {
+      console.warn("No se pudo enviar resumen de doc a Telegram:", notifyError);
+    }
+  }
+}
+
+async function sendPlayerDocAdminReceipt(
+  action: "approve" | "reject",
+  docType: "dni" | "insurance",
+  player: { name?: string; surnames?: string },
+  team: { name?: string; division?: string; manager_name?: string; manager_email?: string },
+  rejectionReason?: string,
+) {
+  if (!RESEND_API_KEY) return;
+  const ok = action === "approve";
+  const docLabel = docType === "dni" ? "DNI / identificación" : "Seguro médico o federativo";
+  const tick = ok ? "✅" : "❌";
+  const stateLabel = ok ? "APROBADO" : "DENEGADO";
+  const playerName = [player.name, player.surnames].filter(Boolean).join(" ").trim() || "Jugador";
+  const reasonBlock = !ok
+    ? `<p style="margin:8px 0;"><strong>Motivo enviado al responsable:</strong></p>
+       <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;white-space:pre-wrap;">${rejectionReason ?? "No informado"}</div>`
+    : "";
   try {
-    await fetch(N8N_WH_URL, {
+    await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${RESEND_API_KEY}`,
+      },
       body: JSON.stringify({
-        eventType: action === "approve" ? "team-approved" : "team-rejected",
-        adminChatIds: mergeChatIds(TELEGRAM_ADMIN_CHAT_IDS, TELEGRAM_VIEWER_CHAT_IDS),
-        message,
+        from: FROM_EMAIL,
+        to: ADMIN_EMAIL,
+        subject: `${tick} ${docLabel} ${stateLabel} — ${playerName}`,
+        html: `
+          <div style="font-family:Segoe UI,Tahoma,sans-serif;max-width:620px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;padding:18px;line-height:1.55;">
+            <h2 style="margin:0 0 10px;color:${ok ? "#15803d" : "#b91c1c"};">${tick} ${docLabel} ${stateLabel}</h2>
+            <p><strong>Jugador:</strong> ${playerName}</p>
+            <p><strong>Equipo:</strong> ${team.name ?? "N/D"}</p>
+            <p><strong>Categoría:</strong> ${team.division ?? "N/D"}</p>
+            <p><strong>Responsable:</strong> ${team.manager_name ?? "N/D"} (${team.manager_email ?? "N/D"})</p>
+            ${reasonBlock}
+          </div>
+        `,
       }),
     });
-  } catch (notifyError) {
-    console.warn("No se pudo enviar resumen de plazas a Telegram:", notifyError);
+  } catch {
+    // ignore
   }
 }
 
@@ -488,6 +643,34 @@ Deno.serve(async (req) => {
         }));
       }
 
+      // Recuperar datos para emails y Telegram (admin + responsable).
+      const { data: playerInfo } = await supabase
+        .from("players")
+        .select("name, surnames, team_id")
+        .eq("id", id)
+        .maybeSingle();
+      let teamInfo: {
+        name?: string;
+        division?: string;
+        manager_name?: string;
+        manager_email?: string;
+      } = {};
+      if (playerInfo?.team_id) {
+        const { data: t } = await supabase
+          .from("teams")
+          .select("name, division, manager_name, manager_email")
+          .eq("id", playerInfo.team_id)
+          .maybeSingle();
+        if (t) teamInfo = t;
+      }
+
+      const defaultRejectReason =
+        "El organizador no ha podido validar el documento (legibilidad, archivo incorrecto o documento no vigente). Sube un archivo nuevo desde el panel de tu equipo. Si necesitas ayuda, contacta con la organización del torneo.";
+      const effectiveRejectReason = action === "reject"
+        ? (rejectionReason && rejectionReason.trim() ? rejectionReason.trim() : defaultRejectReason)
+        : undefined;
+
+      // Correo al RESPONSABLE (vía notify-player-doc-manager-email si tiene secret configurado).
       const notifySecret = Deno.env.get("PLAYER_DOC_NOTIFY_INTERNAL_SECRET");
       if (notifySecret) {
         try {
@@ -502,7 +685,7 @@ Deno.serve(async (req) => {
               playerId: id,
               docType,
               approved: action === "approve",
-              rejectionReason: action === "reject" ? null : undefined,
+              rejectionReason: action === "reject" ? effectiveRejectReason : undefined,
             }),
           });
           if (!resNotify.ok) {
@@ -516,6 +699,28 @@ Deno.serve(async (req) => {
         } catch (e) {
           await sendOpsAlert("warning", "notify-player-doc-manager-email exception", getErrorMessage(e));
         }
+      } else {
+        await sendOpsAlert(
+          "warning",
+          "PLAYER_DOC_NOTIFY_INTERNAL_SECRET no configurado",
+          "El responsable no recibirá email automático de revisión de documento.",
+        );
+      }
+
+      // Recibo al ADMIN.
+      await sendPlayerDocAdminReceipt(
+        action,
+        docType,
+        playerInfo ?? {},
+        teamInfo,
+        effectiveRejectReason,
+      );
+
+      // Resumen tipo tarjeta con tick a Telegram (admin + viewer).
+      try {
+        await sendPlayerDocReviewTelegram(supabase, action, docType, id);
+      } catch (notifyError) {
+        console.warn("No se pudo enviar resumen player-doc a Telegram:", notifyError);
       }
 
       const label = docType === "dni" ? "DNI" : "seguro";
