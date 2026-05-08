@@ -1,15 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { searchRules } from '../services/geminiService';
-import { Match, Team } from '../types';
+import { Team } from '../types';
 import { siteContent } from '../constants/siteContent';
+import { useTournamentData } from '../context/TournamentDataContext';
 
-interface ScheduleProps {
-    matches: Match[];
-    teams: Team[];
-    categoryLimits: { [key: string]: number };
-}
-
-export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, categoryLimits }) => {
+export const Schedule: React.FC = () => {
+    const { matches, teams, categoryLimits } = useTournamentData();
     const [activeTab, setActiveTab] = useState<'info' | 'calendar' | 'results' | 'standings'>('info');
     const [infoSubTab, setInfoSubTab] = useState<'general' | 'rules'>('general');
 

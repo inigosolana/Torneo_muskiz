@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-primary: 0 124 124;
+  --color-primary-dark: 0 102 102;
+  --color-primary-light: 96 226 226;
+}
+
+.dark {
+  --color-primary: 13 242 242;
+  --color-primary-dark: 11 202 202;
+  --color-primary-light: 128 251 251;
+}
+
 body {
   font-family: "Noto Sans", sans-serif;
 }

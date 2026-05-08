@@ -6,18 +6,17 @@ import { resizeAndCompressImage } from '../utils/imageProcessor';
 import { toast } from 'sonner';
 import { teamService } from '../services/teamService';
 import * as XLSX from 'xlsx';
+import { useTournamentData } from '../context/TournamentDataContext';
 
 interface AdminProps {
-    teams: Team[];
     onUpdateTeam: (team: Team) => void;
-    matches: Match[];
     onUpdateMatches: (matches: Match[]) => void;
-    categoryLimits: CategoryLimits;
     onUpdateLimits: (limits: CategoryLimits) => void;
     onGenerateBrackets: () => void;
 }
 
-export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUpdateMatches, categoryLimits, onUpdateLimits, onGenerateBrackets }) => {
+export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onUpdateLimits, onGenerateBrackets }) => {
+    const { teams, matches, categoryLimits } = useTournamentData();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [adminEmail, setAdminEmail] = useState('');
     const [passwordInput, setPasswordInput] = useState('');

@@ -17,9 +17,9 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: "#0df2f2",
-          dark: "#0bcaca",
-          light: "#80fbfb",
+          DEFAULT: "rgb(var(--color-primary) / <alpha-value>)",
+          dark: "rgb(var(--color-primary-dark) / <alpha-value>)",
+          light: "rgb(var(--color-primary-light) / <alpha-value>)",
         },
         secondary: "#f4d06f",
         background: {

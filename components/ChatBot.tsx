@@ -1,12 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { sendChatMessage } from '../services/geminiService';
-import { ChatMessage, Match } from '../types';
+import { ChatMessage } from '../types';
+import { useTournamentData } from '../context/TournamentDataContext';
 
-interface ChatBotProps {
-  matches?: Match[];
-}
-
-export const ChatBot: React.FC<ChatBotProps> = ({ matches = [] }) => {
+export const ChatBot: React.FC = () => {
+  const { matches } = useTournamentData();
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);

@@ -2,13 +2,14 @@ import React, { useRef, useState } from 'react';
 import { Team, Player } from '../types';
 import SignatureCanvas from 'react-signature-canvas';
 import { useNavigate } from 'react-router-dom';
+import { useTournamentData } from '../context/TournamentDataContext';
 
 interface PlayerSelfRegistrationProps {
-    teams: Team[];
     onUpdateTeam: (team: Team) => void;
 }
 
-export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ teams, onUpdateTeam }) => {
+export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ onUpdateTeam }) => {
+    const { teams } = useTournamentData();
     const navigate = useNavigate();
     const params = new URLSearchParams(window.location.search);
     const teamId = params.get('teamId');

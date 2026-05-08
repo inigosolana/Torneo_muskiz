@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Team } from '../types';
 import { siteContent } from '../constants/siteContent';
+import { useTournamentData } from '../context/TournamentDataContext';
 
-interface HomeProps {
-  teams: Team[];
-}
-
-export const Home: React.FC<HomeProps> = ({ teams }) => {
+export const Home: React.FC = () => {
+  const { teams } = useTournamentData();
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
 
@@ -32,6 +29,7 @@ export const Home: React.FC<HomeProps> = ({ teams }) => {
             muted
             loop
             playsInline
+            poster="/campos.jpg"
             className="absolute inset-0 w-full h-full object-cover opacity-60"
           >
             <source src="/promo.mp4" type="video/mp4" />

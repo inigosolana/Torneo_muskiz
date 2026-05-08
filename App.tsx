@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Team, Match, CategoryLimits } from './types';
 import { Layout } from './components/Layout';
 import { ChatBot } from './components/ChatBot';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { Home } from './views/Home';
 import { Schedule } from './views/Schedule';
 import { Admin } from './views/Admin';
@@ -20,6 +21,7 @@ import { OpsErrorBoundary } from './components/OpsErrorBoundary';
 import { reportOpsAlert } from './services/opsAlertService';
 import { Toaster, toast } from 'sonner';
 import type { User } from '@supabase/supabase-js';
+import { TournamentDataProvider } from './context/TournamentDataContext';
 
 const App: React.FC = () => {
   // Category Limits (Admin controlled)
@@ -223,110 +225,80 @@ const App: React.FC = () => {
     }
   };
 
-  // Protected Route Component
-  const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRole: 'staff' | 'manager' }> = ({ children, allowedRole }) => {
-    useEffect(() => {
-      if (user && !roleLoading && userRole && userRole !== allowedRole) {
-        toast.error(`Acceso denegado: Tu cuenta no tiene permisos de ${allowedRole}. Cerrando sesión por seguridad.`);
-        handleLogout();
-      }
-    }, [user, userRole, roleLoading, allowedRole]);
-
-    if (roleLoading) return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
-      </div>
-    );
-
-    if (!user) {
-      return allowedRole === 'staff' ? (
-        <Admin
-          teams={teams}
-          onUpdateTeam={updateTeam}
-          matches={matches}
-          onUpdateMatches={updateMatches}
-          categoryLimits={categoryLimits}
-          onUpdateLimits={setCategoryLimits}
-          onGenerateBrackets={handleGenerateBrackets}
-        />
-      ) : (
-        <ManagerLogin />
-      );
-    }
-
-    if (userRole !== allowedRole) {
-      return <Navigate to="/" replace />;
-    }
-
-    if (allowedRole === 'manager') {
-      if (!dataLoaded) {
-        return (
-          <div className="min-h-screen flex items-center justify-center">
-            <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
-          </div>
-        );
-      }
-
-      const hasApprovedTeam = teams.some(
-        (t) => t.managerEmail === user?.email && t.status === 'approved'
-      );
-
-      if (!hasApprovedTeam) {
-        return <Navigate to="/registration" replace />;
-      }
-    }
-
-    return <>{children}</>;
-  };
+  const hasApprovedTeam = teams.some(
+    (t) => t.managerEmail === user?.email && t.status === 'approved'
+  );
 
   return (
     <OpsErrorBoundary>
       <Router>
-        <Layout>
-        <Toaster richColors position="bottom-right" />
-        <Routes>
-          <Route path="/" element={<Home teams={teams} />} />
-          <Route path="/info" element={<Information />} />
-          <Route path="/schedule" element={<Schedule matches={matches} teams={teams} categoryLimits={categoryLimits} />} />
-          <Route path="/registration" element={<Registration onRegister={addTeams} teams={teams} categoryLimits={categoryLimits} />} />
-          <Route path="/sponsors" element={<Sponsors />} />
-          <Route path="/media" element={<Media />} />
-          <Route path="/self-registration" element={<PlayerSelfRegistration teams={teams} onUpdateTeam={updateTeam} />} />
-          
-          <Route path="/admin" element={
-            <ProtectedRoute allowedRole="staff">
-              <Admin
-                teams={teams}
-                onUpdateTeam={updateTeam}
-                matches={matches}
-                onUpdateMatches={updateMatches}
-                categoryLimits={categoryLimits}
-                onUpdateLimits={handleUpdateLimits}
-                onGenerateBrackets={handleGenerateBrackets}
-              />
-            </ProtectedRoute>
-          } />
+        <TournamentDataProvider value={{ teams, setTeams, matches, setMatches, categoryLimits, setCategoryLimits }}>
+          <Layout>
+            <Toaster richColors position="bottom-right" />
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/info" element={<Information />} />
+              <Route path="/schedule" element={<Schedule />} />
+              <Route path="/registration" element={<Registration onRegister={addTeams} />} />
+              <Route path="/sponsors" element={<Sponsors />} />
+              <Route path="/media" element={<Media />} />
+              <Route path="/self-registration" element={<PlayerSelfRegistration onUpdateTeam={updateTeam} />} />
+              
+              <Route path="/admin" element={
+                <ProtectedRoute
+                  allowedRole="staff"
+                  user={user}
+                  userRole={userRole}
+                  roleLoading={roleLoading}
+                  onUnauthorizedRole={handleLogout}
+                  unauthenticatedElement={
+                    <Admin
+                      onUpdateTeam={updateTeam}
+                      onUpdateMatches={updateMatches}
+                      onUpdateLimits={handleUpdateLimits}
+                      onGenerateBrackets={handleGenerateBrackets}
+                    />
+                  }
+                >
+                  <Admin
+                    onUpdateTeam={updateTeam}
+                    onUpdateMatches={updateMatches}
+                    onUpdateLimits={handleUpdateLimits}
+                    onGenerateBrackets={handleGenerateBrackets}
+                  />
+                </ProtectedRoute>
+              } />
 
-          <Route path="/team-manager" element={
-            <ProtectedRoute allowedRole="manager">
-              <div className="relative">
-                <div className="absolute top-4 right-4 z-50">
-                  <button onClick={handleLogout} className="bg-red-500/10 text-red-500 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2">
-                    <span className="material-symbols-outlined text-sm">logout</span> Cerrar Sesión
-                  </button>
-                </div>
-                <TeamManager
-                  teams={teams.filter(t => t.managerEmail === user?.email && t.status === 'approved')}
-                  onUpdateTeam={updateTeam}
-                />
-              </div>
-            </ProtectedRoute>
-          } />
+              <Route path="/team-manager" element={
+                <ProtectedRoute
+                  allowedRole="manager"
+                  user={user}
+                  userRole={userRole}
+                  roleLoading={roleLoading}
+                  dataLoaded={dataLoaded}
+                  hasApprovedTeam={hasApprovedTeam}
+                  onUnauthorizedRole={handleLogout}
+                  unauthenticatedElement={<ManagerLogin />}
+                >
+                  <div className="relative">
+                    <div className="absolute top-4 right-4 z-50">
+                      <button onClick={handleLogout} className="bg-red-500/10 text-red-500 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center gap-2">
+                        <span className="material-symbols-outlined text-sm">logout</span> Cerrar Sesión
+                      </button>
+                    </div>
+                    <TeamManager
+                      teams={teams.filter(t => t.managerEmail === user?.email && t.status === 'approved')}
+                      onUpdateTeam={updateTeam}
+                    />
+                  </div>
+                </ProtectedRoute>
+              } />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        <ChatBot matches={matches} />
-      </Layout>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+            <ChatBot />
+          </Layout>
+        </TournamentDataProvider>
     </Router>
     </OpsErrorBoundary>
   );

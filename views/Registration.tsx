@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Team, CategoryLimits } from '../types';
+import { Team } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
+import { useTournamentData } from '../context/TournamentDataContext';
 
 interface TeamEntry {
     id: string;
@@ -13,8 +14,6 @@ interface TeamEntry {
 
 interface RegistrationProps {
     onRegister: (teams: Team[], receiptFile: File, meta?: { authUserId: string | null }) => void | Promise<void>;
-    teams: Team[];
-    categoryLimits: CategoryLimits;
 }
 
 function isDuplicateSignupError(error: { code?: string; message?: string }): boolean {
@@ -30,7 +29,8 @@ function isDuplicateSignupError(error: { code?: string; message?: string }): boo
 
 const RESERVATION_MINUTES = 15;
 
-export const Registration: React.FC<RegistrationProps> = ({ onRegister, teams, categoryLimits }) => {
+export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
+    const { teams } = useTournamentData();
     const navigate = useNavigate();
     const SESSION_KEY = 'reg_draft';
 
