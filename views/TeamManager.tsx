@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { analyzePlayerId } from '../services/geminiService';
 import { Team, Player } from '../types';
-import { resizeAndCompressImage } from '../utils/imageProcessor';
 import { toast, Toaster } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { teamService } from '../services/teamService';
@@ -15,7 +13,6 @@ interface TeamManagerProps {
 export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam }) => {
     const navigate = useNavigate();
     const [selectedTeamId, setSelectedTeamId] = useState<string>(teams.length > 0 ? teams[0].id : '');
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isUploadingTeamLogo, setIsUploadingTeamLogo] = useState(false);
 
     useEffect(() => {
@@ -89,57 +86,13 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     const minPlayers = 6;
     const canAddMore = currentPlayerCount < maxPlayers;
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setIsAnalyzing(true);
-        const toastId = toast.loading('Analizando DNI con IA...');
-
-        try {
-            const compressed = await resizeAndCompressImage(file);
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                const base64 = reader.result as string;
-                try {
-                    const result = await analyzePlayerId(base64);
-                    if (result) {
-                        const newPlayer: Player = {
-                            id: `p-${Date.now()}`,
-                            teamId: selectedTeam.id,
-                            name: result.nombre,
-                            surnames: result.apellidos,
-                            dniNumber: result.dni,
-                            birthDate: result.fechaNacimiento,
-                            number: 0,
-                            verified: false,
-                            role: 'PLAYER',
-                            dniStatus: 'PENDING',
-                            insuranceStatus: 'EMPTY',
-                            dniUrl: base64 // Placeholder or real upload logic below
-                        };
-                        
-                        const savedPlayer = await teamService.addPlayer(selectedTeam.id, newPlayer);
-                        onUpdateTeam({ ...selectedTeam, players: [...selectedTeam.players, savedPlayer] });
-                        
-                        toast.success('Jugador detectado y añadido correctamente', { id: toastId });
-                    }
-                } catch (err) {
-                    toast.error('La IA no pudo leer el DNI. Inténtalo manualmente.', { id: toastId });
-                } finally {
-                    setIsAnalyzing(false);
-                }
-            };
-            reader.readAsDataURL(compressed);
-        } catch (err) {
-            toast.error('Error al procesar la imagen');
-            setIsAnalyzing(false);
-        }
-    };
-
     const handleManualAdd = async () => {
         if (!manualPlayer.name) {
             toast.error('El nombre es obligatorio');
+            return;
+        }
+        if ((manualPlayer.role ?? 'PLAYER') === 'PLAYER' && !manualPlayer.dniNumber?.trim()) {
+            toast.error('El DNI es obligatorio para jugadores');
             return;
         }
 
@@ -151,7 +104,8 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             position: manualPlayer.position || 'Universal',
             role: (manualPlayer.role as any) || 'PLAYER',
             verified: false,
-            dniStatus: 'EMPTY',
+            dniNumber: manualPlayer.dniNumber?.trim() || undefined,
+            dniStatus: manualPlayer.dniNumber?.trim() ? 'PENDING' : 'EMPTY',
             insuranceStatus: 'EMPTY'
         };
 
@@ -159,7 +113,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             const savedPlayer = await teamService.addPlayer(selectedTeam.id, newPlayer);
             onUpdateTeam({ ...selectedTeam, players: [...selectedTeam.players, savedPlayer] });
             setShowManualModal(false);
-            setManualPlayer({ name: '', number: undefined, position: 'Universal', role: 'PLAYER' });
+            setManualPlayer({ name: '', number: undefined, position: 'Universal', role: 'PLAYER', dniNumber: '' });
             toast.success('Jugador añadido');
         } catch (error) {
             toast.error('Error al añadir jugador');
@@ -178,17 +132,47 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         }
     };
 
-    const handleDocumentUpload = (playerId: string, type: 'dni' | 'insurance') => {
+    const handleDniNumberUpdate = async (playerId: string) => {
+        const playerToUpdate = selectedTeam.players.find(p => p.id === playerId);
+        if (!playerToUpdate) return;
+
+        const currentDni = playerToUpdate.dniNumber ?? '';
+        const nextDniRaw = window.prompt('Introduce el número de DNI/NIE del jugador:', currentDni);
+        if (nextDniRaw === null) return;
+        const nextDni = nextDniRaw.trim().toUpperCase();
+        if (!nextDni) {
+            toast.error('El DNI no puede estar vacío');
+            return;
+        }
+
+        const updatedPlayerObj: Player = {
+            ...playerToUpdate,
+            dniNumber: nextDni,
+            dniStatus: 'PENDING',
+            dniUrl: undefined
+        };
+
+        try {
+            await teamService.updatePlayer(updatedPlayerObj);
+            const updatedPlayers = selectedTeam.players.map(p => p.id === playerId ? updatedPlayerObj : p);
+            onUpdateTeam({ ...selectedTeam, players: updatedPlayers });
+            toast.success('DNI actualizado correctamente');
+        } catch (err: any) {
+            toast.error(`Error al guardar DNI: ${err.message || err}`);
+        }
+    };
+
+    const handleInsuranceUpload = (playerId: string) => {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*,application/pdf';
         input.onchange = async (e: any) => {
             const file = e.target.files?.[0];
             if (file) {
-                const toastId = toast.loading(`Subiendo ${type.toUpperCase()}...`);
+                const toastId = toast.loading('Subiendo SEGURO...');
                 try {
                     const fileExt = file.name.split('.').pop();
-                    const filePath = `${selectedTeam.id}/${playerId}/${type}_${Date.now()}.${fileExt}`;
+                    const filePath = `${selectedTeam.id}/${playerId}/insurance_${Date.now()}.${fileExt}`;
                     
                     const { error: uploadError } = await supabase.storage
                         .from('player-documents')
@@ -204,14 +188,14 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                     if (playerToUpdate) {
                         const updatedPlayerObj = {
                             ...playerToUpdate,
-                            [type === 'dni' ? 'dniStatus' : 'insuranceStatus']: 'PENDING' as const,
-                            [type === 'dni' ? 'dniUrl' : 'insuranceUrl']: publicUrl
+                            insuranceStatus: 'PENDING' as const,
+                            insuranceUrl: publicUrl
                         };
 
                         await teamService.updatePlayer(updatedPlayerObj);
                         const updatedPlayers = selectedTeam.players.map(p => p.id === playerId ? updatedPlayerObj : p);
                         onUpdateTeam({ ...selectedTeam, players: updatedPlayers });
-                        toast.success(`${type.toUpperCase()} subido correctamente`, { id: toastId });
+                        toast.success('SEGURO subido correctamente', { id: toastId });
                     }
                 } catch (err: any) {
                     toast.error(`Error al subir: ${err.message || err}`, { id: toastId });
@@ -428,7 +412,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                     {/* DNI */}
                                                     <div className="flex flex-col items-center gap-1">
                                                         <button 
-                                                            onClick={() => handleDocumentUpload(player.id, 'dni')}
+                                                            onClick={() => handleDniNumberUpdate(player.id)}
                                                             className={`size-10 rounded-lg flex items-center justify-center border transition-all ${
                                                                 player.dniStatus === 'APPROVED' ? 'bg-green-50 border-green-200 text-green-600' :
                                                                 player.dniStatus === 'REJECTED' ? 'bg-red-50 border-red-200 text-red-600' :
@@ -440,10 +424,10 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                         </button>
                                                         <div className="flex items-center gap-1">
                                                             <span className="text-[8px] font-black opacity-40">DNI</span>
-                                                            {player.dniUrl && (
-                                                                <a href={player.dniUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:scale-110 transition-transform">
-                                                                    <span className="material-symbols-outlined text-[14px]">visibility</span>
-                                                                </a>
+                                                            {player.dniNumber && (
+                                                                <span className="text-[9px] font-bold text-slate-500 max-w-[82px] truncate" title={player.dniNumber}>
+                                                                    {player.dniNumber}
+                                                                </span>
                                                             )}
                                                         </div>
                                                     </div>
@@ -452,7 +436,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                     {(player.role ?? 'PLAYER') === 'PLAYER' && (
                                                         <div className="flex flex-col items-center gap-1">
                                                             <button 
-                                                                onClick={() => handleDocumentUpload(player.id, 'insurance')}
+                                                                onClick={() => handleInsuranceUpload(player.id)}
                                                                 className={`size-10 rounded-lg flex items-center justify-center border transition-all ${
                                                                     player.insuranceStatus === 'APPROVED' ? 'bg-green-50 border-green-200 text-green-600' :
                                                                     player.insuranceStatus === 'REJECTED' ? 'bg-red-50 border-red-200 text-red-600' :
@@ -485,24 +469,10 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                 </div>
 
                                 {canAddMore && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className={`relative border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center transition-all ${isAnalyzing ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary hover:bg-slate-50'}`}>
-                                            <input type="file" name="dniScan" id="dni-scan-upload" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} />
-                                            {isAnalyzing ? (
-                                                <div className="animate-pulse flex flex-col items-center gap-2">
-                                                    <span className="material-symbols-outlined text-3xl text-primary animate-spin">autorenew</span>
-                                                    <span className="text-sm font-bold text-primary">Escaneando DNI...</span>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <span className="material-symbols-outlined text-3xl text-slate-300 mb-2">add_a_photo</span>
-                                                    <p className="text-xs font-bold text-slate-500">Escaneo IA</p>
-                                                </>
-                                            )}
-                                        </div>
+                                    <div className="grid grid-cols-1 gap-4">
                                         <button onClick={() => setShowManualModal(true)} className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-slate-50 transition-all">
                                             <span className="material-symbols-outlined text-3xl text-slate-300 mb-2">edit_note</span>
-                                            <p className="text-xs font-bold text-slate-500">Entrada Manual</p>
+                                            <p className="text-xs font-bold text-slate-500">Añadir jugador manualmente</p>
                                         </button>
                                     </div>
                                 )}
@@ -576,6 +546,16 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                     onChange={(e) => setManualPlayer({...manualPlayer, name: e.target.value})}
                                     className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-primary"
                                     placeholder="Ej: Juan Pérez"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">DNI / NIE</label>
+                                <input
+                                    type="text"
+                                    value={manualPlayer.dniNumber || ''}
+                                    onChange={(e) => setManualPlayer({ ...manualPlayer, dniNumber: e.target.value })}
+                                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder="Ej: 12345678A"
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-4">

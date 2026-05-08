@@ -898,14 +898,12 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
-                                                        {player.dniUrl ? (
-                                                            <a href={player.dniUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary rounded-lg text-[10px] font-bold hover:bg-primary/10 transition-all border border-primary/10 group/btn">
-                                                                <span className="material-symbols-outlined text-sm transition-transform group-hover/btn:scale-110">visibility</span> Ver Documento
-                                                            </a>
+                                                        {player.dniNumber ? (
+                                                            <span className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                                                {player.dniNumber}
+                                                            </span>
                                                         ) : (
-                                                            <div className="size-8 bg-slate-100 rounded flex items-center justify-center text-slate-300" title="No hay documento">
-                                                                <span className="material-symbols-outlined text-lg">block</span>
-                                                            </div>
+                                                            <span className="text-[10px] text-slate-400">Sin número</span>
                                                         )}
                                                         {player.dniStatus !== 'EMPTY' && player.dniStatus ? (
                                                             <div className="flex items-center gap-2">
@@ -923,7 +921,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                             </div>
                                                         ) : (
                                                             <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-400">
-                                                                Falta subir
+                                                                Falta indicar
                                                             </span>
                                                         )}
                                                     </div>
@@ -1068,20 +1066,12 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <div className="flex flex-wrap items-center gap-2">
-                                                                {player.dniUrl ? (
-                                                                    <a
-                                                                        href={player.dniUrl}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary rounded-lg text-[10px] font-bold hover:bg-primary/10 border border-primary/10"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-sm">
-                                                                            visibility
-                                                                        </span>{' '}
-                                                                        Ver
-                                                                    </a>
+                                                                {player.dniNumber ? (
+                                                                    <span className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                                                        {player.dniNumber}
+                                                                    </span>
                                                                 ) : (
-                                                                    <span className="text-[10px] text-slate-400">Sin archivo</span>
+                                                                    <span className="text-[10px] text-slate-400">Sin número</span>
                                                                 )}
                                                                 {player.dniStatus !== 'EMPTY' && player.dniStatus ? (
                                                                     <div className="flex items-center gap-2">
@@ -1135,7 +1125,7 @@ export const Admin: React.FC<AdminProps> = ({ teams, onUpdateTeam, matches, onUp
                                                                     </div>
                                                                 ) : (
                                                                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-400">
-                                                                        Falta subir
+                                                                        Falta indicar
                                                                     </span>
                                                                 )}
                                                             </div>
