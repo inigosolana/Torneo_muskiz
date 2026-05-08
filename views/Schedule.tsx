@@ -254,9 +254,7 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, categoryLimi
                                                     <h4 className="font-bold text-slate-900 dark:text-white uppercase text-sm tracking-wider">Fase de Grupos</h4>
                                                 </div>
                                                 <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Todos los equipos juegan en grupos</li>
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span><strong>Mínimo 3 partidos garantizados</strong> por equipo</li>
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Los mejores de cada grupo pasan a la fase final</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>3 partidos garantizados por equipo</li>
                                                 </ul>
                                             </div>
 
@@ -269,8 +267,7 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, categoryLimi
                                                     <h4 className="font-bold text-slate-900 dark:text-white uppercase text-sm tracking-wider">Fase final</h4>
                                                 </div>
                                                 <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Un único partido decisivo por categoría</li>
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Solo la gran final: sin cuartos ni semifinales</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Fase final</li>
                                                 </ul>
                                             </div>
                                         </div>
