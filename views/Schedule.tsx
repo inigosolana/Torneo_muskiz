@@ -230,7 +230,7 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, categoryLimi
                                                             <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">Límites de Inscripción</h4>
                                                         </div>
                                                         <p className="text-xs text-slate-600 dark:text-slate-400"><span className="font-bold text-slate-900 dark:text-white">Equipos:</span> 31 de Mayo</p>
-                                                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1"><span className="font-bold text-slate-900 dark:text-white">Jugadores:</span> 3 de Junio</p>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1"><span className="font-bold text-slate-900 dark:text-white">Jugadores:</span> 2 de Mayo</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -261,16 +261,16 @@ export const Schedule: React.FC<ScheduleProps> = ({ matches, teams, categoryLimi
                                             </div>
 
                                             {/* Fase final */}
-                                            <div className="bg-secondary/5 border border-secondary/20 rounded-2xl p-6 space-y-3">
+                                            <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 space-y-3">
                                                 <div className="flex items-center gap-3 mb-2">
-                                                    <div className="size-10 rounded-full bg-secondary/20 flex items-center justify-center">
-                                                        <span className="material-symbols-outlined text-secondary">emoji_events</span>
+                                                    <div className="size-10 rounded-full bg-primary/20 flex items-center justify-center">
+                                                        <span className="material-symbols-outlined text-primary">emoji_events</span>
                                                     </div>
                                                     <h4 className="font-bold text-slate-900 dark:text-white uppercase text-sm tracking-wider">Fase final</h4>
                                                 </div>
                                                 <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-secondary text-base mt-0.5">check_circle</span>Un único partido decisivo por categoría</li>
-                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-secondary text-base mt-0.5">check_circle</span>Solo la gran final: sin cuartos ni semifinales</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Un único partido decisivo por categoría</li>
+                                                    <li className="flex items-start gap-2"><span className="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>Solo la gran final: sin cuartos ni semifinales</li>
                                                 </ul>
                                             </div>
                                         </div>

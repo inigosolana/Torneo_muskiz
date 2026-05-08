@@ -544,7 +544,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                     type="text" 
                                     value={manualPlayer.name}
                                     onChange={(e) => setManualPlayer({...manualPlayer, name: e.target.value})}
-                                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-primary"
+                                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-primary"
                                     placeholder="Ej: Juan Pérez"
                                 />
                             </div>
@@ -554,7 +554,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                     type="text"
                                     value={manualPlayer.dniNumber || ''}
                                     onChange={(e) => setManualPlayer({ ...manualPlayer, dniNumber: e.target.value })}
-                                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-primary"
+                                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-primary"
                                     placeholder="Ej: 12345678A"
                                 />
                             </div>
@@ -565,7 +565,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                         type="number" 
                                         value={manualPlayer.number}
                                         onChange={(e) => setManualPlayer({...manualPlayer, number: parseInt(e.target.value)})}
-                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-primary"
+                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-primary"
                                     />
                                 </div>
                                 <div>
@@ -573,14 +573,14 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                     <select 
                                         value={manualPlayer.position}
                                         onChange={(e) => setManualPlayer({...manualPlayer, position: e.target.value})}
-                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-primary"
+                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary"
                                     >
-                                        <option value="Universal">Universal</option>
-                                        <option value="Portero">Portero</option>
-                                        <option value="Extremo">Extremo</option>
-                                        <option value="Lateral">Lateral</option>
-                                        <option value="Central">Central</option>
-                                        <option value="Pivote">Pivote</option>
+                                        <option className="text-slate-900" value="Universal">Universal</option>
+                                        <option className="text-slate-900" value="Portero">Portero</option>
+                                        <option className="text-slate-900" value="Extremo">Extremo</option>
+                                        <option className="text-slate-900" value="Lateral">Lateral</option>
+                                        <option className="text-slate-900" value="Central">Central</option>
+                                        <option className="text-slate-900" value="Pivote">Pivote</option>
                                     </select>
                                 </div>
                             </div>
@@ -591,7 +591,11 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                         <button 
                                             key={r}
                                             onClick={() => setManualPlayer({...manualPlayer, role: r as any})}
-                                            className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${manualPlayer.role === r ? 'bg-primary text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}
+                                            className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${
+                                                manualPlayer.role === r
+                                                    ? 'bg-primary text-white shadow-md'
+                                                    : 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300'
+                                            }`}
                                         >
                                             {r}
                                         </button>
