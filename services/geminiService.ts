@@ -8,6 +8,35 @@
 import { supabase } from './supabaseClient';
 import { Match, Team } from '../types';
 
+const getLocalChatFallback = (newMessage: string, realTimeData: string): string => {
+  const normalized = newMessage.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  if (normalized.includes('inscrib')) {
+    return 'Para inscribirte, entra en la sección "Inscripción", rellena los datos del responsable y del equipo, y sube el justificante si aplica. Si ya tienes equipo aprobado, puedes completar jugadores desde "Gestión de equipo".';
+  }
+
+  if (normalized.includes('jugador') || normalized.includes('dni') || normalized.includes('seguro')) {
+    return 'Para jugadores: el DNI se indica como número en el formulario y el seguro sí se sube como documento. Si el equipo está aprobado, el mánager puede gestionarlo en "Gestión de equipo".';
+  }
+
+  if (normalized.includes('regla') || normalized.includes('reglamento') || normalized.includes('norma')) {
+    return 'Las reglas principales están en "Calendario/Reglamento": fase de grupos, gran final por categoría y formato de 2 sets de 10 minutos.';
+  }
+
+  if (normalized.includes('horario') || normalized.includes('partido') || normalized.includes('calendario')) {
+    if (realTimeData && !realTimeData.includes('No hay partidos programados')) {
+      return `Ahora mismo tengo estos partidos en contexto:\n${realTimeData}\nSi quieres, dime una categoría y te lo resumo.`;
+    }
+    return 'Todavía no tengo partidos cargados en tiempo real. Revisa la pestaña de calendario/resultados para ver actualizaciones cuando estén disponibles.';
+  }
+
+  if (normalized.includes('bano') || normalized.includes('baño') || normalized.includes('ducha') || normalized.includes('ubicacion')) {
+    return 'Para ubicaciones (baños, duchas, pistas), revisa la sección de información del evento o consulta con organización en mesa de control.';
+  }
+
+  return 'Ahora mismo la IA no está disponible, pero puedo ayudarte con inscripción, reglamento, horarios y gestión de jugadores. Prueba con: "cómo me inscribo", "reglas", o "horarios".';
+};
+
 // --- Bracket Generation ---
 export const generateBracketAI = async (
   teams: Team[],
@@ -45,10 +74,10 @@ export const sendChatMessage = async (
     });
 
     if (error) throw error;
-    return data?.reply ?? 'No pude generar una respuesta.';
+    return data?.reply ?? getLocalChatFallback(newMessage, realTimeData);
   } catch (error) {
     console.error('Chat Error:', error);
-    return 'Lo siento, tengo problemas para conectarme a la radio del árbitro en este momento.';
+    return getLocalChatFallback(newMessage, realTimeData);
   }
 };
 
