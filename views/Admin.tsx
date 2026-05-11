@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Team, Match, CategoryLimits, MatchReport, PlayerStat, Player } from '../types';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Team, Match, CategoryLimits, MatchReport, PlayerStat, Player, CalendarDraft } from '../types';
 import { generateBracketAI, generateSocialMediaPost } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
@@ -7,16 +8,25 @@ import { toast } from 'sonner';
 import { teamService } from '../services/teamService';
 import * as XLSX from 'xlsx';
 import { useTournamentData } from '../context/TournamentDataContext';
+import {
+    createDefaultCalendarSimulations,
+    ensureStableDraftMatchIds,
+    fetchCalendarSimulations,
+    finalizeMatchesForDatabase,
+    saveCalendarSimulations,
+    duplicateDraft,
+} from '../services/tournamentScheduleService';
+import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 
 interface AdminProps {
     onUpdateTeam: (team: Team) => void;
     onUpdateMatches: (matches: Match[]) => void;
     onUpdateLimits: (limits: CategoryLimits) => void;
-    onGenerateBrackets: () => void;
 }
 
-export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onUpdateLimits, onGenerateBrackets }) => {
-    const { teams, matches, categoryLimits } = useTournamentData();
+export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onUpdateLimits }) => {
+    const navigate = useNavigate();
+    const { teams, matches, categoryLimits, publicMatchesVisible, persistPublicMatchesVisible } = useTournamentData();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [adminEmail, setAdminEmail] = useState('');
     const [passwordInput, setPasswordInput] = useState('');
@@ -44,6 +54,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         lunchBreak: true,
         customPrompt: 'Fase de grupos por categoría y solo la gran final (sin cuartos ni semifinales). Reparte horarios y pistas sin solapes.'
     });
+
+    const [simDrafts, setSimDrafts] = useState<CalendarDraft[]>([]);
+    const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+    const [simulationsLoaded, setSimulationsLoaded] = useState(false);
+    const [simulationsSaving, setSimulationsSaving] = useState(false);
+
+    const [structureDivision, setStructureDivision] = useState<Team['division']>('Senior Masculino');
+    const [standingsDivision, setStandingsDivision] = useState<Team['division']>('Senior Masculino');
+    const [standingsGroupFilter, setStandingsGroupFilter] = useState<string>('all');
 
     // Acta Management State
     const [selectedMatchForReport, setSelectedMatchForReport] = useState<Match | null>(null);
@@ -253,41 +272,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
-    const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            try {
-                const bstr = evt.target?.result;
-                const wb = XLSX.read(bstr, { type: 'binary' });
-                const wsname = wb.SheetNames[0];
-                const ws = wb.Sheets[wsname];
-                const data = XLSX.utils.sheet_to_json(ws);
-
-                const newMatches: Match[] = data.map((row: any, i) => ({
-                    id: `m-excel-${Date.now()}-${i}`,
-                    time: row['Hora'] || row['Time'] || '00:00',
-                    court: row['Pista'] || row['Court'] || 'Pista Central',
-                    teamA: row['Equipo A'] || row['Team A'] || 'TBD',
-                    teamB: row['Equipo B'] || row['Team B'] || 'TBD',
-                    scoreA: null,
-                    scoreB: null,
-                    status: 'SCHEDULED',
-                    round: row['Ronda'] || row['Fase'] || row['Round'] || ''
-                }));
-
-                onUpdateMatches([...matches, ...newMatches]);
-                toast.success(`${newMatches.length} partidos importados correctamente`);
-            } catch (error) {
-                console.error("Error importando Excel:", error);
-                toast.error("Error al procesar el archivo Excel. Verifica el formato.");
-            }
-        };
-        reader.readAsBinaryString(file);
-    };
-
     // Main Navigation Tabs
     const [activeTab, setActiveTab] = useState<'verification' | 'teamRoster' | 'competition' | 'teams' | 'sponsors' | 'categories'>('verification');
     const [rosterSelectedTeamId, setRosterSelectedTeamId] = useState<string | null>(null);
@@ -301,7 +285,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     }, [activeTab]);
 
     // Competition Sub-tabs
-    const [compSubTab, setCompSubTab] = useState<'calendar' | 'results' | 'standings'>('calendar');
+    const [compSubTab, setCompSubTab] = useState<'structure' | 'simulations' | 'published' | 'results' | 'standings'>('structure');
 
     // --- Team Filters ---
     const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -340,45 +324,130 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         return [...ordered, ...extras];
     }, [categories, rosterTeamsFiltered]);
 
-    // --- Standings Calculation (Moved up) ---
-    const standings = useMemo(() => {
-        const stats: Record<string, { name: string, played: number, won: number, lost: number, gf: number, ga: number, points: number }> = {};
+    const standingsGroupsAvailable = useMemo(
+        () => competitionGroupsForDivision(teams, standingsDivision, false),
+        [teams, standingsDivision]
+    );
 
-        teams.forEach(t => {
-            stats[t.name] = { name: t.name, played: 0, won: 0, lost: 0, gf: 0, ga: 0, points: 0 };
-        });
-        matches.forEach(m => {
-            if (!stats[m.teamA]) stats[m.teamA] = { name: m.teamA, played: 0, won: 0, lost: 0, gf: 0, ga: 0, points: 0 };
-            if (!stats[m.teamB]) stats[m.teamB] = { name: m.teamB, played: 0, won: 0, lost: 0, gf: 0, ga: 0, points: 0 };
-        });
+    const standings = useMemo(
+        () =>
+            computeStandings(teams, matches, {
+                division: standingsDivision,
+                group: standingsGroupFilter,
+                onlyPaidTeams: true,
+            }),
+        [matches, teams, standingsDivision, standingsGroupFilter]
+    );
 
-        matches.forEach(m => {
-            if (m.status === 'FINISHED' && m.scoreA !== null && m.scoreB !== null) {
-                stats[m.teamA].played += 1;
-                stats[m.teamA].gf += m.scoreA;
-                stats[m.teamA].ga += m.scoreB;
-
-                stats[m.teamB].played += 1;
-                stats[m.teamB].gf += m.scoreB;
-                stats[m.teamB].ga += m.scoreA;
-
-                if (m.scoreA > m.scoreB) {
-                    stats[m.teamA].won += 1;
-                    stats[m.teamA].points += 3;
-                    stats[m.teamB].lost += 1;
-                } else if (m.scoreB > m.scoreA) {
-                    stats[m.teamB].won += 1;
-                    stats[m.teamB].points += 3;
-                    stats[m.teamA].lost += 1;
+    useEffect(() => {
+        if (activeTab !== 'competition' || !isAuthenticated || authLoading) return;
+        let cancelled = false;
+        setSimulationsLoaded(false);
+        void (async () => {
+            try {
+                const data = await fetchCalendarSimulations();
+                if (cancelled) return;
+                if (data?.drafts?.length) {
+                    setSimDrafts(data.drafts);
+                    const aid =
+                        data.activeDraftId && data.drafts.some((d) => d.id === data.activeDraftId)
+                            ? data.activeDraftId
+                            : data.drafts[0].id;
+                    setActiveDraftId(aid);
                 } else {
-                    stats[m.teamA].points += 1;
-                    stats[m.teamB].points += 1;
+                    const def = createDefaultCalendarSimulations();
+                    setSimDrafts(def.drafts);
+                    setActiveDraftId(def.activeDraftId);
+                    await saveCalendarSimulations(def);
                 }
+            } catch (e) {
+                console.error(e);
+                toast.error('No se pudieron cargar las simulaciones de calendario.');
+            } finally {
+                if (!cancelled) setSimulationsLoaded(true);
             }
-        });
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, isAuthenticated, authLoading]);
 
-        return Object.values(stats).sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga));
-    }, [matches, teams]);
+    const persistSimDraftsAsync = async (next: CalendarDraft[], nextActiveId: string | null) => {
+        setSimulationsSaving(true);
+        try {
+            await saveCalendarSimulations({ drafts: next, activeDraftId: nextActiveId });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Error guardando borradores';
+            toast.error(msg);
+        } finally {
+            setSimulationsSaving(false);
+        }
+    };
+
+    const handleExcelImport = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            if (!file || !activeDraftId) return;
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const bstr = evt.target?.result;
+                    const wb = XLSX.read(bstr, { type: 'binary' });
+                    const wsname = wb.SheetNames[0];
+                    const ws = wb.Sheets[wsname];
+                    const data = XLSX.utils.sheet_to_json(ws);
+
+                    const newMatches: Match[] = data.map((row: unknown, i) => {
+                        const r = row as Record<string, string>;
+                        return {
+                            id: `excel-${Date.now()}-${i}`,
+                            time: r['Hora'] || r['Time'] || '00:00',
+                            court: r['Pista'] || r['Court'] || 'Pista Central',
+                            teamA: r['Equipo A'] || r['Team A'] || 'TBD',
+                            teamB: r['Equipo B'] || r['Team B'] || 'TBD',
+                            scoreA: null,
+                            scoreB: null,
+                            status: 'SCHEDULED' as const,
+                            round: r['Ronda'] || r['Fase'] || r['Round'] || '',
+                        };
+                    });
+
+                    const normalized = ensureStableDraftMatchIds(newMatches);
+
+                    setSimDrafts((prev) => {
+                        const next = prev.map((d) =>
+                            d.id === activeDraftId ? { ...d, matches: [...d.matches, ...normalized] } : d
+                        );
+                        void persistSimDraftsAsync(next, activeDraftId);
+                        return next;
+                    });
+                    toast.success(`${newMatches.length} partidos importados al borrador`);
+                } catch (error) {
+                    console.error('Error importando Excel:', error);
+                    toast.error('Error al procesar el archivo Excel. Verifica el formato.');
+                }
+            };
+            reader.readAsBinaryString(file);
+            e.target.value = '';
+        },
+        [activeDraftId]
+    );
+
+    const activeDraft = useMemo(() => simDrafts.find((d) => d.id === activeDraftId) ?? null, [simDrafts, activeDraftId]);
+
+    const groupLetterOptions = ['', 'A', 'B', 'C', 'D', 'E', 'F'];
+
+    const DIVISIONS_LIST: Team['division'][] = [
+        'Infantil Femenino',
+        'Infantil Masculino',
+        'Cadete Femenino',
+        'Cadete Masculino',
+        'Juvenil Femenino',
+        'Juvenil Masculino',
+        'Senior Femenino',
+        'Senior Masculino',
+    ];
 
     // --- Auth Logic ---
     const handleLogin = async (e: React.FormEvent) => {
@@ -552,26 +621,159 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     // --- Generator Logic ---
     const handleGenerateBracket = async () => {
+        if (!activeDraftId) {
+            toast.error('Selecciona o crea una simulación primero.');
+            return;
+        }
         setGeneratingBracket(true);
-        const courts = genConfig.courtsInput.split(',').map(s => s.trim());
+        const courts = genConfig.courtsInput.split(',').map((s) => s.trim());
 
-        const paidTeams = teams.filter(t => t.paymentStatus === 'PAID');
+        const paidTeams = teams.filter((t) => t.paymentStatus === 'PAID');
         const newMatches = await generateBracketAI(paidTeams, {
             startTime: genConfig.startTime,
             endTime: genConfig.endTime,
             intervalMins: genConfig.intervalMins,
-            courts: courts,
+            courts,
             lunchBreak: genConfig.lunchBreak,
-            customPrompt: genConfig.customPrompt
+            customPrompt: genConfig.customPrompt,
         });
 
         if (newMatches.length > 0) {
-            onUpdateMatches(newMatches);
-            toast.success(`¡Calendario Generado! ${newMatches.length} partidos creados siguiendo tus instrucciones.`);
+            const normalized = ensureStableDraftMatchIds(newMatches);
+            const nextDrafts = simDrafts.map((d) =>
+                d.id === activeDraftId ? { ...d, matches: normalized } : d
+            );
+            setSimDrafts(nextDrafts);
+            await persistSimDraftsAsync(nextDrafts, activeDraftId);
+            toast.success(
+                `Simulación actualizada: ${newMatches.length} partidos generados en el borrador activo (no público hasta publicar).`
+            );
         } else {
-            toast.error("Error generando el cuadro. Intenta simplificar el prompt.");
+            toast.error('Error generando el cuadro. Intenta simplificar el prompt.');
         }
         setGeneratingBracket(false);
+    };
+
+    const handlePublishActiveDraft = async () => {
+        if (!activeDraft) return;
+        if (
+            !window.confirm(
+                '¿Volcar esta simulación al calendario oficial? Sustituirá todos los partidos actuales en la base de datos. Los usuarios sólo los verán si además activas la visibilidad pública.'
+            )
+        )
+            return;
+        const finalized = finalizeMatchesForDatabase(activeDraft.matches);
+        await onUpdateMatches(finalized);
+        toast.success(`Calendario oficial actualizado (${finalized.length} partidos).`);
+    };
+
+    const handleAddSimulation = async () => {
+        const nm = window.prompt('Nombre de la nueva simulación', `Simulación ${simDrafts.length + 1}`);
+        if (!nm?.trim()) return;
+        const id = crypto.randomUUID();
+        const draft: CalendarDraft = {
+            id,
+            name: nm.trim(),
+            createdAt: new Date().toISOString(),
+            matches: [],
+            formatDescription: '',
+        };
+        const next = [...simDrafts, draft];
+        setSimDrafts(next);
+        setActiveDraftId(id);
+        await persistSimDraftsAsync(next, id);
+    };
+
+    const handleDuplicateActiveSimulation = async () => {
+        if (!activeDraft) return;
+        const clone = duplicateDraft(activeDraft);
+        const next = [...simDrafts, clone];
+        setSimDrafts(next);
+        setActiveDraftId(clone.id);
+        await persistSimDraftsAsync(next, clone.id);
+        toast.success('Copia del borrador creada.');
+    };
+
+    /**
+     * Elimina sólo datos de borradores en site_content (`calendar_simulations`).
+     * Nunca llama a onUpdateTeams, delete de equipos/jugadores ni toca tabla `matches`.
+     */
+    const handleDeleteSimulationById = async (draftId: string, draftNameForConfirm: string) => {
+        if (
+            !window.confirm(
+                `¿Eliminar la simulación «${draftNameForConfirm}»?\n\n` +
+                    'Sólo borra este borrador de pruebas (staff). Los equipos y jugadores inscritos por responsables no se modifican. ' +
+                    'El calendario oficial (BD / pestaña «Oficial») no cambia.\n\n¿Continuar?'
+            )
+        ) {
+            return;
+        }
+
+        let next = simDrafts.filter((d) => d.id !== draftId);
+        let nextActive: string | null = activeDraftId === draftId ? null : activeDraftId;
+
+        if (next.length === 0) {
+            const fresh = createDefaultCalendarSimulations();
+            next = fresh.drafts;
+            nextActive = fresh.activeDraftId;
+        } else if (!nextActive || !next.some((d) => d.id === nextActive)) {
+            nextActive = next[0].id;
+        }
+
+        setSimDrafts(next);
+        setActiveDraftId(nextActive);
+        await persistSimDraftsAsync(next, nextActive);
+        toast.success('Borrador eliminado (equipos, jugadores y calendario oficial intactos).');
+    };
+
+    const handleDeleteActiveSimulation = async () => {
+        if (!activeDraft) return;
+        await handleDeleteSimulationById(activeDraft.id, activeDraft.name);
+    };
+
+    const handleResetAllSimulationsToFresh = async () => {
+        if (
+            !window.confirm(
+                '¿Eliminar TODAS las simulaciones y crear una nueva vacía?\n\n' +
+                    'Igual que arriba: sólo datos de borradores staff. Equipos, jugadores y partidos publicados en BD no se tocan.\n\n¿Continuar?'
+            )
+        ) {
+            return;
+        }
+        const fresh = createDefaultCalendarSimulations();
+        setSimDrafts(fresh.drafts);
+        setActiveDraftId(fresh.activeDraftId);
+        await persistSimDraftsAsync(fresh.drafts, fresh.activeDraftId);
+        toast.success('Simulaciones reseteadas: un borrador nuevo vacío.');
+    };
+
+    const handleClearActiveDraftMatches = async () => {
+        if (!activeDraftId) return;
+        if (!window.confirm('¿Vaciar partidos sólo del borrador activo?')) return;
+        const next = simDrafts.map((d) =>
+            d.id === activeDraftId ? { ...d, matches: [] as Match[] } : d
+        );
+        setSimDrafts(next);
+        await persistSimDraftsAsync(next, activeDraftId);
+    };
+
+    const handleDraftMetadataChange = async (patch: Partial<Pick<CalendarDraft, 'name' | 'formatDescription'>>) => {
+        if (!activeDraftId) return;
+        const next = simDrafts.map((d) =>
+            d.id === activeDraftId ? { ...d, ...patch } : d
+        );
+        setSimDrafts(next);
+        await persistSimDraftsAsync(next, activeDraftId);
+    };
+
+    const handleChangeTeamGroup = async (team: Team, groupLetter: string) => {
+        const nextGroup = groupLetter.trim() || null;
+        try {
+            await onUpdateTeam({ ...team, competitionGroup: nextGroup });
+            toast.success('Grupo guardado.');
+        } catch {
+            /* toast + reportOps en App.tsx (updateTeam) */
+        }
     };
 
     const updateMatchScore = (matchId: string, scoreA: string, scoreB: string) => {
@@ -1548,121 +1750,428 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
 
                             {/* Sub-tabs */}
-                            <div className="flex border-b border-slate-200 mb-6">
+                            <div className="flex flex-wrap border-b border-slate-200 mb-6 gap-1">
                                 <button
-                                    onClick={() => setCompSubTab('calendar')}
-                                    className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'calendar' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                    type="button"
+                                    onClick={() => setCompSubTab('structure')}
+                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'structure' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                                 >
-                                    <span className="material-symbols-outlined text-lg">calendar_month</span> Calendario
+                                    <span className="material-symbols-outlined text-lg">account_tree</span>
+                                    Estructura
                                 </button>
                                 <button
+                                    type="button"
+                                    onClick={() => setCompSubTab('simulations')}
+                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'simulations' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                >
+                                    <span className="material-symbols-outlined text-lg">science</span>
+                                    Simulaciones
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCompSubTab('published')}
+                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'published' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                >
+                                    <span className="material-symbols-outlined text-lg">calendar_month</span>
+                                    Oficial
+                                </button>
+                                <button
+                                    type="button"
                                     onClick={() => setCompSubTab('results')}
-                                    className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'results' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'results' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                                 >
-                                    <span className="material-symbols-outlined text-lg">scoreboard</span> Resultados y Actas
+                                    <span className="material-symbols-outlined text-lg">scoreboard</span>
+                                    Resultados y Actas
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={() => setCompSubTab('standings')}
-                                    className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'standings' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'standings' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                                 >
-                                    <span className="material-symbols-outlined text-lg">leaderboard</span> Clasificación
+                                    <span className="material-symbols-outlined text-lg">leaderboard</span>
+                                    Clasificación
                                 </button>
                             </div>
 
                             {/* SUB-TAB CONTENT */}
                             <div className="min-h-[400px]">
 
-                                {/* 1. CALENDAR VIEW (With Advanced AI Generator) */}
-                                {compSubTab === 'calendar' && (
+                                {/* 1. ESTRUCTURA — categorías y grupos */}
+                                {compSubTab === 'structure' && (
+                                    <div className="space-y-6">
+                                        <div className="bg-amber-50 border border-amber-100 p-4 rounded-lg text-sm text-amber-900">
+                                            <p className="font-bold mb-1">Asignación de grupos</p>
+                                            <p>
+                                                Cada equipo ya tiene una <strong>categoría</strong> (división). Aquí defines el <strong>grupo</strong> dentro de esa
+                                                categoría (A, B, C…). Requiere la columna <code className="bg-white/80 px-1 rounded">competition_group</code> en
+                                                Supabase — ejecuta el SQL en <code className="bg-white/80 px-1 rounded">supabase/sql/add_competition_group_to_teams.sql</code>.
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <label className="text-xs font-bold uppercase text-slate-500">Categoría</label>
+                                            <select
+                                                value={structureDivision}
+                                                onChange={(e) => setStructureDivision(e.target.value as Team['division'])}
+                                                className="border rounded-lg px-3 py-2 text-sm font-medium min-w-[200px]"
+                                            >
+                                                {DIVISIONS_LIST.map((d) => (
+                                                    <option key={d} value={d}>
+                                                        {d}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="overflow-x-auto rounded-lg border border-slate-200">
+                                            <table className="w-full text-sm text-left">
+                                                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                                                    <tr>
+                                                        <th className="px-4 py-3">Equipo</th>
+                                                        <th className="px-4 py-3">Ciudad</th>
+                                                        <th className="px-4 py-3">Estado</th>
+                                                        <th className="px-4 py-3">Grupo</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {teams
+                                                        .filter((t) => t.division === structureDivision)
+                                                        .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+                                                        .map((team) => (
+                                                            <tr key={team.id} className="hover:bg-slate-50/80">
+                                                                <td className="px-4 py-3 font-bold text-slate-800">{team.name}</td>
+                                                                <td className="px-4 py-3 text-slate-600">{team.city}</td>
+                                                                <td className="px-4 py-3">
+                                                                    <span className="text-[10px] font-bold uppercase text-slate-500">{team.status}</span>{' '}
+                                                                    <span className="text-[10px] text-slate-400">· {team.paymentStatus}</span>
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    <select
+                                                                        value={team.competitionGroup ?? ''}
+                                                                        onChange={(e) => void handleChangeTeamGroup(team, e.target.value)}
+                                                                        className="border rounded-lg px-2 py-1.5 text-xs font-semibold bg-white min-w-[100px]"
+                                                                    >
+                                                                        <option value="">Sin grupo</option>
+                                                                        {groupLetterOptions.filter((g) => g).map((g) => (
+                                                                            <option key={g} value={g}>
+                                                                                Grupo {g}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 2. SIMULACIONES — borradores IA / Excel */}
+                                {compSubTab === 'simulations' && (
                                     <div className="space-y-8">
-                                        {/* AI Generator Control Panel */}
-                                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                                                    <span className="material-symbols-outlined text-purple-600">psychology</span>
-                                                    Configuración de Generación IA
-                                                </h4>
-                                                <div className="flex gap-2">
-                                                    <input
-                                                        type="file"
-                                                        id="excel-upload"
-                                                        className="hidden"
-                                                        accept=".xlsx, .xls, .csv"
-                                                        onChange={handleExcelImport}
-                                                    />
-                                                    <label
-                                                        htmlFor="excel-upload"
-                                                        className="cursor-pointer bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">upload_file</span>
-                                                        Importar Excel
-                                                    </label>
-                                                    {matches.length > 0 && (
-                                                        <button
-                                                            onClick={() => onUpdateMatches([])}
-                                                            className="bg-red-50 text-red-500 hover:bg-red-100 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors border border-red-100"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">delete_sweep</span>
-                                                            Limpiar Calendario
-                                                        </button>
+                                        {!simulationsLoaded ? (
+                                            <div className="text-center text-slate-400 py-12">Cargando simulaciones…</div>
+                                        ) : (
+                                            <>
+                                                <div className="flex flex-wrap items-start justify-between gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50/80">
+                                                    <div>
+                                                        <p className="font-bold text-slate-800 mb-1">Visibilidad pública</p>
+                                                        <p className="text-xs text-slate-600 max-w-xl">
+                                                            Mientras esté desactivado, los visitantes sólo ven la pestaña Información en Competición. Los borradores
+                                                            nunca se muestran; sólo cuenta el calendario <strong>oficial</strong> publicado abajo después de dar a
+                                                            &quot;Publicar&quot;.
+                                                        </p>
+                                                        <label className="mt-3 flex items-center gap-3 cursor-pointer">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={publicMatchesVisible}
+                                                                onChange={(e) => void persistPublicMatchesVisible(e.target.checked)}
+                                                                className="size-5 rounded border-slate-300 text-primary focus:ring-primary"
+                                                            />
+                                                            <span className="text-sm font-bold text-slate-800">
+                                                                Mostrar Calendario, Resultados y Clasificación en la web
+                                                            </span>
+                                                        </label>
+                                                    </div>
+                                                    {simulationsSaving && (
+                                                        <span className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                                                            <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+                                                            Guardando…
+                                                        </span>
                                                     )}
                                                 </div>
-                                            </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+
+                                                <div className="rounded-lg border border-teal-100 bg-teal-50/80 px-4 py-3 text-xs text-teal-900">
+                                                    <strong>Borradores = sólo staff.</strong> Al eliminar una simulación sólo se quita ese trozo del almacén de
+                                                    borradores (<code className="bg-white/70 px-0.5 rounded">calendar_simulations</code>). Nunca borra equipos ni
+                                                    jugadores. El calendario oficial en base de datos no cambia salvo que uses &quot;Publicar&quot; o
+                                                    &quot;Limpiar calendario oficial&quot;.
+                                                </div>
+
+                                                <div className="flex flex-wrap gap-3 items-end">
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Simulación activa</label>
+                                                        <select
+                                                            value={activeDraftId ?? ''}
+                                                            onChange={async (e) => {
+                                                                const id = e.target.value;
+                                                                setActiveDraftId(id);
+                                                                setSimulationsSaving(true);
+                                                                try {
+                                                                    await saveCalendarSimulations({ drafts: simDrafts, activeDraftId: id });
+                                                                } catch (err: unknown) {
+                                                                    toast.error(err instanceof Error ? err.message : 'Error al guardar selección');
+                                                                } finally {
+                                                                    setSimulationsSaving(false);
+                                                                }
+                                                            }}
+                                                            className="border rounded-lg px-3 py-2 text-sm font-semibold min-w-[220px]"
+                                                        >
+                                                            {simDrafts.map((d) => (
+                                                                <option key={d.id} value={d.id}>
+                                                                    {d.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleAddSimulation()}
+                                                        className="bg-primary text-background-dark px-4 py-2 rounded-lg text-xs font-bold uppercase"
+                                                    >
+                                                        + Nueva simulación
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleDuplicateActiveSimulation()}
+                                                        disabled={!activeDraft}
+                                                        className="border border-slate-200 bg-white px-4 py-2 rounded-lg text-xs font-bold uppercase disabled:opacity-50"
+                                                    >
+                                                        Duplicar
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleDeleteActiveSimulation()}
+                                                        disabled={!activeDraft}
+                                                        className="border border-red-100 text-red-600 bg-red-50 px-4 py-2 rounded-lg text-xs font-bold uppercase disabled:opacity-50"
+                                                    >
+                                                        Eliminar activa
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleResetAllSimulationsToFresh()}
+                                                        className="border border-amber-200 text-amber-900 bg-amber-50 px-4 py-2 rounded-lg text-xs font-bold uppercase"
+                                                    >
+                                                        Borrar todas y empezar limpio
+                                                    </button>
+                                                </div>
+
+                                                <div className="rounded-lg border border-slate-200 overflow-hidden">
+                                                    <div className="bg-slate-50 px-3 py-2 text-[10px] font-black uppercase text-slate-500">
+                                                        Todas las simulaciones (borrar una concreta)
+                                                    </div>
+                                                    <ul className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                                                        {simDrafts.map((d) => (
+                                                            <li
+                                                                key={d.id}
+                                                                className="flex items-center justify-between gap-2 px-3 py-2 text-sm bg-white hover:bg-slate-50/80"
+                                                            >
+                                                                <div className="min-w-0">
+                                                                    <span className="font-bold text-slate-800 truncate block">{d.name}</span>
+                                                                    <span className="text-[10px] text-slate-500">
+                                                                        {d.matches.length} partido{d.matches.length === 1 ? '' : 's'} en borrador
+                                                                    </span>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    title="Eliminar sólo este borrador"
+                                                                    onClick={() => void handleDeleteSimulationById(d.id, d.name)}
+                                                                    className="shrink-0 p-2 rounded-lg text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-[20px]">delete</span>
+                                                                </button>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+
+                                                {activeDraft && (
+                                                    <div className="grid md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre del borrador</label>
+                                                            <input
+                                                                value={activeDraft.name}
+                                                                onChange={(e) => void handleDraftMetadataChange({ name: e.target.value })}
+                                                                className="w-full border rounded-lg px-3 py-2 text-sm"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                                                                Formato del torneo (nota para ti)
+                                                            </label>
+                                                            <input
+                                                                value={activeDraft.formatDescription ?? ''}
+                                                                onChange={(e) => void handleDraftMetadataChange({ formatDescription: e.target.value })}
+                                                                placeholder="Ej. 2 grupos de 4 + cruce 1º–2º..."
+                                                                className="w-full border rounded-lg px-3 py-2 text-sm"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        type="button"
+                                                        disabled={!activeDraft?.matches?.length}
+                                                        onClick={() => void handlePublishActiveDraft()}
+                                                        className="bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-wide flex items-center gap-2"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">cloud_upload</span>
+                                                        Publicar como calendario oficial
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleClearActiveDraftMatches()}
+                                                        disabled={!activeDraftId}
+                                                        className="border border-slate-200 px-5 py-2.5 rounded-lg text-xs font-bold uppercase"
+                                                    >
+                                                        Vaciar borrador
+                                                    </button>
+                                                </div>
+
+                                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
+                                                    <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
+                                                        <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                                                            <span className="material-symbols-outlined text-purple-600">psychology</span>
+                                                            Generación IA (sólo afecta al borrador activo)
+                                                        </h4>
+                                                        <div className="flex gap-2 flex-wrap">
+                                                            <input type="file" id="excel-upload" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleExcelImport} />
+                                                            <label
+                                                                htmlFor="excel-upload"
+                                                                className={`cursor-pointer bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${!activeDraftId ? 'opacity-50 pointer-events-none' : ''}`}
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">upload_file</span>
+                                                                Importar Excel al borrador
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Horario</label>
+                                                            <div className="flex items-center gap-2">
+                                                                <input type="time" value={genConfig.startTime} onChange={(e) => setGenConfig({ ...genConfig, startTime: e.target.value })} className="border rounded px-2 py-1 text-sm w-full" />
+                                                                <span>a</span>
+                                                                <input type="time" value={genConfig.endTime} onChange={(e) => setGenConfig({ ...genConfig, endTime: e.target.value })} className="border rounded px-2 py-1 text-sm w-full" />
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Intervalo (mins)</label>
+                                                            <input type="number" value={genConfig.intervalMins} onChange={(e) => setGenConfig({ ...genConfig, intervalMins: parseInt(e.target.value, 10) })} className="border rounded px-2 py-1 text-sm w-full" step="5" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Parada comida</label>
+                                                            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer mt-6 md:mt-0">
+                                                                <input type="checkbox" checked={genConfig.lunchBreak} onChange={(e) => setGenConfig({ ...genConfig, lunchBreak: e.target.checked })} className="rounded text-primary focus:ring-primary" />
+                                                                13:00 – 14:00
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mb-4">
+                                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Pistas (separar por comas)</label>
+                                                        <input type="text" value={genConfig.courtsInput} onChange={(e) => setGenConfig({ ...genConfig, courtsInput: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
+                                                    </div>
+                                                    <div className="mb-4">
+                                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Prompt IA</label>
+                                                        <textarea
+                                                            value={genConfig.customPrompt}
+                                                            onChange={(e) => setGenConfig({ ...genConfig, customPrompt: e.target.value })}
+                                                            className="w-full border rounded px-3 py-2 text-sm h-20 resize-none"
+                                                            placeholder="Describe fases, grupos, horarios prioritarios..."
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleGenerateBracket()}
+                                                        disabled={generatingBracket || !activeDraftId}
+                                                        className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                                                    >
+                                                        {generatingBracket ? (
+                                                            <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                                                        ) : (
+                                                            <span className="material-symbols-outlined">auto_awesome</span>
+                                                        )}
+                                                        {generatingBracket ? 'Generando…' : 'Generar en este borrador'}
+                                                    </button>
+                                                </div>
+
                                                 <div>
-                                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Horario</label>
-                                                    <div className="flex items-center gap-2">
-                                                        <input type="time" value={genConfig.startTime} onChange={e => setGenConfig({ ...genConfig, startTime: e.target.value })} className="border rounded px-2 py-1 text-sm w-full" />
-                                                        <span>a</span>
-                                                        <input type="time" value={genConfig.endTime} onChange={e => setGenConfig({ ...genConfig, endTime: e.target.value })} className="border rounded px-2 py-1 text-sm w-full" />
+                                                    <h4 className="text-sm font-black uppercase text-slate-500 mb-3">
+                                                        Vista previa del borrador ({activeDraft?.matches.length ?? 0} partidos)
+                                                    </h4>
+                                                    <div className="grid gap-4">
+                                                        {!activeDraft || activeDraft.matches.length === 0 ? (
+                                                            <div className="text-center text-slate-400 py-8 border rounded-lg border-dashed">Sin partidos en este borrador</div>
+                                                        ) : (
+                                                            activeDraft.matches.map((match) => (
+                                                                <div key={match.id} className="flex flex-col lg:flex-row flex-wrap justify-between items-stretch lg:items-center gap-3 p-4 border border-teal-100 rounded-lg bg-teal-50/30">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="bg-primary/10 text-primary-dark text-[10px] font-bold px-2 py-0.5 rounded uppercase">{match.round || 'Partido'}</span>
+                                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-teal-800">{match.time}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-6">
+                                                                        <span className="font-bold text-slate-800">{match.teamA}</span>
+                                                                        <span className="text-xs text-slate-400">vs</span>
+                                                                        <span className="font-bold text-slate-800">{match.teamB}</span>
+                                                                    </div>
+                                                                    <div className="text-xs text-slate-500 flex items-center gap-1">
+                                                                        <span className="material-symbols-outlined text-sm">location_on</span>
+                                                                        {match.court}
+                                                                    </div>
+                                                                </div>
+                                                            ))
+                                                        )}
                                                     </div>
                                                 </div>
-                                                <div>
-                                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Intervalo (mins)</label>
-                                                    <input type="number" value={genConfig.intervalMins} onChange={e => setGenConfig({ ...genConfig, intervalMins: parseInt(e.target.value) })} className="border rounded px-2 py-1 text-sm w-full" step="5" />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Parada Comida</label>
-                                                    <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                                                        <input type="checkbox" checked={genConfig.lunchBreak} onChange={e => setGenConfig({ ...genConfig, lunchBreak: e.target.checked })} className="rounded text-primary focus:ring-primary" />
-                                                        Respetar 13:00 - 14:00
-                                                    </label>
-                                                </div>
-                                            </div>
-                                            <div className="mb-4">
-                                                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Pistas Disponibles (separar por comas)</label>
-                                                <input type="text" value={genConfig.courtsInput} onChange={e => setGenConfig({ ...genConfig, courtsInput: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
-                                            </div>
-                                            <div className="mb-4">
-                                                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Instrucciones para la IA (Prompt)</label>
-                                                <textarea
-                                                    value={genConfig.customPrompt}
-                                                    onChange={e => setGenConfig({ ...genConfig, customPrompt: e.target.value })}
-                                                    className="w-full border rounded px-3 py-2 text-sm h-20 resize-none"
-                                                    placeholder="Ej: Crea una liguilla de todos contra todos. Haz que los equipos Cadete jueguen por la mañana."
-                                                ></textarea>
-                                            </div>
-                                            <button
-                                                onClick={handleGenerateBracket}
-                                                disabled={generatingBracket}
-                                                className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                                            >
-                                                {generatingBracket ? (
-                                                    <span className="material-symbols-outlined animate-spin">progress_activity</span>
-                                                ) : (
-                                                    <span className="material-symbols-outlined">auto_awesome</span>
-                                                )}
-                                                {generatingBracket ? 'Pensando y Organizando...' : 'Generar Calendario Inteligente'}
-                                            </button>
-                                        </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
 
-                                        {/* Matches List */}
+                                {/* 3. CALENDARIO OFICIAL (tabla matches) */}
+                                {compSubTab === 'published' && (
+                                    <div className="space-y-6">
+                                        <div className="bg-slate-100 border border-slate-200 p-4 rounded-lg text-sm text-slate-700">
+                                            <p>
+                                                <strong>Calendario oficial</strong>: lo que hay en la base de datos <code className="bg-white px-1 rounded">matches</code>.
+                                                Los visitantes sólo lo ven si activas el interruptor en <strong>Simulaciones</strong>.
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {matches.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (
+                                                            window.confirm(
+                                                                '¿Borrar TODOS los partidos oficiales de la base de datos? Esta acción deja sin calendario publicado hasta que publiques otra vez.'
+                                                            )
+                                                        ) {
+                                                            void onUpdateMatches([]);
+                                                        }
+                                                    }}
+                                                    className="bg-red-50 text-red-600 border border-red-100 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">delete_sweep</span>
+                                                    Limpiar calendario oficial
+                                                </button>
+                                            )}
+                                        </div>
                                         <div className="grid gap-4">
                                             {matches.length === 0 ? (
-                                                <div className="text-center text-slate-400 py-8">No hay partidos. Usa el generador arriba.</div>
+                                                <div className="text-center text-slate-400 py-8">No hay partidos publicados.</div>
                                             ) : (
-                                                matches.map(match => (
-                                                    <div key={match.id} className="flex flex-col sm:flex-row justify-between items-center p-4 border border-slate-100 rounded-lg bg-slate-50/50">
+                                                matches.map((match) => (
+                                                    <div key={match.id} className="flex flex-col lg:flex-row flex-wrap justify-between items-stretch lg:items-center gap-3 p-4 border border-slate-100 rounded-lg bg-slate-50/50">
                                                         <div className="flex flex-col mb-2 sm:mb-0">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="bg-primary/10 text-primary-dark text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider">{match.round || 'Partido'}</span>
@@ -1674,9 +2183,19 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             <span className="text-xs text-slate-400">vs</span>
                                                             <span className="font-bold text-slate-800">{match.teamB}</span>
                                                         </div>
-                                                        <div className="text-xs text-slate-500 flex items-center gap-1">
+                                                        <div className="text-xs text-slate-500 flex items-center gap-1 lg:mr-auto">
                                                             <span className="material-symbols-outlined text-sm">location_on</span> {match.court}
                                                         </div>
+                                                        {match.id && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => navigate(`/admin/match-report/${match.id}`)}
+                                                                className="inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm hover:border-primary hover:text-primary"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[16px]">print</span>
+                                                                Generar Acta
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 ))
                                             )}
@@ -1720,7 +2239,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     <span className="font-bold text-slate-800 w-32 truncate">{match.teamB}</span>
                                                 </div>
 
-                                                <div className="w-full md:w-auto flex justify-end gap-2 mt-4 md:mt-0">
+                                                <div className="w-full md:w-auto flex flex-wrap justify-end gap-2 mt-4 md:mt-0">
+                                                    {match.id && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => navigate(`/admin/match-report/${match.id}`)}
+                                                            className="px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 border border-teal-200 bg-teal-50 text-teal-900 hover:bg-teal-100 transition-colors"
+                                                        >
+                                                            <span className="material-symbols-outlined text-sm">print</span>
+                                                            Generar Acta
+                                                        </button>
+                                                    )}
                                                     {match.status === 'FINISHED' && (
                                                         <button
                                                             onClick={() => handleGenerateSocialPost(match)}
@@ -1743,8 +2272,54 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                     </div>
                                 )}
 
-                                {/* 3. STANDINGS VIEW */}
+                                {/* 5. STANDINGS */}
                                 {compSubTab === 'standings' && (
+                                    <div className="space-y-4">
+                                        <div className="flex flex-col gap-3">
+                                            <div className="flex overflow-x-auto gap-2 pb-1">
+                                                {DIVISIONS_LIST.map((cat) => (
+                                                    <button
+                                                        key={cat}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setStandingsDivision(cat);
+                                                            setStandingsGroupFilter('all');
+                                                        }}
+                                                        className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shrink-0 ${
+                                                            standingsDivision === cat
+                                                                ? 'bg-primary text-background-dark shadow'
+                                                                : 'bg-slate-100 text-slate-600'
+                                                        }`}
+                                                    >
+                                                        {cat}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-[10px] font-black uppercase text-slate-400">Grupo</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setStandingsGroupFilter('all')}
+                                                    className={`px-3 py-1 rounded-full text-[10px] font-bold ${
+                                                        standingsGroupFilter === 'all' ? 'bg-secondary text-background-dark' : 'bg-slate-100 text-slate-600'
+                                                    }`}
+                                                >
+                                                    Todos
+                                                </button>
+                                                {standingsGroupsAvailable.map((g) => (
+                                                    <button
+                                                        key={g}
+                                                        type="button"
+                                                        onClick={() => setStandingsGroupFilter(g)}
+                                                        className={`px-3 py-1 rounded-full text-[10px] font-bold ${
+                                                            standingsGroupFilter === g ? 'bg-secondary text-background-dark' : 'bg-slate-100 text-slate-600'
+                                                        }`}
+                                                    >
+                                                        {g}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
                                     <div className="overflow-hidden rounded-lg border border-slate-200">
                                         <table className="w-full text-sm text-left">
                                             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
@@ -1774,6 +2349,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 ))}
                                             </tbody>
                                         </table>
+                                    </div>
                                     </div>
                                 )}
                             </div>

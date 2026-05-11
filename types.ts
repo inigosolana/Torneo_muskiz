@@ -100,6 +100,26 @@ export interface Match {
   report?: MatchReport; // New field for the Acta
 }
 
+/** Borrador de calendario (simulación). No se muestra al público hasta publicar. */
+export interface CalendarDraft {
+  id: string;
+  name: string;
+  /** Nota libre: formato del torneo, fases, etc. */
+  formatDescription?: string;
+  createdAt: string;
+  matches: Match[];
+}
+
+export interface CalendarSimulationsPayload {
+  drafts: CalendarDraft[];
+  activeDraftId: string | null;
+}
+
+export interface ScheduleVisibilityPayload {
+  /** Si es true, visitantes ven pestañas Calendario / Resultados / Clasificación (datos = partidos oficiales en BD). */
+  publicMatchesVisible: boolean;
+}
+
 export interface Player {
   id: string;
   teamId: string;
@@ -124,6 +144,8 @@ export interface Team {
   name: string;
   city: string;
   division: 'Infantil Femenino' | 'Infantil Masculino' | 'Cadete Femenino' | 'Cadete Masculino' | 'Juvenil Femenino' | 'Juvenil Masculino' | 'Senior Femenino' | 'Senior Masculino';
+  /** Grupo dentro de la categoría (ej. A, B). Requiere columna `competition_group` en Supabase. */
+  competitionGroup?: string | null;
   logoUrl?: string; // Team Logo
   paymentStatus: 'PAID' | 'PENDING' | 'WAITING_VALIDATION' | 'EXPIRED';
   paymentMethod?: 'TRANSFER' | 'CARD' | 'PAYPAL' | 'CASH' | 'MANUAL';

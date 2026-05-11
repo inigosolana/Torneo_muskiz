@@ -7,9 +7,12 @@ type OpsAlertPayload = {
   details?: string;
 };
 
-/** Evita ráfagas idénticas (p. ej. bucles de render). */
+/** Evita ráfagas idénticas (p. ej. bucles de render o el mismo fallo repetido). */
 let _lastFingerprint = "";
 let _lastFingerprintAt = 0;
+
+/** Mismo mensaje repetido ≤1 vez cada 60 s (los avisos a Telegram pueden venir también del backend por otro canal). */
+const DEFAULT_THROTTLE_MS = 60_000;
 
 function shouldThrottle(fingerprint: string, windowMs: number): boolean {
   const now = Date.now();
@@ -21,7 +24,7 @@ function shouldThrottle(fingerprint: string, windowMs: number): boolean {
 
 export async function reportOpsAlert(payload: OpsAlertPayload) {
   const fingerprint = `${payload.source}|${payload.message}|${(payload.details ?? "").slice(0, 200)}`;
-  if (shouldThrottle(fingerprint, 2500)) return;
+  if (shouldThrottle(fingerprint, DEFAULT_THROTTLE_MS)) return;
 
   try {
     const { error } = await supabase.functions.invoke("notify-ops-alert", {

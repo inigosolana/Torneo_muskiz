@@ -29,6 +29,7 @@ export const teamService = {
             managerName: t.manager_name,
             managerEmail: t.manager_email,
             status: t.status || 'pending',
+            competitionGroup: t.competition_group ?? null,
             players: t.players.map((p: any) => ({
                 id: p.id,
                 name: p.name,
@@ -124,7 +125,8 @@ export const teamService = {
                 payment_method: team.paymentMethod,
                 logo_url: team.logoUrl,
                 status: team.status,
-                payment_feedback: team.paymentFeedback
+                payment_feedback: team.paymentFeedback,
+                competition_group: team.competitionGroup ?? null,
             })
             .eq('id', team.id);
 
@@ -253,13 +255,43 @@ export const matchService = {
         }));
     },
 
+    async getMatchById(id: string): Promise<Match | null> {
+        const { data, error } = await supabase
+            .from('matches')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error fetching match:', error);
+            return null;
+        }
+        if (!data) return null;
+
+        const m = data as any;
+        return {
+            id: m.id,
+            time: m.time,
+            court: m.court,
+            teamA: m.team_a,
+            teamB: m.team_b,
+            scoreA: m.score_a,
+            scoreB: m.score_b,
+            status: m.status,
+            round: m.round,
+            report: m.report
+        };
+    },
+
     async saveMatches(matches: Match[]): Promise<void> {
         // Basic implementation: delete existing and insert new for bracket regen
         await supabase.from('matches').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Hack to clear
 
+        const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
         const { error } = await supabase
             .from('matches')
             .insert(matches.map(m => ({
+                ...(UUID_RX.test(m.id) ? { id: m.id } : {}),
                 time: m.time,
                 court: m.court,
                 team_a: m.teamA,

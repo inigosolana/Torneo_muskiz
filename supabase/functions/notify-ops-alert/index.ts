@@ -16,6 +16,26 @@ type AlertPayload = {
   details?: string;
 };
 
+/** Dedupe en memoria (reduce ráfagas Telegram por el mismo fallo en esta instancia Edge). */
+const recentAlerts = new Map<string, number>();
+const DEDUP_MS = 45_000;
+const MAX_KEYS = 120;
+
+function pruneOldAlerts(now: number): void {
+  for (const [k, t] of recentAlerts) {
+    if (now - t > DEDUP_MS) recentAlerts.delete(k);
+  }
+  if (recentAlerts.size > MAX_KEYS) {
+    const entries = [...recentAlerts.entries()].sort((a, b) => a[1] - b[1]);
+    entries.slice(0, recentAlerts.size - MAX_KEYS + 20).forEach(([k]) => recentAlerts.delete(k));
+  }
+}
+
+function alertDedupKey(payload: AlertPayload): string {
+  const s = `${payload.source ?? ""}|${payload.message ?? ""}|${(payload.details ?? "").slice(0, 280)}`;
+  return s.length > 600 ? s.slice(0, 600) : s;
+}
+
 function laneFromSource(source: string): string {
   const s = (source || "").toLowerCase();
   if (s.startsWith("frontend.")) return "FRONTEND";
@@ -61,6 +81,18 @@ Deno.serve(async (req) => {
     }
 
     const payload = await req.json() as AlertPayload;
+    const now = Date.now();
+    pruneOldAlerts(now);
+    const key = alertDedupKey(payload);
+    const last = recentAlerts.get(key);
+    if (last !== undefined && now - last < DEDUP_MS) {
+      return new Response(JSON.stringify({ success: true, deduped: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    recentAlerts.set(key, now);
+
     const text = formatAlert(payload);
 
     const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {

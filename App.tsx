@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Team, Match, CategoryLimits } from './types';
 import { Layout } from './components/Layout';
 import { ChatBot } from './components/ChatBot';
@@ -14,14 +14,15 @@ import { Media } from './views/Media';
 import { Information } from './views/Information';
 import { PlayerSelfRegistration } from './views/PlayerSelfRegistration';
 import { ManagerLogin } from './views/ManagerLogin';
+import { MatchReport } from './views/MatchReport';
 import { teamService, matchService } from './services/teamService';
-import { generateBracketAI } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 import { OpsErrorBoundary } from './components/OpsErrorBoundary';
 import { reportOpsAlert } from './services/opsAlertService';
 import { Toaster, toast } from 'sonner';
 import type { User } from '@supabase/supabase-js';
 import { TournamentDataProvider } from './context/TournamentDataContext';
+import { fetchScheduleVisibility, saveScheduleVisibility } from './services/tournamentScheduleService';
 
 const App: React.FC = () => {
   // Category Limits (Admin controlled)
@@ -42,6 +43,7 @@ const App: React.FC = () => {
   // Matches Data
   const [matches, setMatches] = useState<Match[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [publicMatchesVisible, setPublicMatchesVisible] = useState(false);
 
   // Auth Manager
   const [user, setUser] = useState<User | null>(null);
@@ -89,6 +91,9 @@ const App: React.FC = () => {
       if (limitsData?.value) {
         setCategoryLimits(limitsData.value as CategoryLimits);
       }
+
+      const vis = await fetchScheduleVisibility();
+      setPublicMatchesVisible(vis.publicMatchesVisible);
 
       // 2. Fetch Teams and Matches
       const dbTeams = await teamService.getTeams();
@@ -182,13 +187,24 @@ const App: React.FC = () => {
       setTeams(prev => prev.map(t => t.id === updatedTeam.id ? updatedTeam : t));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al guardar el equipo';
-      toast.error(msg);
-      void reportOpsAlert({
-        source: 'frontend.team-update',
-        severity: 'error',
-        message: 'Error al guardar equipo (manager/admin)',
-        details: e instanceof Error ? `${msg}\n${e.stack ?? ''}`.slice(0, 3500) : msg,
-      });
+      /** Fallo habitual si no está aplicado add_competition_group_to_teams.sql — no debe spamear el bot de fallos */
+      const likelyMissingCompetitionGroup =
+        typeof msg === 'string' &&
+        /competition_group/i.test(msg) &&
+        /does not exist|unknown column|no existe|could not/i.test(msg);
+      toast.error(
+        likelyMissingCompetitionGroup
+          ? 'Falta la columna competition_group en Supabase. Ejecuta supabase/sql/add_competition_group_to_teams.sql y recarga.'
+          : msg
+      );
+      if (!likelyMissingCompetitionGroup) {
+        void reportOpsAlert({
+          source: 'frontend.team-update',
+          severity: 'error',
+          message: 'Error al guardar equipo (manager/admin)',
+          details: e instanceof Error ? `${msg}\n${e.stack ?? ''}`.slice(0, 3500) : msg,
+        });
+      }
       throw e;
     }
   };
@@ -196,32 +212,18 @@ const App: React.FC = () => {
   const updateMatches = async (newMatches: Match[]) => {
     setMatches(newMatches);
     await matchService.saveMatches(newMatches);
-  }
+  };
 
-  const handleGenerateBrackets = async () => {
+  const persistPublicMatchesVisible = async (visible: boolean) => {
+    setPublicMatchesVisible(visible);
     try {
-      toast.info("Generando cuadro del torneo mediante IA...");
-      const newMatches = await generateBracketAI(teams, {
-        startTime: '09:00',
-        endTime: '21:00',
-        intervalMins: 30,
-        courts: ['Pista Central', 'Pista 2', 'Pista 3'],
-        lunchBreak: true,
-        customPrompt: 'Generar fase de grupos y fase final (solo gran final) para todas las categorías.'
-      });
-      if (newMatches.length > 0) {
-        updateMatches(newMatches);
-        toast.success("Cuadro generado con éxito");
-      }
-    } catch (error) {
-      console.error(error);
-      reportOpsAlert({
-        source: 'frontend.bracket-generation',
-        severity: 'error',
-        message: 'Error generando cuadro con IA',
-        details: error instanceof Error ? error.message : String(error),
-      });
-      toast.error("Error al generar los partidos");
+      await saveScheduleVisibility(visible);
+      toast.success(visible ? 'Calendario visible para el público y equipos' : 'Calendario oculto para visitantes');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al guardar visibilidad';
+      toast.error(msg);
+      const v = await fetchScheduleVisibility();
+      setPublicMatchesVisible(v.publicMatchesVisible);
     }
   };
 
@@ -229,13 +231,55 @@ const App: React.FC = () => {
     (t) => t.managerEmail === user?.email && t.status === 'approved'
   );
 
+  const adminUnauthorized = (
+                  <Admin
+                    onUpdateTeam={updateTeam}
+                    onUpdateMatches={updateMatches}
+                    onUpdateLimits={handleUpdateLimits}
+                  />
+  );
+
   return (
     <OpsErrorBoundary>
       <Router>
-        <TournamentDataProvider value={{ teams, setTeams, matches, setMatches, categoryLimits, setCategoryLimits }}>
-          <Layout>
-            <Toaster richColors position="bottom-right" />
-            <Routes>
+        <TournamentDataProvider
+          value={{
+            teams,
+            setTeams,
+            matches,
+            setMatches,
+            categoryLimits,
+            setCategoryLimits,
+            publicMatchesVisible,
+            persistPublicMatchesVisible,
+          }}
+        >
+          <Routes>
+            <Route
+              path="/admin/match-report/:matchId"
+              element={
+                <ProtectedRoute
+                  allowedRole="staff"
+                  user={user}
+                  userRole={userRole}
+                  roleLoading={roleLoading}
+                  onUnauthorizedRole={handleLogout}
+                  unauthenticatedElement={adminUnauthorized}
+                >
+                  <MatchReport />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              element={
+                <Layout>
+                  <Toaster richColors position="bottom-right" />
+                  <Outlet />
+                  <ChatBot />
+                </Layout>
+              }
+            >
               <Route path="/" element={<Home />} />
               <Route path="/info" element={<Information />} />
               <Route path="/schedule" element={<Schedule />} />
@@ -243,31 +287,26 @@ const App: React.FC = () => {
               <Route path="/sponsors" element={<Sponsors />} />
               <Route path="/media" element={<Media />} />
               <Route path="/self-registration" element={<PlayerSelfRegistration onUpdateTeam={updateTeam} />} />
-              
-              <Route path="/admin" element={
-                <ProtectedRoute
-                  allowedRole="staff"
-                  user={user}
-                  userRole={userRole}
-                  roleLoading={roleLoading}
-                  onUnauthorizedRole={handleLogout}
-                  unauthenticatedElement={
+
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute
+                    allowedRole="staff"
+                    user={user}
+                    userRole={userRole}
+                    roleLoading={roleLoading}
+                    onUnauthorizedRole={handleLogout}
+                    unauthenticatedElement={adminUnauthorized}
+                  >
                     <Admin
                       onUpdateTeam={updateTeam}
                       onUpdateMatches={updateMatches}
                       onUpdateLimits={handleUpdateLimits}
-                      onGenerateBrackets={handleGenerateBrackets}
                     />
-                  }
-                >
-                  <Admin
-                    onUpdateTeam={updateTeam}
-                    onUpdateMatches={updateMatches}
-                    onUpdateLimits={handleUpdateLimits}
-                    onGenerateBrackets={handleGenerateBrackets}
-                  />
-                </ProtectedRoute>
-              } />
+                  </ProtectedRoute>
+                }
+              />
 
               <Route path="/team-manager" element={
                 <ProtectedRoute
@@ -287,7 +326,7 @@ const App: React.FC = () => {
                       </button>
                     </div>
                     <TeamManager
-                      teams={teams.filter(t => t.managerEmail === user?.email && t.status === 'approved')}
+                      teams={teams.filter((t) => t.managerEmail === user?.email && t.status === 'approved')}
                       onUpdateTeam={updateTeam}
                     />
                   </div>
@@ -295,9 +334,8 @@ const App: React.FC = () => {
               } />
 
               <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-            <ChatBot />
-          </Layout>
+            </Route>
+          </Routes>
         </TournamentDataProvider>
     </Router>
     </OpsErrorBoundary>

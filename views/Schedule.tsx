@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { searchRules } from '../services/geminiService';
 import { Team } from '../types';
-import { siteContent } from '../constants/siteContent';
 import { useTournamentData } from '../context/TournamentDataContext';
+import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 
 export const Schedule: React.FC = () => {
-    const { matches, teams, categoryLimits } = useTournamentData();
+    const { matches, teams, categoryLimits, publicMatchesVisible } = useTournamentData();
     const [activeTab, setActiveTab] = useState<'info' | 'calendar' | 'results' | 'standings'>('info');
     const [infoSubTab, setInfoSubTab] = useState<'general' | 'rules'>('general');
 
@@ -13,6 +13,12 @@ export const Schedule: React.FC = () => {
     const [mapQuery, setMapQuery] = useState('');
     const [mapResult, setMapResult] = useState<{ text: string, links: any[] } | null>(null);
     const [selectedStandingsCategory, setSelectedStandingsCategory] = useState<Team['division']>('Senior Masculino');
+    const [selectedStandingsGroup, setSelectedStandingsGroup] = useState<string>('all');
+
+    const standingsGroups = useMemo(
+        () => competitionGroupsForDivision(teams, selectedStandingsCategory, true),
+        [teams, selectedStandingsCategory]
+    );
 
     const handleSearchVenue = async () => {
         setMapResult(null);
@@ -21,48 +27,15 @@ export const Schedule: React.FC = () => {
     };
 
     // --- Calculated Standings (Client Side View) ---
-    const standings = useMemo(() => {
-        const stats: Record<string, { name: string, played: number, won: number, lost: number, gf: number, ga: number, points: number, logoUrl?: string }> = {};
-
-        const filteredTeams = teams.filter(t => t.division === selectedStandingsCategory && t.paymentStatus === 'PAID');
-
-        filteredTeams.forEach(t => {
-            stats[t.name] = { name: t.name, logoUrl: t.logoUrl, played: 0, won: 0, lost: 0, gf: 0, ga: 0, points: 0 };
-        });
-
-        matches.forEach(m => {
-            const teamA = teams.find(t => t.name === m.teamA);
-            if (teamA?.division === selectedStandingsCategory) {
-                if (!stats[m.teamA]) stats[m.teamA] = { name: m.teamA, played: 0, won: 0, lost: 0, gf: 0, ga: 0, points: 0 };
-                if (!stats[m.teamB]) stats[m.teamB] = { name: m.teamB, played: 0, won: 0, lost: 0, gf: 0, ga: 0, points: 0 };
-
-                if (m.status === 'FINISHED' && m.scoreA !== null && m.scoreB !== null) {
-                    stats[m.teamA].played += 1;
-                    stats[m.teamA].gf += m.scoreA;
-                    stats[m.teamA].ga += m.scoreB;
-
-                    stats[m.teamB].played += 1;
-                    stats[m.teamB].gf += m.scoreB;
-                    stats[m.teamB].ga += m.scoreA;
-
-                    if (m.scoreA > m.scoreB) {
-                        stats[m.teamA].won += 1;
-                        stats[m.teamA].points += 3;
-                        stats[m.teamB].lost += 1;
-                    } else if (m.scoreB > m.scoreA) {
-                        stats[m.teamB].won += 1;
-                        stats[m.teamB].points += 3;
-                        stats[m.teamA].lost += 1;
-                    } else {
-                        stats[m.teamA].points += 1;
-                        stats[m.teamB].points += 1;
-                    }
-                }
-            }
-        });
-
-        return Object.values(stats).sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga));
-    }, [matches, teams, selectedStandingsCategory]);
+    const standings = useMemo(
+        () =>
+            computeStandings(teams, matches, {
+                division: selectedStandingsCategory,
+                group: selectedStandingsGroup,
+                onlyPaidTeams: true,
+            }),
+        [matches, teams, selectedStandingsCategory, selectedStandingsGroup]
+    );
 
     return (
         <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 sm:px-6 lg:px-8 animate-in fade-in">
@@ -85,7 +58,7 @@ export const Schedule: React.FC = () => {
                 <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-sm border border-slate-200 dark:border-white/5 overflow-hidden">
                     <div className="flex border-b border-slate-200 dark:border-white/10 overflow-x-auto no-scrollbar">
                         {(['info', 'calendar', 'results', 'standings'] as const)
-                            .filter(tab => tab === 'info' || siteContent.isScheduleActive)
+                            .filter((tab) => tab === 'info' || publicMatchesVisible)
                             .map((tab) => (
                             <button
                                 key={tab}
@@ -323,21 +296,48 @@ export const Schedule: React.FC = () => {
 
                         {activeTab === 'standings' && (
                             <div className="space-y-6 animate-in fade-in">
-                                <div className="flex overflow-x-auto no-scrollbar gap-2">
-                                    {[
-                                        'Infantil Femenino', 'Infantil Masculino',
-                                        'Cadete Femenino', 'Cadete Masculino',
-                                        'Juvenil Femenino', 'Juvenil Masculino',
-                                        'Senior Femenino', 'Senior Masculino'
-                                    ].map((cat) => (
-                                        <button
-                                            key={cat}
-                                            onClick={() => setSelectedStandingsCategory(cat as any)}
-                                            className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap ${selectedStandingsCategory === cat ? 'bg-primary text-background-dark' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}
-                                        >
-                                            {cat}
-                                        </button>
-                                    ))}
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex overflow-x-auto no-scrollbar gap-2">
+                                        {[
+                                            'Infantil Femenino', 'Infantil Masculino',
+                                            'Cadete Femenino', 'Cadete Masculino',
+                                            'Juvenil Femenino', 'Juvenil Masculino',
+                                            'Senior Femenino', 'Senior Masculino'
+                                        ].map((cat) => (
+                                            <button
+                                                key={cat}
+                                                onClick={() => {
+                                                    setSelectedStandingsCategory(cat as Team['division']);
+                                                    setSelectedStandingsGroup('all');
+                                                }}
+                                                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap ${selectedStandingsCategory === cat ? 'bg-primary text-background-dark' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}
+                                            >
+                                                {cat}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {standingsGroups.length > 0 && (
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-[10px] font-bold uppercase text-slate-500">Grupo</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedStandingsGroup('all')}
+                                                className={`px-3 py-1 rounded-full text-[10px] font-bold ${selectedStandingsGroup === 'all' ? 'bg-secondary text-background-dark' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}
+                                            >
+                                                Todos
+                                            </button>
+                                            {standingsGroups.map((g) => (
+                                                <button
+                                                    key={g}
+                                                    type="button"
+                                                    onClick={() => setSelectedStandingsGroup(g)}
+                                                    className={`px-3 py-1 rounded-full text-[10px] font-bold ${selectedStandingsGroup === g ? 'bg-secondary text-background-dark' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}
+                                                >
+                                                    {g}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10">
                                     <table className="w-full text-sm text-left">

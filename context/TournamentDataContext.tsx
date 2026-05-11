@@ -8,6 +8,9 @@ interface TournamentDataContextValue {
   setMatches: React.Dispatch<React.SetStateAction<Match[]>>;
   categoryLimits: CategoryLimits;
   setCategoryLimits: React.Dispatch<React.SetStateAction<CategoryLimits>>;
+  /** Calendario / resultados / clasificación visibles para cualquier visitante (no staff). */
+  publicMatchesVisible: boolean;
+  persistPublicMatchesVisible: (visible: boolean) => Promise<void>;
 }
 
 const TournamentDataContext = createContext<TournamentDataContextValue | undefined>(undefined);
