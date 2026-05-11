@@ -98,6 +98,8 @@ export interface Match {
   status: 'SCHEDULED' | 'LIVE' | 'FINISHED';
   round?: string;
   report?: MatchReport; // New field for the Acta
+  /** Sólo simulador / borradores y UI; no se persiste en la tabla `matches` de Supabase. */
+  scheduleDay?: 'Viernes' | 'Sábado' | 'Domingo';
 }
 
 /** Borrador de calendario (simulación). No se muestra al público hasta publicar. */

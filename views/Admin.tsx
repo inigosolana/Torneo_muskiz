@@ -17,6 +17,8 @@ import {
     duplicateDraft,
 } from '../services/tournamentScheduleService';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
+import { buildMuskizWeekendDraftMatches, MIN_REAL_MATCHES_PER_TEAM } from '../services/muskizScheduleSimulator';
+import { SimulationScheduleGridTabs } from '../components/SimulationDayGrid';
 
 interface AdminProps {
     onUpdateTeam: (team: Team) => void;
@@ -46,6 +48,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     // Generator State
     const [generatingBracket, setGeneratingBracket] = useState(false);
+    const [generatingMuskiz, setGeneratingMuskiz] = useState(false);
     const [genConfig, setGenConfig] = useState({
         startTime: '09:00',
         endTime: '21:00',
@@ -652,6 +655,38 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             toast.error('Error generando el cuadro. Intenta simplificar el prompt.');
         }
         setGeneratingBracket(false);
+    };
+
+    const handleGenerateMuskizWeekend = async () => {
+        if (!activeDraftId) {
+            toast.error('Selecciona o crea una simulación primero.');
+            return;
+        }
+        setGeneratingMuskiz(true);
+        try {
+            const { matches: newMatches, error: muskizError } = buildMuskizWeekendDraftMatches(teams);
+            if (muskizError) {
+                toast.error(muskizError);
+                return;
+            }
+            if (newMatches.length === 0) {
+                toast.error(
+                    'No se generaron partidos: hace falta al menos 2 equipos pagados en una misma categoría.'
+                );
+                return;
+            }
+            const normalized = ensureStableDraftMatchIds(newMatches);
+            const nextDrafts = simDrafts.map((d) =>
+                d.id === activeDraftId ? { ...d, matches: normalized } : d
+            );
+            setSimDrafts(nextDrafts);
+            await persistSimDraftsAsync(nextDrafts, activeDraftId);
+            toast.success(
+                `Calendario Muskiz: ${normalized.length} partidos (mín. ${MIN_REAL_MATCHES_PER_TEAM} reales por equipo; sólo dentro de Viernes/Sábado/Domingo definidos).`
+            );
+        } finally {
+            setGeneratingMuskiz(false);
+        }
     };
 
     const handlePublishActiveDraft = async () => {
@@ -2104,6 +2139,43 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     </button>
                                                 </div>
 
+                                                <div className="bg-teal-50 border border-teal-200 rounded-xl p-6 mt-6">
+                                                    <div className="mb-3">
+                                                        <h4 className="font-bold text-teal-900 flex items-center gap-2">
+                                                            <span className="material-symbols-outlined text-teal-700">event_available</span>
+                                                            Simulador fin de semana Muskiz (determinístico)
+                                                        </h4>
+                                                        <p className="text-xs text-teal-800 mt-2 leading-relaxed max-w-3xl">
+                                                            <strong>Viernes:</strong> cadetes 17:00–21:00, <strong>6 campos</strong>.{' '}
+                                                            <strong>Sábado:</strong> juvenil/senior 9:00–21:00, comida 13:00–14:00, <strong>6 campos</strong>.{' '}
+                                                            <strong>Domingo:</strong> infantiles 9:00–15:00, <strong>4 campos</strong>. Huecos{' '}
+                                                            <strong>35 min</strong>. Como mínimo <strong>{MIN_REAL_MATCHES_PER_TEAM} partidos</strong>{' '}
+                                                            entre equipos reales por equipo; se añaden duelos de grupo extra si hace falta. Si no cabe todo en
+                                                            esas franjas, no se genera el calendario y se muestra el motivo. Grupos con «competición» en ficha o
+                                                            reparto automático; dos grupos → semis + final.
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleGenerateMuskizWeekend()}
+                                                        disabled={generatingMuskiz || !activeDraftId}
+                                                        className="w-full sm:w-auto bg-teal-700 hover:bg-teal-800 text-white py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                                                    >
+                                                        {generatingMuskiz ? (
+                                                            <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                                                        ) : (
+                                                            <span className="material-symbols-outlined">calendar_month</span>
+                                                        )}
+                                                        {generatingMuskiz ? 'Generando…' : 'Generar calendario fin de semana en el borrador'}
+                                                    </button>
+                                                </div>
+
+                                                {activeDraft && activeDraft.matches.length > 0 && (
+                                                    <div className="mt-6">
+                                                        <SimulationScheduleGridTabs matches={activeDraft.matches} />
+                                                    </div>
+                                                )}
+
                                                 <div>
                                                     <h4 className="text-sm font-black uppercase text-slate-500 mb-3">
                                                         Vista previa del borrador ({activeDraft?.matches.length ?? 0} partidos)
@@ -2114,7 +2186,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         ) : (
                                                             activeDraft.matches.map((match) => (
                                                                 <div key={match.id} className="flex flex-col lg:flex-row flex-wrap justify-between items-stretch lg:items-center gap-3 p-4 border border-teal-100 rounded-lg bg-teal-50/30">
-                                                                    <div className="flex items-center gap-2">
+                                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                                        {match.scheduleDay && (
+                                                                            <span className="bg-teal-200/80 text-teal-900 text-[10px] font-black px-2 py-0.5 rounded uppercase">
+                                                                                {match.scheduleDay}
+                                                                            </span>
+                                                                        )}
                                                                         <span className="bg-primary/10 text-primary-dark text-[10px] font-bold px-2 py-0.5 rounded uppercase">{match.round || 'Partido'}</span>
                                                                         <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-teal-800">{match.time}</span>
                                                                     </div>

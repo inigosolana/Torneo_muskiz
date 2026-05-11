@@ -23,14 +23,19 @@ export function ensureStableDraftMatchIds(matches: Match[]): Match[] {
     }));
 }
 
-/** Al volcar borrador a tabla oficial: sólo UUIDs válidos para Supabase */
+/** Al volcar borrador a tabla oficial: sólo UUIDs válidos para Supabase (sin campos sólo‑borrador). */
 export function finalizeMatchesForDatabase(matches: Match[]): Match[] {
     return matches.map((m) => ({
-        ...m,
         id: UUID_RX.test(m.id) ? m.id : crypto.randomUUID(),
+        time: m.time,
+        court: m.court,
+        teamA: m.teamA,
+        teamB: m.teamB,
         scoreA: m.scoreA ?? null,
         scoreB: m.scoreB ?? null,
         status: m.status ?? 'SCHEDULED',
+        round: m.round,
+        report: m.report,
     }));
 }
 
