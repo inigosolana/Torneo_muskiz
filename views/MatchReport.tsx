@@ -4,8 +4,15 @@ import type { Match, Player, Team } from '../types';
 import { matchService, teamService } from '../services/teamService';
 import { siteContent } from '../constants/siteContent';
 
-/** Mínimo de líneas tipo acta papel; puede crecer si hay más jugadores inscritos. */
-const MIN_ROSTER_ROWS = 14;
+/** Filas del tanteo punto a punto según modelo acta playa (Kolosaurios / RFEBM). */
+const GRID_ROWS = 44;
+
+function inferGenderMixLabel(team: Team | undefined): string {
+    const d = (team?.division ?? '').toLowerCase();
+    if (d.includes('femen')) return 'FEM';
+    if (d.includes('mascul')) return 'MAS';
+    return '';
+}
 
 function formatPlayerName(p: Player): string {
     const surname = (p.surnames ?? '').trim();
@@ -24,18 +31,20 @@ function playersForActa(team: Team | undefined): Player[] {
 function buildRosterRows(
     team: Team | undefined,
     rowCount: number
-): { idx: number; player: Player | null }[] {
+): { player: Player | null }[] {
     const roster: (Player | null)[] = [...playersForActa(team)];
     while (roster.length < rowCount) roster.push(null);
-    return roster.slice(0, rowCount).map((player, i) => ({
-        idx: i + 1,
-        player,
-    }));
+    return roster.slice(0, rowCount).map((player) => ({ player }));
 }
 
+const cellScore = 'h-[6px] max-h-[6px] border-r border-black p-0 align-middle';
+const cellRosterThin = 'h-[6px] max-h-[6px] border-r border-black p-0 align-middle text-center text-[6px] leading-none';
+const cellRosterName =
+    'h-[6px] max-h-[6px] border-r border-black px-px py-0 align-middle text-[6px] leading-none whitespace-nowrap overflow-hidden text-ellipsis max-w-0';
+
 /**
- * Acta física imprimible (balonmano playa).
- * Diseñada para A4; sólo esta hoja aparece limpia al imprimir desde el navegador.
+ * Acta física imprimible — alineada al PDF modelo acta playa (Kolosaurios).
+ * Un folio A4; tipografía compacta para 44 filas de tanteo.
  */
 export const MatchReport: React.FC = () => {
     const { matchId } = useParams<{ matchId: string }>();
@@ -90,19 +99,15 @@ export const MatchReport: React.FC = () => {
     );
 
     const categoryLabel = teamA?.division ?? teamB?.division ?? '';
+    const groupLabel = teamA?.competitionGroup ?? teamB?.competitionGroup ?? '';
+    const genderLabel = inferGenderMixLabel(teamA) || inferGenderMixLabel(teamB);
 
-    const rosterRowCount = useMemo(() => {
-        const na = playersForActa(teamA).length;
-        const nb = playersForActa(teamB).length;
-        return Math.min(24, Math.max(MIN_ROSTER_ROWS, na, nb));
-    }, [teamA, teamB]);
-
-    const rosterA = useMemo(() => buildRosterRows(teamA, rosterRowCount), [teamA, rosterRowCount]);
-    const rosterB = useMemo(() => buildRosterRows(teamB, rosterRowCount), [teamB, rosterRowCount]);
+    const rosterA = useMemo(() => buildRosterRows(teamA, GRID_ROWS), [teamA]);
+    const rosterB = useMemo(() => buildRosterRows(teamB, GRID_ROWS), [teamB]);
 
     const handlePrint = useCallback(() => window.print(), []);
 
-    const competitionName = siteContent.heroTitle ?? 'Torneo';
+    const competitionName = (siteContent.heroTitle ?? 'Torneo').toUpperCase();
 
     return (
         <>
@@ -110,7 +115,7 @@ export const MatchReport: React.FC = () => {
         @media print {
           @page {
             size: A4 portrait;
-            margin: 10mm;
+            margin: 6mm;
           }
           html, body {
             background: white !important;
@@ -139,7 +144,7 @@ export const MatchReport: React.FC = () => {
                         Imprimir acta
                     </button>
                     <span className="text-xs text-slate-500">
-                        En impresión, esta barra no aparece — sólo el acta del folio A4.
+                        Modelo según PDF acta playa Kolosaurios — comprobar encaje A4 en vista previa.
                     </span>
                 </div>
 
@@ -157,260 +162,445 @@ export const MatchReport: React.FC = () => {
 
                     {match && !error && (
                         <article
-                            className="border border-black bg-white text-[10px] leading-tight shadow print:shadow-none break-inside-avoid"
+                            className="border border-black bg-white text-[6px] leading-none shadow print:shadow-none break-inside-avoid print:text-[6px]"
                             id="match-report-sheet"
                             aria-label="Acta de partido"
                         >
-                            {/* Cabecera título */}
-                            <header className="border-b border-black px-3 py-2 text-center uppercase">
-                                <h1 className="text-[11px] font-black tracking-tight">
-                                    Acta de control — Balonmano playa
-                                </h1>
-                                <p className="mt-0.5 text-[9px] font-semibold tracking-wide text-slate-800">
-                                    {competitionName}
-                                </p>
+                            <header className="border-b border-black px-1 py-px text-center font-black uppercase tracking-tight">
+                                <h1 className="text-[8px] print:text-[8px]">{competitionName}</h1>
                             </header>
 
-                            {/* Dos tablas cabecera: competición | partido */}
-                            <section className="grid grid-cols-2 border-b border-black">
-                                <div className="border-r border-black">
-                                    <div className="bg-slate-100 px-1 py-0.5 text-center text-[9px] font-bold uppercase tracking-wide border-b border-black">
-                                        Datos de la competición
-                                    </div>
-                                    <table className="w-full border-collapse text-[9px]">
-                                        <tbody>
-                                            <tr className="border-b border-black">
-                                                <td className="w-[38%] border-r border-black bg-slate-50 px-1 py-0.5 font-semibold uppercase">
-                                                    Nombre torneo / edición
-                                                </td>
-                                                <td className="min-h-[5mm] px-1 py-0.5">{competitionName}</td>
-                                            </tr>
-                                            <tr className="border-b border-black">
-                                                <td className="border-r border-black bg-slate-50 px-1 py-0.5 font-semibold uppercase">
-                                                    Ubicación / sede
-                                                </td>
-                                                <td className="min-h-[5mm] px-1 py-0.5">Playa La Arena · Muskiz</td>
-                                            </tr>
-                                            <tr>
-                                                <td className="border-r border-black bg-slate-50 px-1 py-0.5 font-semibold uppercase">
-                                                    Observaciones
-                                                </td>
-                                                <td className="min-h-[6mm] px-1 py-0.5 print:min-h-[8mm]" />
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div>
-                                    <div className="bg-slate-100 px-1 py-0.5 text-center text-[9px] font-bold uppercase tracking-wide border-b border-black">
-                                        Datos del partido
-                                    </div>
-                                    <table className="w-full border-collapse text-[9px]">
-                                        <tbody>
-                                            <tr className="border-b border-black">
-                                                <td className="w-[32%] border-r border-black bg-slate-50 px-1 py-0.5 font-semibold uppercase">
-                                                    Fecha (dd/mm/aa)
-                                                </td>
-                                                <td className="border-r border-black px-1 py-0.5 print:min-h-[5mm]" />
-                                                <td className="w-[26%] border-r border-black bg-slate-50 px-1 py-0.5 font-semibold uppercase">
-                                                    Hora
-                                                </td>
-                                                <td className="px-1 py-0.5 font-semibold">{match.time || '—'}</td>
-                                            </tr>
-                                            <tr className="border-b border-black">
-                                                <td className="border-r border-black bg-slate-50 px-1 py-0.5 font-semibold uppercase">
-                                                    Fase / jornada
-                                                </td>
-                                                <td colSpan={3} className="px-1 py-0.5">{match.round || '—'}</td>
-                                            </tr>
-                                            <tr className="border-b border-black">
-                                                <td className="border-r border-black bg-slate-50 px-1 py-0.5 font-semibold uppercase">
-                                                    Pista / campo
-                                                </td>
-                                                <td colSpan={3} className="px-1 py-0.5 font-semibold">
-                                                    {match.court || '—'}
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td className="border-r border-black bg-slate-50 px-1 py-0.5 font-semibold uppercase">
-                                                    Categoría
-                                                </td>
-                                                <td colSpan={3} className="px-1 py-0.5">{categoryLabel || '—'}</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </section>
-
-                            {/* Rosters dos columnas */}
-                            <section className="grid grid-cols-2 border-b border-black">
-                                {/* Equipo A */}
-                                <div className="border-r border-black">
-                                    <div className="border-b border-black bg-teal-100 px-1 py-0.5 text-center text-[9px] font-bold uppercase">
-                                        Equipo organizador — A (local)
-                                    </div>
-                                    <div className="border-b border-black px-1 py-0.5 text-[9px]">
-                                        <span className="font-bold uppercase tracking-wide">{match.teamA}</span>
-                                        {teamA?.city ? (
-                                            <span className="text-slate-700"> · {teamA.city}</span>
-                                        ) : null}
-                                    </div>
-                                    <table className="w-full border-collapse text-[9px]">
-                                        <thead>
-                                            <tr className="bg-slate-100 text-center uppercase">
-                                                <th className="w-8 border-b border-r border-black py-0.5 font-semibold">N.º</th>
-                                                <th className="w-11 border-b border-r border-black py-0.5 font-semibold">Dr.</th>
-                                                <th className="border-b border-black py-0.5 font-semibold">
-                                                    Apellidos, nombre
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {rosterA.map(({ idx, player }) => (
-                                                <tr key={`a-${idx}`} className="border-b border-black">
-                                                    <td className="border-r border-black text-center py-0.5 font-mono text-[9px]">
-                                                        {idx}
-                                                    </td>
-                                                    <td className="border-r border-black px-0.5 text-center py-0.5 font-semibold">
-                                                        {player?.number ?? ''}
-                                                    </td>
-                                                    <td className="px-1 py-0.5 h-[18px] print:h-[17px]">
-                                                        {player ? formatPlayerName(player) : ''}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                {/* Equipo B */}
-                                <div>
-                                    <div className="border-b border-black bg-teal-100 px-1 py-0.5 text-center text-[9px] font-bold uppercase">
-                                        Equipo visitante — B
-                                    </div>
-                                    <div className="border-b border-black px-1 py-0.5 text-[9px]">
-                                        <span className="font-bold uppercase tracking-wide">{match.teamB}</span>
-                                        {teamB?.city ? (
-                                            <span className="text-slate-700"> · {teamB.city}</span>
-                                        ) : null}
-                                    </div>
-                                    <table className="w-full border-collapse text-[9px]">
-                                        <thead>
-                                            <tr className="bg-slate-100 text-center uppercase">
-                                                <th className="w-8 border-b border-r border-black py-0.5 font-semibold">N.º</th>
-                                                <th className="w-11 border-b border-r border-black py-0.5 font-semibold">Dr.</th>
-                                                <th className="border-b border-black py-0.5 font-semibold">
-                                                    Apellidos, nombre
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {rosterB.map(({ idx, player }) => (
-                                                <tr key={`b-${idx}`} className="border-b border-black">
-                                                    <td className="border-r border-black text-center py-0.5 font-mono text-[9px]">
-                                                        {idx}
-                                                    </td>
-                                                    <td className="border-r border-black px-0.5 text-center py-0.5 font-semibold">
-                                                        {player?.number ?? ''}
-                                                    </td>
-                                                    <td className="px-1 py-0.5 h-[18px] print:h-[17px]">
-                                                        {player ? formatPlayerName(player) : ''}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </section>
-
-                            {/* Cuadrícula resultado — vacío para cumplimentar a mano */}
+                            {/* DATOS DE LA COMPETICIÓN */}
                             <section className="border-b border-black">
-                                <div className="border-b border-black bg-slate-100 px-1 py-0.5 text-center text-[9px] font-bold uppercase">
-                                    Resultado (rellenar a mano)
+                                <div className="border-b border-black bg-slate-100 px-1 py-px text-center text-[6px] font-bold uppercase">
+                                    DATOS DE LA COMPETICIÓN
                                 </div>
-                                <table className="w-full border-collapse text-[9px]">
+                                <table className="w-full table-fixed border-collapse text-[6px]">
                                     <thead>
-                                        <tr className="text-center uppercase bg-white">
-                                            <th className="w-[14%] border-r border-black py-0.5" />
-                                            <th className="border-r border-black py-0.5 font-semibold">
-                                                Tiempo corrido · Set 1
+                                        <tr className="bg-slate-50 text-center uppercase">
+                                            <th className="border-b border-r border-black p-px font-semibold w-[20%]">
+                                                TORNEO
                                             </th>
-                                            <th className="border-r border-black py-0.5 font-semibold">
-                                                Tiempo corrido · Set 2
+                                            <th className="border-b border-r border-black p-px font-semibold w-[18%]">
+                                                CATEGORÍA
                                             </th>
-                                            <th className="py-0.5 font-semibold">
-                                                Shoot-out · (si procede)
+                                            <th className="border-b border-r border-black p-px font-semibold w-[12%]">
+                                                MAS/FEM/MIX
+                                            </th>
+                                            <th className="border-b border-r border-black p-px font-semibold w-[15%]">
+                                                FASE
+                                            </th>
+                                            <th className="border-b border-r border-black p-px font-semibold w-[12%]">
+                                                GRUPO
+                                            </th>
+                                            <th className="border-b border-black p-px font-semibold w-[13%]">
+                                                JORNADA
                                             </th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <tr>
-                                            <td className="border-t border-black border-r bg-slate-50 px-1 py-0.5 font-bold uppercase">
-                                                Eq. A
+                                            <td className="border-b border-r border-black h-[4mm] px-px py-0 align-top">
+                                                {competitionName}
                                             </td>
-                                            <td className="border-t border-black border-r h-[11mm]" />
-                                            <td className="border-t border-black border-r h-[11mm]" />
-                                            <td className="border-t border-black h-[11mm]" />
-                                        </tr>
-                                        <tr>
-                                            <td className="border-t border-black border-r bg-slate-50 px-1 py-0.5 font-bold uppercase">
-                                                Eq. B
+                                            <td className="border-b border-r border-black h-[4mm] px-px py-0 align-top">
+                                                {categoryLabel || '—'}
                                             </td>
-                                            <td className="border-t border-black border-r h-[11mm]" />
-                                            <td className="border-t border-black border-r h-[11mm]" />
-                                            <td className="border-t border-black h-[11mm]" />
+                                            <td className="border-b border-r border-black h-[4mm] px-px py-0 align-top">
+                                                {genderLabel || '—'}
+                                            </td>
+                                            <td className="border-b border-r border-black h-[4mm] px-px py-0 align-top">
+                                                {match.round || '—'}
+                                            </td>
+                                            <td className="border-b border-r border-black h-[4mm] px-px py-0 align-top">
+                                                {groupLabel || '—'}
+                                            </td>
+                                            <td className="border-b border-black h-[4mm] px-px py-0 align-top" />
                                         </tr>
                                     </tbody>
                                 </table>
                             </section>
 
-                            {/* Observaciones escritas */}
+                            {/* DATOS DEL PARTIDO */}
                             <section className="border-b border-black">
-                                <div className="flex border-black">
-                                    <div className="w-[52%] border-r border-black">
-                                        <div className="border-b border-black bg-slate-100 px-1 py-0.5 text-[9px] font-bold uppercase text-center">
-                                            Incidencias / anotaciones
-                                        </div>
-                                        <div className="h-[26mm]" />
-                                        <div className="h-[26mm]" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="border-b border-black bg-slate-100 px-1 py-0.5 text-[9px] font-bold uppercase text-center">
-                                            Firmas (rellenar a mano)
-                                        </div>
-                                        <table className="w-full border-collapse text-[9px]">
-                                            <tbody>
-                                                <tr>
-                                                    <td className="w-1/2 border-b border-r border-black px-1 py-0.5 font-semibold uppercase align-top">
-                                                        Capitán equipo A
+                                <div className="border-b border-black bg-slate-100 px-1 py-px text-center text-[6px] font-bold uppercase">
+                                    DATOS DEL PARTIDO
+                                </div>
+                                <table className="w-full table-fixed border-collapse text-[6px]">
+                                    <thead>
+                                        <tr className="bg-slate-50 text-center uppercase">
+                                            <th className="border-b border-r border-black p-px font-semibold w-[18%]">
+                                                TEMPORADA
+                                            </th>
+                                            <th className="border-b border-r border-black p-px font-semibold w-[22%]">
+                                                FECHA
+                                            </th>
+                                            <th className="border-b border-r border-black p-px font-semibold w-[15%]">
+                                                HORA
+                                            </th>
+                                            <th className="border-b border-black p-px font-semibold">
+                                                TERRENO DE JUEGO (LOCALIDAD)
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td className="border-b border-r border-black h-[4mm] p-px" />
+                                            <td className="border-b border-r border-black h-[4mm] p-px" />
+                                            <td className="border-b border-r border-black h-[4mm] p-px text-center font-semibold">
+                                                {match.time || '—'}
+                                            </td>
+                                            <td className="border-b border-black h-[4mm] px-px py-0">
+                                                {[match.court, 'Muskiz'].filter(Boolean).join(' · ')}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </section>
+
+                            {/* EQUIPOS + RESULTADO FINAL */}
+                            <section className="border-b border-black">
+                                <table className="w-full table-fixed border-collapse text-[6px]">
+                                    <thead>
+                                        <tr className="bg-slate-50 text-center uppercase">
+                                            <th className="border-b border-r border-black p-px font-semibold w-[36%]">
+                                                EQUIPO ORGANIZADOR
+                                            </th>
+                                            <th className="border-b border-r border-black p-px font-semibold w-[28%]">
+                                                RESULTADO FINAL
+                                            </th>
+                                            <th className="border-b border-black p-px font-semibold w-[36%]">
+                                                EQUIPO VISITANTE
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr className="text-center font-bold uppercase">
+                                            <td className="border-b border-r border-black bg-slate-100 p-px">A</td>
+                                            <td className="border-b border-r border-black p-px" rowSpan={2} />
+                                            <td className="border-b border-black bg-slate-100 p-px">B</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="border-b border-r border-black px-px py-px text-left normal-case font-bold leading-tight">
+                                                {match.teamA}
+                                                {teamA?.city ? ` · ${teamA.city}` : ''}
+                                            </td>
+                                            <td className="border-b border-black px-px py-px text-left normal-case font-bold leading-tight">
+                                                {match.teamB}
+                                                {teamB?.city ? ` · ${teamB.city}` : ''}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </section>
+
+                            {/* Cuadrícula: plantilla A | tanteo | plantilla B */}
+                            <section className="border-b border-black overflow-x-auto print:overflow-visible">
+                                <table className="w-full table-fixed border-collapse text-[6px] min-w-[680px] print:min-w-0">
+                                    <thead>
+                                        <tr className="bg-slate-100 text-center uppercase">
+                                            <th
+                                                colSpan={6}
+                                                className="border-b border-r border-black py-px font-bold leading-tight"
+                                            >
+                                                COMPONENTES EQUIPO ORGANIZADOR (A)
+                                            </th>
+                                            <th
+                                                colSpan={4}
+                                                className="border-b border-r border-black py-px font-semibold"
+                                            >
+                                                PRIMER SET
+                                            </th>
+                                            <th
+                                                colSpan={4}
+                                                className="border-b border-r border-black py-px font-semibold"
+                                            >
+                                                SEGUNDO SET
+                                            </th>
+                                            <th
+                                                colSpan={5}
+                                                className="border-b border-r border-black py-px font-semibold"
+                                            >
+                                                SHOOT OUT
+                                            </th>
+                                            <th
+                                                colSpan={6}
+                                                className="border-b border-black py-px font-bold leading-tight"
+                                            >
+                                                COMPONENTES EQUIPO VISITANTE (B)
+                                            </th>
+                                        </tr>
+                                        <tr className="bg-white text-center uppercase">
+                                            <th className="border-b border-r border-black w-[2.5%] p-0 font-semibold">
+                                                Nº
+                                            </th>
+                                            <th className="border-b border-r border-black w-[11%] p-0 font-semibold">
+                                                NOMBRE Y APELLIDOS
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.2%] p-0 font-semibold">
+                                                EX1
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.2%] p-0 font-semibold">
+                                                EX2
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.2%] p-0 font-semibold">
+                                                D
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.2%] p-0 font-semibold">
+                                                DD
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.4%] p-0 font-semibold">
+                                                JA
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.4%] p-0 font-semibold">
+                                                TA
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.4%] p-0 font-semibold">
+                                                TB
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.4%] p-0 font-semibold">
+                                                JB
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.4%] p-0 font-semibold">
+                                                JA
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.4%] p-0 font-semibold">
+                                                TA
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.4%] p-0 font-semibold">
+                                                TB
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.4%] p-0 font-semibold">
+                                                JB
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2%] p-0 font-semibold">
+                                                Nº
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.2%] p-0 font-semibold">
+                                                TA
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2%] p-0 font-semibold">
+                                                Nº
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.2%] p-0 font-semibold">
+                                                TB
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.2%] p-0 font-semibold">
+                                                JB
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.5%] p-0 font-semibold">
+                                                Nº
+                                            </th>
+                                            <th className="border-b border-r border-black w-[11%] p-0 font-semibold">
+                                                NOMBRE Y APELLIDOS
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.2%] p-0 font-semibold">
+                                                EX1
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.2%] p-0 font-semibold">
+                                                EX2
+                                            </th>
+                                            <th className="border-b border-r border-black w-[2.2%] p-0 font-semibold">
+                                                D
+                                            </th>
+                                            <th className="border-b border-black w-[2.2%] p-0 font-semibold">
+                                                DD
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rosterA.map((rowA, i) => {
+                                            const rowB = rosterB[i]!;
+                                            const pa = rowA.player;
+                                            const pb = rowB.player;
+                                            return (
+                                                <tr key={`grid-${i}`} className="border-b border-black">
+                                                    <td className={cellRosterThin}>{pa?.number ?? ''}</td>
+                                                    <td className={cellRosterName} title={pa ? formatPlayerName(pa) : ''}>
+                                                        {pa ? formatPlayerName(pa) : ''}
                                                     </td>
-                                                    <td className="w-1/2 border-b border-black px-1 py-0.5 font-semibold uppercase align-top">
-                                                        Capitán equipo B
+                                                    <td className={cellRosterThin} />
+                                                    <td className={cellRosterThin} />
+                                                    <td className={cellRosterThin} />
+                                                    <td className={cellRosterThin} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellScore} />
+                                                    <td className={cellRosterThin}>{pb?.number ?? ''}</td>
+                                                    <td className={cellRosterName} title={pb ? formatPlayerName(pb) : ''}>
+                                                        {pb ? formatPlayerName(pb) : ''}
                                                     </td>
+                                                    <td className={cellRosterThin} />
+                                                    <td className={cellRosterThin} />
+                                                    <td className={cellRosterThin} />
+                                                    <td className={cellRosterThin} />
                                                 </tr>
-                                                <tr>
-                                                    <td className="border-r border-black h-[20mm]" />
-                                                    <td className="h-[20mm]" />
-                                                </tr>
-                                                <tr>
-                                                    <td className="border-b border-r border-black px-1 py-0.5 font-semibold uppercase align-top">
-                                                        Árbitro / mesa
-                                                    </td>
-                                                    <td className="border-b border-black px-1 py-0.5 font-semibold uppercase align-top">
-                                                        Cronometrador / Anotador
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td className="border-r border-black h-[20mm]" />
-                                                    <td className="h-[20mm]" />
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </section>
+
+                            {/* Resumen PUNTOS + RESULTADO (modelo PDF) */}
+                            <section className="grid grid-cols-2 border-b border-black">
+                                <div className="border-r border-black">
+                                    <table className="w-full border-collapse text-[6px]">
+                                        <tbody>
+                                            <tr className="bg-slate-100 text-center uppercase">
+                                                <td className="border-b border-r border-black p-px font-bold" colSpan={2}>
+                                                    PUNTOS
+                                                </td>
+                                                <td className="border-b border-r border-black p-px font-bold" colSpan={2}>
+                                                    PUNTOS
+                                                </td>
+                                                <td className="border-b border-black p-px font-bold" colSpan={2}>
+                                                    PUNTOS
+                                                </td>
+                                            </tr>
+                                            <tr className="bg-white text-center uppercase">
+                                                <td className="border-b border-r border-black p-px font-semibold" colSpan={2}>
+                                                    PRIMER SET
+                                                </td>
+                                                <td className="border-b border-r border-black p-px font-semibold" colSpan={2}>
+                                                    SEGUNDO SET
+                                                </td>
+                                                <td className="border-b border-black p-px font-semibold" colSpan={2}>
+                                                    SHOOT OUT
+                                                </td>
+                                            </tr>
+                                            <tr className="text-center font-semibold uppercase">
+                                                <td className="border-b border-r border-black bg-slate-50 p-px w-[3%]">
+                                                    A
+                                                </td>
+                                                <td className="border-b border-r border-black bg-slate-50 p-px w-[3%]">
+                                                    B
+                                                </td>
+                                                <td className="border-b border-r border-black bg-slate-50 p-px w-[3%]">
+                                                    A
+                                                </td>
+                                                <td className="border-b border-r border-black bg-slate-50 p-px w-[3%]">
+                                                    B
+                                                </td>
+                                                <td className="border-b border-r border-black bg-slate-50 p-px w-[3%]">
+                                                    A
+                                                </td>
+                                                <td className="border-b border-black bg-slate-50 p-px w-[3%]">
+                                                    B
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border-b border-r border-black h-[5mm] p-0" />
+                                                <td className="border-b border-r border-black h-[5mm] p-0" />
+                                                <td className="border-b border-r border-black h-[5mm] p-0" />
+                                                <td className="border-b border-r border-black h-[5mm] p-0" />
+                                                <td className="border-b border-r border-black h-[5mm] p-0" />
+                                                <td className="border-b border-black h-[5mm] p-0" />
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div>
+                                    <table className="w-full border-collapse text-[6px]">
+                                        <tbody>
+                                            <tr className="bg-slate-100 text-center uppercase">
+                                                <td className="border-b border-r border-black p-px font-bold" colSpan={2}>
+                                                    RESULTADO
+                                                </td>
+                                                <td className="border-b border-r border-black p-px font-bold" colSpan={2}>
+                                                    RESULTADO
+                                                </td>
+                                                <td className="border-b border-black p-px font-bold" colSpan={2}>
+                                                    RESULTADO
+                                                </td>
+                                            </tr>
+                                            <tr className="bg-white text-center uppercase">
+                                                <td className="border-b border-r border-black p-px font-semibold" colSpan={2}>
+                                                    PRIMER SET
+                                                </td>
+                                                <td className="border-b border-r border-black p-px font-semibold" colSpan={2}>
+                                                    SEGUNDO SET
+                                                </td>
+                                                <td className="border-b border-black p-px font-semibold" colSpan={2}>
+                                                    SHOOT OUT
+                                                </td>
+                                            </tr>
+                                            <tr className="text-center font-semibold uppercase">
+                                                <td className="border-b border-r border-black bg-slate-50 p-px w-[3%]">
+                                                    A
+                                                </td>
+                                                <td className="border-b border-r border-black bg-slate-50 p-px w-[3%]">
+                                                    B
+                                                </td>
+                                                <td className="border-b border-r border-black bg-slate-50 p-px w-[3%]">
+                                                    A
+                                                </td>
+                                                <td className="border-b border-r border-black bg-slate-50 p-px w-[3%]">
+                                                    B
+                                                </td>
+                                                <td className="border-b border-r border-black bg-slate-50 p-px w-[3%]">
+                                                    A
+                                                </td>
+                                                <td className="border-b border-black bg-slate-50 p-px w-[3%]">
+                                                    B
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td className="border-b border-r border-black h-[5mm] p-0" />
+                                                <td className="border-b border-r border-black h-[5mm] p-0" />
+                                                <td className="border-b border-r border-black h-[5mm] p-0" />
+                                                <td className="border-b border-r border-black h-[5mm] p-0" />
+                                                <td className="border-b border-r border-black h-[5mm] p-0" />
+                                                <td className="border-b border-black h-[5mm] p-0" />
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </section>
 
-                            <footer className="px-2 py-1 text-center text-[8px] text-slate-600 italic">
-                                Documento modelo Kolosaurios / Muskiz — impresión A4 única cara.
+                            {/* Oficiales + observaciones */}
+                            <section className="border-b border-black">
+                                <table className="w-full border-collapse text-[6px]">
+                                    <tbody>
+                                        <tr className="bg-slate-100 text-center uppercase">
+                                            <td className="border-b border-r border-black p-px font-bold w-1/4">
+                                                ÁRBITRO 1
+                                            </td>
+                                            <td className="border-b border-r border-black p-px font-bold w-1/4">
+                                                ÁRBITRO 2
+                                            </td>
+                                            <td className="border-b border-r border-black p-px font-bold w-1/4">
+                                                ANOTADOR
+                                            </td>
+                                            <td className="border-b border-black p-px font-bold w-1/4">
+                                                CRONOMETRADOR
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td className="border-b border-r border-black h-[7mm] p-0" />
+                                            <td className="border-b border-r border-black h-[7mm] p-0" />
+                                            <td className="border-b border-r border-black h-[7mm] p-0" />
+                                            <td className="border-b border-black h-[7mm] p-0" />
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div className="border-b border-black bg-slate-100 px-1 py-px text-center text-[6px] font-bold uppercase">
+                                    OBSERVACIONES
+                                </div>
+                                <div className="min-h-[10mm] p-px" />
+                            </section>
+
+                            <footer className="px-1 py-px text-center text-[5px] text-slate-600 italic leading-none">
+                                Acta balonmano playa — modelo Kolosaurios / Muskiz. PDF de referencia en documentación del club.
                             </footer>
                         </article>
                     )}
