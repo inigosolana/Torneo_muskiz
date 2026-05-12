@@ -9,6 +9,8 @@ export const Schedule: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'info' | 'calendar' | 'results' | 'standings'>('info');
     const [infoSubTab, setInfoSubTab] = useState<'general' | 'rules'>('general');
 
+    const publicMatches = useMemo(() => matches.filter((m) => m.isPublic === true), [matches]);
+
     const [showMapModal, setShowMapModal] = useState(false);
     const [mapQuery, setMapQuery] = useState('');
     const [mapResult, setMapResult] = useState<{ text: string, links: any[] } | null>(null);
@@ -29,12 +31,12 @@ export const Schedule: React.FC = () => {
     // --- Calculated Standings (Client Side View) ---
     const standings = useMemo(
         () =>
-            computeStandings(teams, matches, {
+            computeStandings(teams, publicMatches, {
                 division: selectedStandingsCategory,
                 group: selectedStandingsGroup,
                 onlyPaidTeams: true,
             }),
-        [matches, teams, selectedStandingsCategory, selectedStandingsGroup]
+        [publicMatches, teams, selectedStandingsCategory, selectedStandingsGroup]
     );
 
     return (
@@ -268,103 +270,152 @@ export const Schedule: React.FC = () => {
                         )}
 
                         {activeTab === 'calendar' && (
-                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 animate-in fade-in">
-                                {matches.filter(m => {
-                                    const teamA = teams.find(t => t.name === m.teamA);
-                                    const teamB = teams.find(t => t.name === m.teamB);
-                                    return m.status !== 'FINISHED' && teamA?.paymentStatus === 'PAID' && teamB?.paymentStatus === 'PAID';
-                                }).map(match => (
-                                    <div key={match.id} className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 border border-slate-200 dark:border-white/5">
-                                        <div className="text-xs font-bold text-slate-500 mb-2">{match.time} | {match.court}</div>
-                                        <div className="font-bold text-slate-900 dark:text-white text-lg">{match.teamA} vs {match.teamB}</div>
+                            <div className="animate-in fade-in">
+                                {publicMatches.length === 0 ? (
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 dark:bg-white/5 px-6 py-12 text-center text-slate-600 dark:text-slate-300">
+                                        <p className="text-lg font-black text-slate-800 dark:text-white mb-2">Calendario en preparación</p>
+                                        <p className="text-sm leading-relaxed max-w-md mx-auto">
+                                            El calendario oficial se publicará próximamente.
+                                        </p>
                                     </div>
-                                ))}
+                                ) : (
+                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                        {publicMatches
+                                            .filter((m) => {
+                                                const teamA = teams.find((t) => t.name === m.teamA);
+                                                const teamB = teams.find((t) => t.name === m.teamB);
+                                                if (m.status === 'FINISHED') return false;
+                                                if (!teamA || !teamB) return true;
+                                                return teamA.paymentStatus === 'PAID' && teamB.paymentStatus === 'PAID';
+                                            })
+                                            .map((match) => (
+                                                <div
+                                                    key={match.id}
+                                                    className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 border border-slate-200 dark:border-white/5"
+                                                >
+                                                    <div className="text-xs font-bold text-slate-500 mb-2">
+                                                        {match.time} | {match.court}
+                                                    </div>
+                                                    <div className="font-bold text-slate-900 dark:text-white text-lg">
+                                                        {match.teamA} vs {match.teamB}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                    </div>
+                                )}
                             </div>
                         )}
 
                         {activeTab === 'results' && (
                             <div className="grid gap-4 md:grid-cols-2 animate-in fade-in">
-                                {matches.filter(m => m.status === 'FINISHED').map(match => (
-                                    <div key={match.id} className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-white/10 p-4 rounded-xl flex justify-between items-center">
-                                        <span className="font-bold">{match.teamA}</span>
-                                        <div className="bg-slate-100 dark:bg-white/10 px-3 py-1 rounded font-black">{match.scoreA}-{match.scoreB}</div>
-                                        <span className="font-bold">{match.teamB}</span>
+                                {publicMatches.length === 0 ? (
+                                    <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 dark:bg-white/5 px-6 py-12 text-center text-slate-600 dark:text-slate-300">
+                                        <p className="text-lg font-black text-slate-800 dark:text-white mb-2">Resultados en preparación</p>
+                                        <p className="text-sm leading-relaxed max-w-md mx-auto">
+                                            El calendario oficial se publicará próximamente.
+                                        </p>
                                     </div>
-                                ))}
+                                ) : (
+                                    publicMatches
+                                        .filter((m) => m.status === 'FINISHED')
+                                        .map((match) => (
+                                            <div
+                                                key={match.id}
+                                                className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-white/10 p-4 rounded-xl flex justify-between items-center"
+                                            >
+                                                <span className="font-bold">{match.teamA}</span>
+                                                <div className="bg-slate-100 dark:bg-white/10 px-3 py-1 rounded font-black">
+                                                    {match.scoreA}-{match.scoreB}
+                                                </div>
+                                                <span className="font-bold">{match.teamB}</span>
+                                            </div>
+                                        ))
+                                )}
                             </div>
                         )}
 
                         {activeTab === 'standings' && (
                             <div className="space-y-6 animate-in fade-in">
-                                <div className="flex flex-col gap-3">
-                                    <div className="flex overflow-x-auto no-scrollbar gap-2">
-                                        {[
-                                            'Infantil Femenino', 'Infantil Masculino',
-                                            'Cadete Femenino', 'Cadete Masculino',
-                                            'Juvenil Femenino', 'Juvenil Masculino',
-                                            'Senior Femenino', 'Senior Masculino'
-                                        ].map((cat) => (
-                                            <button
-                                                key={cat}
-                                                onClick={() => {
-                                                    setSelectedStandingsCategory(cat as Team['division']);
-                                                    setSelectedStandingsGroup('all');
-                                                }}
-                                                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap ${selectedStandingsCategory === cat ? 'bg-primary text-background-dark' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}
-                                            >
-                                                {cat}
-                                            </button>
-                                        ))}
+                                {publicMatches.length === 0 ? (
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 dark:bg-white/5 px-6 py-12 text-center text-slate-600 dark:text-slate-300">
+                                        <p className="text-lg font-black text-slate-800 dark:text-white mb-2">Clasificación en preparación</p>
+                                        <p className="text-sm leading-relaxed max-w-md mx-auto">
+                                            El calendario oficial se publicará próximamente.
+                                        </p>
                                     </div>
-                                    {standingsGroups.length > 0 && (
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-[10px] font-bold uppercase text-slate-500">Grupo</span>
-                                            <button
-                                                type="button"
-                                                onClick={() => setSelectedStandingsGroup('all')}
-                                                className={`px-3 py-1 rounded-full text-[10px] font-bold ${selectedStandingsGroup === 'all' ? 'bg-secondary text-background-dark' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}
-                                            >
-                                                Todos
-                                            </button>
-                                            {standingsGroups.map((g) => (
-                                                <button
-                                                    key={g}
-                                                    type="button"
-                                                    onClick={() => setSelectedStandingsGroup(g)}
-                                                    className={`px-3 py-1 rounded-full text-[10px] font-bold ${selectedStandingsGroup === g ? 'bg-secondary text-background-dark' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}
-                                                >
-                                                    {g}
-                                                </button>
-                                            ))}
+                                ) : (
+                                    <>
+                                        <div className="flex flex-col gap-3">
+                                            <div className="flex overflow-x-auto no-scrollbar gap-2">
+                                                {[
+                                                    'Infantil Femenino', 'Infantil Masculino',
+                                                    'Cadete Femenino', 'Cadete Masculino',
+                                                    'Juvenil Femenino', 'Juvenil Masculino',
+                                                    'Senior Femenino', 'Senior Masculino'
+                                                ].map((cat) => (
+                                                    <button
+                                                        key={cat}
+                                                        onClick={() => {
+                                                            setSelectedStandingsCategory(cat as Team['division']);
+                                                            setSelectedStandingsGroup('all');
+                                                        }}
+                                                        className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap ${selectedStandingsCategory === cat ? 'bg-primary text-background-dark' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}
+                                                    >
+                                                        {cat}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {standingsGroups.length > 0 && (
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="text-[10px] font-bold uppercase text-slate-500">Grupo</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSelectedStandingsGroup('all')}
+                                                        className={`px-3 py-1 rounded-full text-[10px] font-bold ${selectedStandingsGroup === 'all' ? 'bg-secondary text-background-dark' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}
+                                                    >
+                                                        Todos
+                                                    </button>
+                                                    {standingsGroups.map((g) => (
+                                                        <button
+                                                            key={g}
+                                                            type="button"
+                                                            onClick={() => setSelectedStandingsGroup(g)}
+                                                            className={`px-3 py-1 rounded-full text-[10px] font-bold ${selectedStandingsGroup === g ? 'bg-secondary text-background-dark' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}
+                                                        >
+                                                            {g}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
-                                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-slate-50 dark:bg-white/5 text-slate-500 font-bold uppercase text-xs">
-                                            <tr>
-                                                <th className="px-6 py-4">Pos</th>
-                                                <th className="px-6 py-4">Equipo</th>
-                                                <th className="px-4 py-4 text-center">PJ</th>
-                                                <th className="px-4 py-4 text-center">PG</th>
-                                                <th className="px-4 py-4 text-center">PP</th>
-                                                <th className="px-6 py-4 text-right">PTS</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                            {standings.map((team, index) => (
-                                                <tr key={team.name} className="hover:bg-slate-50/50 dark:hover:bg-white/5">
-                                                    <td className="px-6 py-4">{index + 1}</td>
-                                                    <td className="px-6 py-4 font-bold">{team.name}</td>
-                                                    <td className="px-4 py-4 text-center">{team.played}</td>
-                                                    <td className="px-4 py-4 text-center">{team.won}</td>
-                                                    <td className="px-4 py-4 text-center">{team.lost}</td>
-                                                    <td className="px-6 py-4 text-right font-black">{team.points}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10">
+                                            <table className="w-full text-sm text-left">
+                                                <thead className="bg-slate-50 dark:bg-white/5 text-slate-500 font-bold uppercase text-xs">
+                                                    <tr>
+                                                        <th className="px-6 py-4">Pos</th>
+                                                        <th className="px-6 py-4">Equipo</th>
+                                                        <th className="px-4 py-4 text-center">PJ</th>
+                                                        <th className="px-4 py-4 text-center">PG</th>
+                                                        <th className="px-4 py-4 text-center">PP</th>
+                                                        <th className="px-6 py-4 text-right">PTS</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                                                    {standings.map((team, index) => (
+                                                        <tr key={team.name} className="hover:bg-slate-50/50 dark:hover:bg-white/5">
+                                                            <td className="px-6 py-4">{index + 1}</td>
+                                                            <td className="px-6 py-4 font-bold">{team.name}</td>
+                                                            <td className="px-4 py-4 text-center">{team.played}</td>
+                                                            <td className="px-4 py-4 text-center">{team.won}</td>
+                                                            <td className="px-4 py-4 text-center">{team.lost}</td>
+                                                            <td className="px-6 py-4 text-right font-black">{team.points}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>

@@ -42,7 +42,9 @@ export const ChatBot: React.FC = () => {
       parts: [{ text: m.text }]
     }));
 
-    const matchesContext = matches.map(m => `[${m.time} - Pista: ${m.court}] ${m.teamA} vs ${m.teamB} (Resultado: ${m.scoreA !== null ? m.scoreA : '-'} - ${m.scoreB !== null ? m.scoreB : '-'})`).join('\\n') || "No hay partidos programados aún en tiempo real.";
+    const matchesContext = matches
+        .filter((m) => m.isPublic === true)
+        .map(m => `[${m.time} - Pista: ${m.court}] ${m.teamA} vs ${m.teamB} (Resultado: ${m.scoreA !== null ? m.scoreA : '-'} - ${m.scoreB !== null ? m.scoreB : '-'})`).join('\\n') || "No hay partidos programados aún en tiempo real.";
 
     const responseText = await sendChatMessage(history, userMsg.text, matchesContext);
 

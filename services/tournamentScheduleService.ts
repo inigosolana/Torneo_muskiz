@@ -20,11 +20,16 @@ export function ensureStableDraftMatchIds(matches: Match[]): Match[] {
     return matches.map((m, i) => ({
         ...m,
         id: m.id && String(m.id).length > 0 ? m.id : `draft_${crypto.randomUUID()}_${i}`,
+        isPublic: m.isPublic ?? true,
     }));
 }
 
 /** Al volcar borrador a tabla oficial: sólo UUIDs válidos para Supabase (sin campos sólo‑borrador). */
-export function finalizeMatchesForDatabase(matches: Match[]): Match[] {
+export function finalizeMatchesForDatabase(
+    matches: Match[],
+    options?: { isPublic?: boolean }
+): Match[] {
+    const isPublic = options?.isPublic ?? true;
     return matches.map((m) => ({
         id: UUID_RX.test(m.id) ? m.id : crypto.randomUUID(),
         time: m.time,
@@ -36,6 +41,7 @@ export function finalizeMatchesForDatabase(matches: Match[]): Match[] {
         status: m.status ?? 'SCHEDULED',
         round: m.round,
         report: m.report,
+        isPublic,
     }));
 }
 

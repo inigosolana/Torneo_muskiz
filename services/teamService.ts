@@ -230,6 +230,25 @@ export const teamService = {
     }
 };
 
+/** Fila `matches` de Supabase → modelo `Match`. */
+export function mapSupabaseMatchRow(m: Record<string, unknown>): Match {
+    const r = m as Record<string, any>;
+    return {
+        id: String(r.id ?? ''),
+        time: String(r.time ?? ''),
+        court: String(r.court ?? ''),
+        teamA: String(r.team_a ?? r.teamA ?? ''),
+        teamB: String(r.team_b ?? r.teamB ?? ''),
+        scoreA: r.score_a ?? r.scoreA ?? null,
+        scoreB: r.score_b ?? r.scoreB ?? null,
+        status: (r.status as Match['status']) ?? 'SCHEDULED',
+        round: r.round ?? undefined,
+        report: r.report ?? undefined,
+        scheduleDay: (r.schedule_day ?? r.scheduleDay) as Match['scheduleDay'] | undefined,
+        isPublic: typeof r.is_public === 'boolean' ? r.is_public : true,
+    };
+}
+
 export const matchService = {
     async getMatches(): Promise<Match[]> {
         const { data, error } = await supabase
@@ -241,18 +260,7 @@ export const matchService = {
             return [];
         }
 
-        return data.map((m: any) => ({
-            id: m.id,
-            time: m.time,
-            court: m.court,
-            teamA: m.team_a,
-            teamB: m.team_b,
-            scoreA: m.score_a,
-            scoreB: m.score_b,
-            status: m.status,
-            round: m.round,
-            report: m.report
-        }));
+        return (data ?? []).map((m: Record<string, unknown>) => mapSupabaseMatchRow(m));
     },
 
     async getMatchById(id: string): Promise<Match | null> {
@@ -268,19 +276,7 @@ export const matchService = {
         }
         if (!data) return null;
 
-        const m = data as any;
-        return {
-            id: m.id,
-            time: m.time,
-            court: m.court,
-            teamA: m.team_a,
-            teamB: m.team_b,
-            scoreA: m.score_a,
-            scoreB: m.score_b,
-            status: m.status,
-            round: m.round,
-            report: m.report
-        };
+        return mapSupabaseMatchRow(data as Record<string, unknown>);
     },
 
     async saveMatches(matches: Match[]): Promise<void> {
@@ -288,6 +284,8 @@ export const matchService = {
         await supabase.from('matches').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Hack to clear
 
         const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (matches.length === 0) return;
+
         const { error } = await supabase
             .from('matches')
             .insert(matches.map(m => ({
@@ -300,9 +298,23 @@ export const matchService = {
                 score_b: m.scoreB,
                 status: m.status,
                 round: m.round,
-                report: m.report
+                report: m.report,
+                is_public: m.isPublic,
             })));
 
         if (error) console.error('Error saving matches:', error);
-    }
+    },
+
+    /** Marca todos los partidos como visibles en la web (`is_public = true`). */
+    async makeAllMatchesPublic(): Promise<void> {
+        const { error } = await supabase
+            .from('matches')
+            .update({ is_public: true })
+            .neq('id', '00000000-0000-0000-0000-000000000000');
+
+        if (error) {
+            console.error('Error makeAllMatchesPublic:', error);
+            throw new Error(error.message);
+        }
+    },
 };

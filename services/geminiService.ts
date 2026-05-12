@@ -55,7 +55,8 @@ export const generateBracketAI = async (
     });
 
     if (error) throw error;
-    return (data?.matches ?? []) as Match[];
+    const raw = (data?.matches ?? []) as Match[];
+    return raw.map((m) => ({ ...m, isPublic: m.isPublic ?? true }));
   } catch (error) {
     console.error('Bracket Generation Error:', error);
     return [];

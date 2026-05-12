@@ -5,7 +5,7 @@ import { generateBracketAI, generateSocialMediaPost } from '../services/geminiSe
 import { supabase } from '../services/supabaseClient';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
 import { toast } from 'sonner';
-import { teamService } from '../services/teamService';
+import { teamService, matchService } from '../services/teamService';
 import * as XLSX from 'xlsx';
 import { useTournamentData } from '../context/TournamentDataContext';
 import {
@@ -19,6 +19,26 @@ import {
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 import { buildMuskizWeekendDraftMatches, MIN_REAL_MATCHES_PER_TEAM } from '../services/muskizScheduleSimulator';
 import { SimulationScheduleGridTabs } from '../components/SimulationDayGrid';
+
+/** Plantilla de jugadores para equipos ficticios (stress test / IA). */
+function buildFakePlayersForTeam(teamId: string): Player[] {
+    const squadSize = 10 + Math.floor(Math.random() * 3);
+    const players: Player[] = [];
+    for (let i = 1; i <= squadSize; i++) {
+        players.push({
+            id: `fake-pl-${teamId}-${i}`,
+            teamId,
+            name: `Jugador ${i}`,
+            surnames: `Apellido Ficticio ${i}`,
+            number: i,
+            verified: true,
+            role: 'PLAYER',
+            dniStatus: 'APPROVED',
+            insuranceStatus: 'APPROVED',
+        });
+    }
+    return players;
+}
 
 interface AdminProps {
     onUpdateTeam: (team: Team) => void;
@@ -62,6 +82,19 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
     const [simulationsLoaded, setSimulationsLoaded] = useState(false);
     const [simulationsSaving, setSimulationsSaving] = useState(false);
+    const [simulationMode, setSimulationMode] = useState<'REAL' | 'FAKE'>('REAL');
+    const [fakeTeamCounts, setFakeCounts] = useState<Record<Team['division'], number>>({
+        'Infantil Femenino': 0,
+        'Infantil Masculino': 0,
+        'Cadete Femenino': 0,
+        'Cadete Masculino': 0,
+        'Juvenil Femenino': 0,
+        'Juvenil Masculino': 0,
+        'Senior Femenino': 0,
+        'Senior Masculino': 0,
+    });
+
+    const [publishDraftAsPublic, setPublishDraftAsPublic] = useState(false);
 
     const [structureDivision, setStructureDivision] = useState<Team['division']>('Senior Masculino');
     const [standingsDivision, setStandingsDivision] = useState<Team['division']>('Senior Masculino');
@@ -342,6 +375,37 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         [matches, teams, standingsDivision, standingsGroupFilter]
     );
 
+    const officialCalendarStatus = useMemo(() => {
+        if (matches.length === 0) {
+            return {
+                headline: 'Sin partidos en la tabla oficial',
+                sub: 'Importa o genera en Simulaciones y usa «Guardar calendario oficial».',
+                variant: 'neutral' as const,
+            };
+        }
+        const publicCount = matches.filter((m) => m.isPublic).length;
+        const privateCount = matches.length - publicCount;
+        if (privateCount === 0) {
+            return {
+                headline: 'CALENDARIO OFICIAL',
+                sub: `Todos los partidos (${publicCount}) están marcados como públicos para la web.`,
+                variant: 'official' as const,
+            };
+        }
+        if (publicCount === 0) {
+            return {
+                headline: 'BORRADOR PRIVADO',
+                sub: `Hay ${privateCount} partido${privateCount === 1 ? '' : 's'} en base de datos, todos ocultos al público hasta que los publiques.`,
+                variant: 'draft' as const,
+            };
+        }
+        return {
+            headline: 'Calendario mixto',
+            sub: `${publicCount} público${publicCount === 1 ? '' : 's'} · ${privateCount} privado${privateCount === 1 ? '' : 's'} (revisa cada partido).`,
+            variant: 'mixed' as const,
+        };
+    }, [matches]);
+
     useEffect(() => {
         if (activeTab !== 'competition' || !isAuthenticated || authLoading) return;
         let cancelled = false;
@@ -351,7 +415,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                 const data = await fetchCalendarSimulations();
                 if (cancelled) return;
                 if (data?.drafts?.length) {
-                    setSimDrafts(data.drafts);
+                    setSimDrafts(
+                        data.drafts.map((d) => ({
+                            ...d,
+                            matches: ensureStableDraftMatchIds(d.matches),
+                        }))
+                    );
                     const aid =
                         data.activeDraftId && data.drafts.some((d) => d.id === data.activeDraftId)
                             ? data.activeDraftId
@@ -413,6 +482,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                             scoreB: null,
                             status: 'SCHEDULED' as const,
                             round: r['Ronda'] || r['Fase'] || r['Round'] || '',
+                            isPublic: true,
                         };
                     });
 
@@ -628,11 +698,39 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             toast.error('Selecciona o crea una simulación primero.');
             return;
         }
+        let teamsToSimulate: Team[] = [];
+
+        if (simulationMode === 'REAL') {
+            teamsToSimulate = teams.filter((t) => t.paymentStatus === 'PAID');
+        } else {
+            DIVISIONS_LIST.forEach((division) => {
+                const count = fakeTeamCounts[division] || 0;
+                for (let i = 1; i <= count; i++) {
+                    const tid = `fake-${division}-${i}`;
+                    teamsToSimulate.push({
+                        id: tid,
+                        name: `Ficticio ${division} ${i}`,
+                        city: 'Prueba',
+                        division,
+                        paymentStatus: 'PAID',
+                        status: 'approved',
+                        fee: 0,
+                        managerEmail: '',
+                        managerName: '',
+                        players: buildFakePlayersForTeam(tid),
+                    });
+                }
+            });
+            if (teamsToSimulate.length === 0) {
+                toast.error('Indica al menos un equipo ficticio en alguna categoría.');
+                return;
+            }
+        }
+
         setGeneratingBracket(true);
         const courts = genConfig.courtsInput.split(',').map((s) => s.trim());
 
-        const paidTeams = teams.filter((t) => t.paymentStatus === 'PAID');
-        const newMatches = await generateBracketAI(paidTeams, {
+        const newMatches = await generateBracketAI(teamsToSimulate, {
             startTime: genConfig.startTime,
             endTime: genConfig.endTime,
             intervalMins: genConfig.intervalMins,
@@ -693,13 +791,36 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         if (!activeDraft) return;
         if (
             !window.confirm(
-                '¿Volcar esta simulación al calendario oficial? Sustituirá todos los partidos actuales en la base de datos. Los usuarios sólo los verán si además activas la visibilidad pública.'
+                '¿Volcar esta simulación al calendario oficial en la base de datos? Sustituirá todos los partidos actuales.\n\n' +
+                    (publishDraftAsPublic
+                        ? 'Has elegido PUBLICAR ahora: los partidos serán visibles en Competición para visitantes (si además el interruptor global de visibilidad está activo).'
+                        : 'Has elegido NO publicar ahora: los partidos se guardarán como PRIVADOS hasta que uses «Hacer público el calendario actual».')
             )
         )
             return;
-        const finalized = finalizeMatchesForDatabase(activeDraft.matches);
+        const finalized = finalizeMatchesForDatabase(activeDraft.matches, { isPublic: publishDraftAsPublic });
         await onUpdateMatches(finalized);
-        toast.success(`Calendario oficial actualizado (${finalized.length} partidos).`);
+        toast.success(
+            `Calendario oficial actualizado (${finalized.length} partidos). ${publishDraftAsPublic ? 'Visibilidad: público.' : 'Visibilidad: privado (borrador en sombra).'}`,
+        );
+    };
+
+    const handleMakeAllMatchesPublic = async () => {
+        if (
+            !window.confirm(
+                '¿Marcar TODOS los partidos del calendario oficial como visibles para el público (is_public = true)? Los visitantes los verán en Competición si el interruptor global también está activo.'
+            )
+        ) {
+            return;
+        }
+        try {
+            await matchService.makeAllMatchesPublic();
+            const fresh = await matchService.getMatches();
+            await onUpdateMatches(fresh);
+            toast.success('Todos los partidos del calendario oficial son ahora públicos.');
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'No se pudo actualizar la visibilidad.');
+        }
     };
 
     const handleAddSimulation = async () => {
@@ -2053,24 +2174,40 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     </div>
                                                 )}
 
-                                                <div className="flex flex-wrap gap-2">
-                                                    <button
-                                                        type="button"
-                                                        disabled={!activeDraft?.matches?.length}
-                                                        onClick={() => void handlePublishActiveDraft()}
-                                                        className="bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-wide flex items-center gap-2"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">cloud_upload</span>
-                                                        Publicar como calendario oficial
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => void handleClearActiveDraftMatches()}
-                                                        disabled={!activeDraftId}
-                                                        className="border border-slate-200 px-5 py-2.5 rounded-lg text-xs font-bold uppercase"
-                                                    >
-                                                        Vaciar borrador
-                                                    </button>
+                                                <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-4 space-y-3">
+                                                    <label className="flex items-start gap-3 cursor-pointer text-sm text-teal-950">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={publishDraftAsPublic}
+                                                            onChange={(e) => setPublishDraftAsPublic(e.target.checked)}
+                                                            className="mt-1 size-4 rounded border-teal-300 text-teal-700 focus:ring-teal-600"
+                                                        />
+                                                        <span>
+                                                            <strong>¿Publicar ahora?</strong> Si está marcado, cada partido se guarda como{' '}
+                                                            <strong>público</strong> (visible en Competición para visitantes, además del interruptor global). Si
+                                                            no, se guardan como <strong>privados</strong> (trabajo en sombra) hasta que pulses «Hacer público el
+                                                            calendario actual» en la pestaña Oficial.
+                                                        </span>
+                                                    </label>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            disabled={!activeDraft?.matches?.length}
+                                                            onClick={() => void handlePublishActiveDraft()}
+                                                            className="bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-wide flex items-center gap-2"
+                                                        >
+                                                            <span className="material-symbols-outlined text-sm">cloud_upload</span>
+                                                            Guardar calendario oficial
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void handleClearActiveDraftMatches()}
+                                                            disabled={!activeDraftId}
+                                                            className="border border-slate-200 px-5 py-2.5 rounded-lg text-xs font-bold uppercase bg-white"
+                                                        >
+                                                            Vaciar borrador
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
@@ -2090,6 +2227,75 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             </label>
                                                         </div>
                                                     </div>
+
+                                                    <div className="mb-4 rounded-lg border border-slate-200 bg-white/80 p-4">
+                                                        <p className="text-[10px] font-black uppercase text-slate-500 mb-2">
+                                                            Origen de equipos para la IA
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-2 mb-3">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSimulationMode('REAL')}
+                                                                className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+                                                                    simulationMode === 'REAL'
+                                                                        ? 'bg-primary text-background-dark shadow-sm'
+                                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                                }`}
+                                                            >
+                                                                Equipos reales (pagados)
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSimulationMode('FAKE')}
+                                                                className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+                                                                    simulationMode === 'FAKE'
+                                                                        ? 'bg-amber-600 text-white shadow-sm'
+                                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                                }`}
+                                                            >
+                                                                Equipos ficticios (pruebas)
+                                                            </button>
+                                                        </div>
+                                                        {simulationMode === 'REAL' ? (
+                                                            <p className="text-sm text-slate-700 leading-relaxed">
+                                                                Se simulará usando los{' '}
+                                                                <strong>{teams.filter((t) => t.paymentStatus === 'PAID').length}</strong> equipos reales que
+                                                                han pagado.
+                                                            </p>
+                                                        ) : (
+                                                            <div className="rounded-lg border border-amber-100 bg-amber-50/90 p-4">
+                                                                <p className="text-xs text-amber-950 mb-3 leading-relaxed">
+                                                                    Ajusta cuántos equipos de prueba hay por categoría. No se guardan en la base de datos; sólo
+                                                                    alimentan esta generación de borrador.
+                                                                </p>
+                                                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                                                    {DIVISIONS_LIST.map((division) => (
+                                                                        <label
+                                                                            key={division}
+                                                                            className="flex flex-col gap-1 rounded-md border border-amber-200/80 bg-white/70 px-2 py-2"
+                                                                        >
+                                                                            <span className="text-[10px] font-bold uppercase text-amber-900/80 leading-tight">
+                                                                                {division}
+                                                                            </span>
+                                                                            <input
+                                                                                type="number"
+                                                                                min={0}
+                                                                                step={1}
+                                                                                value={fakeTeamCounts[division]}
+                                                                                onChange={(e) => {
+                                                                                    const raw = parseInt(e.target.value, 10);
+                                                                                    const next = Number.isFinite(raw) && raw >= 0 ? raw : 0;
+                                                                                    setFakeCounts((prev) => ({ ...prev, [division]: next }));
+                                                                                }}
+                                                                                className="w-full border border-amber-100 rounded-md px-2 py-1.5 text-sm font-semibold text-slate-800"
+                                                                            />
+                                                                        </label>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
                                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
                                                         <div>
                                                             <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Horario</label>
@@ -2217,42 +2423,90 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 {/* 3. CALENDARIO OFICIAL (tabla matches) */}
                                 {compSubTab === 'published' && (
                                     <div className="space-y-6">
+                                        <div
+                                            className={`rounded-xl border p-4 text-sm ${
+                                                officialCalendarStatus.variant === 'official'
+                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                                                    : officialCalendarStatus.variant === 'draft'
+                                                      ? 'border-amber-200 bg-amber-50 text-amber-950'
+                                                      : officialCalendarStatus.variant === 'mixed'
+                                                        ? 'border-violet-200 bg-violet-50 text-violet-950'
+                                                        : 'border-slate-200 bg-slate-50 text-slate-700'
+                                            }`}
+                                        >
+                                            <p className="text-xs font-black uppercase tracking-wide opacity-80 mb-1">Estado (tabla matches)</p>
+                                            <p className="font-black text-base">{officialCalendarStatus.headline}</p>
+                                            <p className="mt-1 leading-relaxed">{officialCalendarStatus.sub}</p>
+                                            <p className="mt-2 text-xs opacity-90">
+                                                El interruptor global sigue en <strong>Simulaciones</strong>; además, cada partido tiene su propio{' '}
+                                                <code className="rounded bg-white/70 px-1">is_public</code>.
+                                            </p>
+                                        </div>
+
                                         <div className="bg-slate-100 border border-slate-200 p-4 rounded-lg text-sm text-slate-700">
                                             <p>
                                                 <strong>Calendario oficial</strong>: lo que hay en la base de datos <code className="bg-white px-1 rounded">matches</code>.
-                                                Los visitantes sólo lo ven si activas el interruptor en <strong>Simulaciones</strong>.
+                                                Aquí ves <strong>todos</strong> los partidos (públicos y privados). Los visitantes sólo ven los públicos.
                                             </p>
                                         </div>
-                                        <div className="flex flex-wrap gap-2">
+
+                                        <div className="flex flex-wrap gap-2 items-center">
                                             {matches.length > 0 && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (
-                                                            window.confirm(
-                                                                '¿Borrar TODOS los partidos oficiales de la base de datos? Esta acción deja sin calendario publicado hasta que publiques otra vez.'
-                                                            )
-                                                        ) {
-                                                            void onUpdateMatches([]);
-                                                        }
-                                                    }}
-                                                    className="bg-red-50 text-red-600 border border-red-100 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"
-                                                >
-                                                    <span className="material-symbols-outlined text-sm">delete_sweep</span>
-                                                    Limpiar calendario oficial
-                                                </button>
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleMakeAllMatchesPublic()}
+                                                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-wide flex items-center gap-2 shadow-sm"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">visibility</span>
+                                                        Hacer público el calendario actual
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (
+                                                                window.confirm(
+                                                                    '¿Borrar TODOS los partidos oficiales de la base de datos? Esta acción deja sin calendario publicado hasta que guardes otra vez.',
+                                                                )
+                                                            ) {
+                                                                void onUpdateMatches([]);
+                                                            }
+                                                        }}
+                                                        className="bg-red-50 text-red-600 border border-red-100 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">delete_sweep</span>
+                                                        Limpiar calendario oficial
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
+
                                         <div className="grid gap-4">
                                             {matches.length === 0 ? (
-                                                <div className="text-center text-slate-400 py-8">No hay partidos publicados.</div>
+                                                <div className="text-center text-slate-400 py-8">No hay partidos en la tabla oficial.</div>
                                             ) : (
                                                 matches.map((match) => (
-                                                    <div key={match.id} className="flex flex-col lg:flex-row flex-wrap justify-between items-stretch lg:items-center gap-3 p-4 border border-slate-100 rounded-lg bg-slate-50/50">
-                                                        <div className="flex flex-col mb-2 sm:mb-0">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="bg-primary/10 text-primary-dark text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider">{match.round || 'Partido'}</span>
-                                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">{match.time}</span>
+                                                    <div
+                                                        key={match.id}
+                                                        className="flex flex-col lg:flex-row flex-wrap justify-between items-stretch lg:items-center gap-3 p-4 border border-slate-100 rounded-lg bg-slate-50/50"
+                                                    >
+                                                        <div className="flex flex-col mb-2 sm:mb-0 gap-1">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span
+                                                                    className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                                                        match.isPublic
+                                                                            ? 'bg-emerald-100 text-emerald-800'
+                                                                            : 'bg-amber-100 text-amber-900'
+                                                                    }`}
+                                                                >
+                                                                    {match.isPublic ? 'Público' : 'Privado'}
+                                                                </span>
+                                                                <span className="bg-primary/10 text-primary-dark text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider">
+                                                                    {match.round || 'Partido'}
+                                                                </span>
+                                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">
+                                                                    {match.time}
+                                                                </span>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-6">

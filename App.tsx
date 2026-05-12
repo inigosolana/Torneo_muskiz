@@ -15,7 +15,7 @@ import { Information } from './views/Information';
 import { PlayerSelfRegistration } from './views/PlayerSelfRegistration';
 import { ManagerLogin } from './views/ManagerLogin';
 import { MatchReport } from './views/MatchReport';
-import { teamService, matchService } from './services/teamService';
+import { teamService, matchService, mapSupabaseMatchRow } from './services/teamService';
 import { supabase } from './services/supabaseClient';
 import { OpsErrorBoundary } from './components/OpsErrorBoundary';
 import { reportOpsAlert } from './services/opsAlertService';
@@ -111,10 +111,10 @@ const App: React.FC = () => {
         if (payload.eventType === 'INSERT') {
           setMatches(prev => {
             if (prev.some(m => m.id === payload.new.id)) return prev;
-            return [...prev, payload.new as Match];
+            return [...prev, mapSupabaseMatchRow(payload.new as Record<string, unknown>)];
           });
         } else if (payload.eventType === 'UPDATE') {
-          setMatches(prev => prev.map(m => m.id === payload.new.id ? payload.new as Match : m));
+          setMatches(prev => prev.map(m => m.id === payload.new.id ? mapSupabaseMatchRow(payload.new as Record<string, unknown>) : m));
         } else if (payload.eventType === 'DELETE') {
           setMatches(prev => prev.filter(m => m.id !== payload.old.id));
         }

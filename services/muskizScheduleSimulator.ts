@@ -508,6 +508,7 @@ export function buildMuskizWeekendDraftMatches(allTeams: Team[], options?: Muski
             status: 'SCHEDULED' as const,
             round: `${roundPrefix} · ${c.spec.roundLabel}`,
             scheduleDay: schedDay,
+            isPublic: true,
         };
     });
 

@@ -100,6 +100,8 @@ export interface Match {
   report?: MatchReport; // New field for the Acta
   /** Sólo simulador / borradores y UI; no se persiste en la tabla `matches` de Supabase. */
   scheduleDay?: 'Viernes' | 'Sábado' | 'Domingo';
+  /** Si es false, el partido no se muestra en la vista pública (Competición) hasta publicarlo. Columna `is_public` en Supabase. */
+  isPublic: boolean;
 }
 
 /** Borrador de calendario (simulación). No se muestra al público hasta publicar. */
