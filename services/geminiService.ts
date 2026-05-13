@@ -46,6 +46,9 @@ function parseBracketError(raw: string): string {
   if (raw.includes('GEMINI_API_KEY not configured')) {
     return 'Falta configurar GEMINI_API_KEY en los secrets de Supabase.';
   }
+  if (raw.includes('non-2xx')) {
+    return 'El servidor de IA falló (generate-bracket). Suele deberse a GEMINI_API_KEY caducada en Supabase: usa «Generar Viernes» mientras renuevas la clave.';
+  }
   try {
     const inner = JSON.parse(raw);
     const msg = inner?.error?.message ?? inner?.message ?? inner?.error;
@@ -54,6 +57,48 @@ function parseBracketError(raw: string): string {
     /* texto plano */
   }
   return raw.length > 280 ? `${raw.slice(0, 280)}…` : raw;
+}
+
+async function readResponseErrorBody(ctx: Response): Promise<string | null> {
+  try {
+    const clone = ctx.clone();
+    const body = (await clone.json()) as { error?: string; message?: string };
+    const msg = body?.error ?? body?.message;
+    if (typeof msg === 'string' && msg.length > 0) return parseBracketError(msg);
+  } catch {
+    /* no JSON */
+  }
+  try {
+    const text = await ctx.text();
+    if (!text) return null;
+    try {
+      const body = JSON.parse(text) as { error?: string; message?: string };
+      const msg = body?.error ?? body?.message;
+      if (typeof msg === 'string' && msg.length > 0) return parseBracketError(msg);
+    } catch {
+      return parseBracketError(text);
+    }
+  } catch {
+    /* sin cuerpo */
+  }
+  return null;
+}
+
+async function readInvokeFailure(error: unknown, data: unknown): Promise<string> {
+  if (data && typeof data === 'object' && 'error' in data && (data as { error?: unknown }).error) {
+    return parseBracketError(String((data as { error: string }).error));
+  }
+  if (error && typeof error === 'object' && 'context' in error) {
+    const ctx = (error as { context?: Response }).context;
+    if (ctx instanceof Response) {
+      const fromBody = await readResponseErrorBody(ctx);
+      if (fromBody) return fromBody;
+    }
+  }
+  if (error instanceof Error) {
+    return parseBracketError(error.message);
+  }
+  return 'Error al invocar generate-bracket.';
 }
 
 export const generateBracketAI = async (
@@ -79,8 +124,8 @@ export const generateBracketAI = async (
     }
 
     if (error) {
-      const msg = payload?.error ?? error.message ?? 'Error al invocar generate-bracket';
-      return { matches: [], error: parseBracketError(String(msg)) };
+      const msg = await readInvokeFailure(error, data);
+      return { matches: [], error: msg };
     }
 
     const raw = (payload?.matches ?? []) as Match[];

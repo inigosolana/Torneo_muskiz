@@ -2589,6 +2589,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         )}
                                                         {generatingBracket ? 'Generando…' : 'Generar en este borrador'}
                                                     </button>
+                                                    <p className="mt-2 text-[11px] text-slate-500 leading-relaxed">
+                                                        Requiere GEMINI_API_KEY válida en Supabase. Si falla, usa el simulador determinístico de abajo.
+                                                    </p>
                                                 </div>
 
                                                 <div className="bg-teal-50 border border-teal-200 rounded-xl p-6 mt-6">
