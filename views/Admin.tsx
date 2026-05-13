@@ -15,10 +15,28 @@ import {
     finalizeMatchesForDatabase,
     saveCalendarSimulations,
     duplicateDraft,
+    normalizeCalendarSimulations,
+    mergeWeekendDraftMatches,
+    WEEKEND_SCHEDULE_DAYS,
 } from '../services/tournamentScheduleService';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
-import { buildMuskizWeekendDraftMatches, MIN_REAL_MATCHES_PER_TEAM } from '../services/muskizScheduleSimulator';
+import {
+    buildMuskizDayDraftMatches,
+    buildMuskizWeekendDraftsByDay,
+    divisionBelongsToScheduleDay,
+    getMuskizDayGenDefaults,
+    MIN_REAL_MATCHES_PER_TEAM,
+} from '../services/muskizScheduleSimulator';
 import { SimulationScheduleGridTabs } from '../components/SimulationDayGrid';
+import {
+    isPlayerRole,
+    isPlayerEligibleForMatch,
+    memberDocsComplete,
+    memberDocsMissing,
+    memberDocsPending,
+    playerRoleLabel,
+    playersEligibleForMatch,
+} from '../utils/squadLimits';
 
 /** Plantilla de jugadores para equipos ficticios (stress test / IA). */
 function buildFakePlayersForTeam(teamId: string): Player[] {
@@ -329,6 +347,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const [filterPayment, setFilterPayment] = useState<string>('all');
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [filterTeam, setFilterTeam] = useState<string>('');
+    const [filterVerificationRole, setFilterVerificationRole] = useState<'all' | Player['role']>('all');
 
     const filteredTeams = useMemo(() => {
         return teams.filter(team => {
@@ -415,17 +434,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                 const data = await fetchCalendarSimulations();
                 if (cancelled) return;
                 if (data?.drafts?.length) {
+                    const normalized = normalizeCalendarSimulations(data);
                     setSimDrafts(
-                        data.drafts.map((d) => ({
+                        normalized.drafts.map((d) => ({
                             ...d,
                             matches: ensureStableDraftMatchIds(d.matches),
                         }))
                     );
-                    const aid =
-                        data.activeDraftId && data.drafts.some((d) => d.id === data.activeDraftId)
-                            ? data.activeDraftId
-                            : data.drafts[0].id;
-                    setActiveDraftId(aid);
+                    setActiveDraftId(normalized.activeDraftId);
+                    if (JSON.stringify(normalized) !== JSON.stringify(data)) {
+                        await saveCalendarSimulations(normalized);
+                    }
                 } else {
                     const def = createDefaultCalendarSimulations();
                     setSimDrafts(def.drafts);
@@ -509,8 +528,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     const activeDraft = useMemo(() => simDrafts.find((d) => d.id === activeDraftId) ?? null, [simDrafts, activeDraftId]);
 
-    const groupLetterOptions = ['', 'A', 'B', 'C', 'D', 'E', 'F'];
-
     const DIVISIONS_LIST: Team['division'][] = [
         'Infantil Femenino',
         'Infantil Masculino',
@@ -521,6 +538,46 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         'Senior Femenino',
         'Senior Masculino',
     ];
+
+    const simulationDivisions = useMemo(() => {
+        if (!activeDraft?.scheduleDay) return DIVISIONS_LIST;
+        return DIVISIONS_LIST.filter((d) => divisionBelongsToScheduleDay(d, activeDraft.scheduleDay!));
+    }, [activeDraft?.scheduleDay]);
+
+    const paidTeamsForSimulation = useMemo(() => {
+        const paid = teams.filter((t) => t.paymentStatus === 'PAID');
+        if (!activeDraft?.scheduleDay) return paid;
+        return paid.filter((t) => divisionBelongsToScheduleDay(t.division, activeDraft.scheduleDay!));
+    }, [teams, activeDraft?.scheduleDay]);
+
+    useEffect(() => {
+        if (!activeDraft?.scheduleDay) return;
+        const defs = getMuskizDayGenDefaults(activeDraft.scheduleDay);
+        setGenConfig((prev) => ({ ...prev, ...defs }));
+        const dayDivs = DIVISIONS_LIST.filter((d) => divisionBelongsToScheduleDay(d, activeDraft.scheduleDay!));
+        setFakeCounts((prev) => {
+            const next = { ...prev };
+            for (const d of DIVISIONS_LIST) {
+                if (!dayDivs.includes(d)) next[d] = 0;
+            }
+            const dayTotal = dayDivs.reduce((sum, d) => sum + (prev[d] || 0), 0);
+            if (dayTotal === 0) {
+                for (const d of dayDivs) next[d] = 12;
+            }
+            return next;
+        });
+    }, [activeDraftId, activeDraft?.scheduleDay]);
+
+    const weekendDrafts = useMemo(
+        () => WEEKEND_SCHEDULE_DAYS.map((day) => simDrafts.find((d) => d.scheduleDay === day)).filter(Boolean) as CalendarDraft[],
+        [simDrafts]
+    );
+    const weekendMatchCount = useMemo(
+        () => weekendDrafts.reduce((n, d) => n + d.matches.length, 0),
+        [weekendDrafts]
+    );
+
+    const groupLetterOptions = ['', 'A', 'B', 'C', 'D', 'E', 'F'];
 
     // --- Auth Logic ---
     const handleLogin = async (e: React.FormEvent) => {
@@ -703,7 +760,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         if (simulationMode === 'REAL') {
             teamsToSimulate = teams.filter((t) => t.paymentStatus === 'PAID');
         } else {
-            DIVISIONS_LIST.forEach((division) => {
+            simulationDivisions.forEach((division) => {
                 const count = fakeTeamCounts[division] || 0;
                 for (let i = 1; i <= count; i++) {
                     const tid = `fake-${division}-${i}`;
@@ -727,10 +784,19 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             }
         }
 
+        const draftDay = activeDraft?.scheduleDay;
+        if (draftDay) {
+            teamsToSimulate = teamsToSimulate.filter((t) => divisionBelongsToScheduleDay(t.division, draftDay));
+            if (teamsToSimulate.length < 2) {
+                toast.error(`No hay suficientes equipos para ${draftDay} (categorías de ese día).`);
+                return;
+            }
+        }
+
         setGeneratingBracket(true);
         const courts = genConfig.courtsInput.split(',').map((s) => s.trim());
 
-        const newMatches = await generateBracketAI(teamsToSimulate, {
+        const { matches: newMatches, error: bracketError } = await generateBracketAI(teamsToSimulate, {
             startTime: genConfig.startTime,
             endTime: genConfig.endTime,
             intervalMins: genConfig.intervalMins,
@@ -739,8 +805,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             customPrompt: genConfig.customPrompt,
         });
 
-        if (newMatches.length > 0) {
-            const normalized = ensureStableDraftMatchIds(newMatches);
+        if (bracketError) {
+            toast.error(bracketError);
+        } else if (newMatches.length > 0) {
+            const normalized = ensureStableDraftMatchIds(newMatches).map((m) => ({
+                ...m,
+                scheduleDay: draftDay ?? m.scheduleDay,
+            }));
             const nextDrafts = simDrafts.map((d) =>
                 d.id === activeDraftId ? { ...d, matches: normalized } : d
             );
@@ -749,28 +820,31 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             toast.success(
                 `Simulación actualizada: ${newMatches.length} partidos generados en el borrador activo (no público hasta publicar).`
             );
-        } else {
-            toast.error('Error generando el cuadro. Intenta simplificar el prompt.');
+        } else if (!bracketError) {
+            toast.error('No se generaron partidos. Prueba el simulador determinístico o simplifica el prompt.');
         }
         setGeneratingBracket(false);
     };
 
-    const handleGenerateMuskizWeekend = async () => {
-        if (!activeDraftId) {
+    const handleGenerateMuskizActiveDay = async () => {
+        if (!activeDraftId || !activeDraft) {
             toast.error('Selecciona o crea una simulación primero.');
+            return;
+        }
+        const day = activeDraft.scheduleDay;
+        if (!day) {
+            toast.error('Este borrador no tiene día asignado. Usa Viernes, Sábado o Domingo, o «Generar los 3 días».');
             return;
         }
         setGeneratingMuskiz(true);
         try {
-            const { matches: newMatches, error: muskizError } = buildMuskizWeekendDraftMatches(teams);
+            const { matches: newMatches, error: muskizError } = buildMuskizDayDraftMatches(teams, day);
             if (muskizError) {
                 toast.error(muskizError);
                 return;
             }
             if (newMatches.length === 0) {
-                toast.error(
-                    'No se generaron partidos: hace falta al menos 2 equipos pagados en una misma categoría.'
-                );
+                toast.error(`No se generaron partidos para ${day}: hace falta al menos 2 equipos pagados en una categoría de ese día.`);
                 return;
             }
             const normalized = ensureStableDraftMatchIds(newMatches);
@@ -780,7 +854,38 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             setSimDrafts(nextDrafts);
             await persistSimDraftsAsync(nextDrafts, activeDraftId);
             toast.success(
-                `Calendario Muskiz: ${normalized.length} partidos (mín. ${MIN_REAL_MATCHES_PER_TEAM} reales por equipo; sólo dentro de Viernes/Sábado/Domingo definidos).`
+                `${day}: ${normalized.length} partidos (mín. ${MIN_REAL_MATCHES_PER_TEAM} reales por equipo).`
+            );
+        } finally {
+            setGeneratingMuskiz(false);
+        }
+    };
+
+    const handleGenerateMuskizAllDays = async () => {
+        if (weekendDrafts.length < 3) {
+            toast.error('Faltan borradores de Viernes, Sábado o Domingo.');
+            return;
+        }
+        setGeneratingMuskiz(true);
+        try {
+            const { byDay, error: muskizError } = buildMuskizWeekendDraftsByDay(teams);
+            if (muskizError) {
+                toast.error(muskizError);
+                return;
+            }
+            const total = WEEKEND_SCHEDULE_DAYS.reduce((n, day) => n + byDay[day].length, 0);
+            if (total === 0) {
+                toast.error('No se generaron partidos: hace falta al menos 2 equipos pagados en una misma categoría.');
+                return;
+            }
+            const nextDrafts = simDrafts.map((d) => {
+                if (!d.scheduleDay || !WEEKEND_SCHEDULE_DAYS.includes(d.scheduleDay)) return d;
+                return { ...d, matches: ensureStableDraftMatchIds(byDay[d.scheduleDay]) };
+            });
+            setSimDrafts(nextDrafts);
+            await persistSimDraftsAsync(nextDrafts, activeDraftId);
+            toast.success(
+                `3 calendarios generados: Viernes ${byDay.Viernes.length}, Sábado ${byDay.Sábado.length}, Domingo ${byDay.Domingo.length} partidos.`
             );
         } finally {
             setGeneratingMuskiz(false);
@@ -802,6 +907,30 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         await onUpdateMatches(finalized);
         toast.success(
             `Calendario oficial actualizado (${finalized.length} partidos). ${publishDraftAsPublic ? 'Visibilidad: público.' : 'Visibilidad: privado (borrador en sombra).'}`,
+        );
+    };
+
+    const handlePublishAllWeekendDrafts = async () => {
+        const merged = mergeWeekendDraftMatches(simDrafts);
+        if (!merged.length) {
+            toast.error('No hay partidos en los borradores Viernes / Sábado / Domingo.');
+            return;
+        }
+        if (
+            !window.confirm(
+                `¿Volcar los 3 calendarios (Viernes + Sábado + Domingo = ${merged.length} partidos) al calendario oficial?\n\n` +
+                    'Sustituirá todos los partidos actuales en la base de datos.\n\n' +
+                    (publishDraftAsPublic
+                        ? 'Has elegido PUBLICAR ahora: visibles para visitantes (si el interruptor global también está activo).'
+                        : 'Has elegido NO publicar ahora: partidos privados hasta «Hacer público el calendario actual».')
+            )
+        ) {
+            return;
+        }
+        const finalized = finalizeMatchesForDatabase(merged, { isPublic: publishDraftAsPublic });
+        await onUpdateMatches(finalized);
+        toast.success(
+            `Calendario oficial: ${finalized.length} partidos de los 3 días. ${publishDraftAsPublic ? 'Visibilidad: público.' : 'Visibilidad: privado.'}`
         );
     };
 
@@ -954,8 +1083,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             const teamBObj = teams.find(t => t.name === match.teamB);
 
             const initialStats: PlayerStat[] = [];
-            teamAObj?.players.forEach(p => initialStats.push({ playerId: p.id, goals: 0, yellowCards: 0, redCards: 0 }));
-            teamBObj?.players.forEach(p => initialStats.push({ playerId: p.id, goals: 0, yellowCards: 0, redCards: 0 }));
+            teamAObj?.players.filter(isPlayerEligibleForMatch).forEach(p => initialStats.push({ playerId: p.id, goals: 0, yellowCards: 0, redCards: 0 }));
+            teamBObj?.players.filter(isPlayerEligibleForMatch).forEach(p => initialStats.push({ playerId: p.id, goals: 0, yellowCards: 0, redCards: 0 }));
 
             const tempMatch = {
                 ...match,
@@ -968,7 +1097,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             setSelectedMatchForReport(tempMatch);
             setReportMode('DIGITAL');
         } else {
-            setSelectedMatchForReport(match);
+            const teamAObj = teams.find(t => t.name === match.teamA);
+            const teamBObj = teams.find(t => t.name === match.teamB);
+            const eligibleIds = new Set([
+                ...(teamAObj ? playersEligibleForMatch(teamAObj.players) : []),
+                ...(teamBObj ? playersEligibleForMatch(teamBObj.players) : []),
+            ].map((p) => p.id));
+            const filteredStats = match.report?.playerStats?.filter((s) => eligibleIds.has(s.playerId)) ?? [];
+            setSelectedMatchForReport({
+                ...match,
+                report: match.report ? { ...match.report, playerStats: filteredStats } : match.report,
+            });
             setReportMode(match.report.type);
         }
     };
@@ -1041,7 +1180,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     };
 
     const allPlayers = teams.flatMap(t => t.players.map(p => ({ ...p, teamName: t.name, teamId: t.id, division: t.division })));
-    const pendingCount = allPlayers.filter(p => p.dniStatus === 'PENDING' || p.insuranceStatus === 'PENDING').length;
+    const pendingCount = allPlayers.filter((p) => memberDocsPending(p)).length;
     const totalTeams = teams.length;
     const paidTeams = teams.filter(t => t.paymentStatus === 'PAID').length;
     const pendingPaymentTeams = teams.filter(t => t.paymentStatus === 'PENDING').length;
@@ -1174,7 +1313,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                             <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
                                     <h3 className="font-bold text-lg text-slate-800">Verificación de Documentos</h3>
-                                    <p className="text-xs text-slate-500 mt-1">Valida la identidad y el seguro de los jugadores.</p>
+                                    <p className="text-xs text-slate-500 mt-1">Valida DNI de todos y seguro solo de jugadores (entrenadores/oficiales no llevan seguro).</p>
                                 </div>
                                 
                                 {/* Filter Bar for Verification */}
@@ -1208,6 +1347,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                         <option value="Femenino">Femenino</option>
                                     </select>
 
+                                    <select
+                                        value={filterVerificationRole}
+                                        onChange={(e) => setFilterVerificationRole(e.target.value as typeof filterVerificationRole)}
+                                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                    >
+                                        <option value="all">Roles (todos)</option>
+                                        <option value="PLAYER">Jugadores</option>
+                                        <option value="COACH">Entrenadores</option>
+                                        <option value="OFFICIAL">Oficiales</option>
+                                    </select>
+
                                     <select 
                                         value={filterStatus} 
                                         onChange={(e) => setFilterStatus(e.target.value)}
@@ -1224,7 +1374,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 <table className="w-full text-sm text-left">
                                     <thead className="bg-slate-50 text-slate-500 font-medium uppercase text-xs">
                                         <tr>
-                                            <th className="px-6 py-4">Jugador</th>
+                                            <th className="px-6 py-4">Persona</th>
+                                            <th className="px-6 py-4">Rol</th>
                                             <th className="px-6 py-4">Equipo</th>
                                             <th className="px-6 py-4">DNI</th>
                                             <th className="px-6 py-4">Seguro</th>
@@ -1236,19 +1387,55 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 const matchTeam = filterTeam === '' || p.teamName.toLowerCase().includes(filterTeam.toLowerCase());
                                                 const matchCat = filterCategory === 'all' || p.division?.includes(filterCategory);
                                                 const matchSex = filterSex === 'all' || p.division?.includes(filterSex);
+                                                const matchRole =
+                                                    filterVerificationRole === 'all' ||
+                                                    (p.role ?? 'PLAYER') === filterVerificationRole;
                                                 const matchStat = filterStatus === 'all' || 
-                                                    (filterStatus === 'empty' && (p.dniStatus === 'EMPTY' || p.insuranceStatus === 'EMPTY')) ||
-                                                    (filterStatus === 'pending' && (p.dniStatus === 'PENDING' || p.insuranceStatus === 'PENDING')) ||
-                                                    (filterStatus === 'approved' && (p.dniStatus === 'APPROVED' && p.insuranceStatus === 'APPROVED'));
-                                                return matchTeam && matchCat && matchSex && matchStat;
+                                                    (filterStatus === 'empty' && memberDocsMissing(p)) ||
+                                                    (filterStatus === 'pending' && memberDocsPending(p)) ||
+                                                    (filterStatus === 'approved' && memberDocsComplete(p));
+                                                return matchTeam && matchCat && matchSex && matchRole && matchStat;
                                             })
                                             .map(player => (
-                                            <tr key={`${player.teamId}-${player.id}`} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                                <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-3">
-                                                    <div className="size-8 rounded-full bg-slate-200 overflow-hidden">
-                                                        {player.avatarUrl && <img src={player.avatarUrl} className="w-full h-full object-cover" />}
+                                            <tr
+                                                key={`${player.teamId}-${player.id}`}
+                                                className={`group border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${
+                                                    isPlayerRole(player.role) && !isPlayerEligibleForMatch(player)
+                                                        ? 'bg-amber-50/40'
+                                                        : ''
+                                                }`}
+                                            >
+                                                <td className="px-6 py-4 font-bold text-slate-800">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="size-8 rounded-full bg-slate-200 overflow-hidden shrink-0">
+                                                            {player.avatarUrl && (
+                                                                <img
+                                                                    src={player.avatarUrl}
+                                                                    className="w-full h-full object-cover"
+                                                                    alt=""
+                                                                />
+                                                            )}
+                                                        </div>
+                                                        <div>
+                                                            <div>{player.name}</div>
+                                                            {isPlayerRole(player.role) && !isPlayerEligibleForMatch(player) && (
+                                                                <span className="block text-[9px] font-bold text-amber-700 mt-0.5">
+                                                                    No puede jugar ni salir en acta hasta aprobar DNI y seguro
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                    {player.name}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span
+                                                        className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                                            isPlayerRole(player.role)
+                                                                ? 'bg-blue-50 text-blue-800'
+                                                                : 'bg-violet-50 text-violet-800'
+                                                        }`}
+                                                    >
+                                                        {playerRoleLabel(player.role)}
+                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-slate-600">
                                                     {player.teamName}
@@ -1284,6 +1471,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
+                                                    {!isPlayerRole(player.role) ? (
+                                                        <span className="text-[10px] font-bold uppercase text-slate-400">No aplica</span>
+                                                    ) : (
                                                     <div className="flex items-center gap-2">
                                                         {player.insuranceUrl ? (
                                                             <a href={player.insuranceUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary rounded-lg text-[10px] font-bold hover:bg-primary/10 transition-all border border-primary/10 group/btn">
@@ -1314,6 +1504,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             </span>
                                                         )}
                                                     </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <button 
@@ -1418,7 +1609,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </td>
                                                         <td className="px-6 py-4 text-slate-600">
                                                             <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                                                                {player.role}
+                                                                {playerRoleLabel(player.role)}
                                                             </span>
                                                         </td>
                                                         <td className="px-6 py-4">
@@ -2063,6 +2254,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     &quot;Limpiar calendario oficial&quot;.
                                                 </div>
 
+                                                <div className="rounded-lg border border-indigo-100 bg-indigo-50/80 px-4 py-3 text-xs text-indigo-950">
+                                                    <strong>3 calendarios por día.</strong> Viernes (cadetes), Sábado (juvenil/senior) y Domingo
+                                                    (infantil) son borradores independientes. Genera con IA o el simulador Muskiz en cada uno, o usa
+                                                    «Generar los 3 días» para rellenarlos todos a la vez. Al publicar, puedes volcar solo el día activo o
+                                                    los tres juntos ({weekendMatchCount} partidos en total entre los 3).
+                                                </div>
+
                                                 <div className="flex flex-wrap gap-3 items-end">
                                                     <div>
                                                         <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Simulación activa</label>
@@ -2084,7 +2282,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         >
                                                             {simDrafts.map((d) => (
                                                                 <option key={d.id} value={d.id}>
-                                                                    {d.name}
+                                                                    {d.scheduleDay ? `${d.scheduleDay} · ` : ''}
+                                                                    {d.name} ({d.matches.length})
                                                                 </option>
                                                             ))}
                                                         </select>
@@ -2132,7 +2331,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                                 className="flex items-center justify-between gap-2 px-3 py-2 text-sm bg-white hover:bg-slate-50/80"
                                                             >
                                                                 <div className="min-w-0">
-                                                                    <span className="font-bold text-slate-800 truncate block">{d.name}</span>
+                                                                    <span className="font-bold text-slate-800 truncate block">
+                                                                        {d.scheduleDay ? (
+                                                                            <span className="text-indigo-700">{d.scheduleDay} · </span>
+                                                                        ) : null}
+                                                                        {d.name}
+                                                                    </span>
                                                                     <span className="text-[10px] text-slate-500">
                                                                         {d.matches.length} partido{d.matches.length === 1 ? '' : 's'} en borrador
                                                                     </span>
@@ -2197,7 +2401,18 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             className="bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-wide flex items-center gap-2"
                                                         >
                                                             <span className="material-symbols-outlined text-sm">cloud_upload</span>
-                                                            Guardar calendario oficial
+                                                            {activeDraft?.scheduleDay
+                                                                ? `Publicar solo ${activeDraft.scheduleDay}`
+                                                                : 'Guardar calendario oficial'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            disabled={weekendMatchCount === 0}
+                                                            onClick={() => void handlePublishAllWeekendDrafts()}
+                                                            className="bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-wide flex items-center gap-2"
+                                                        >
+                                                            <span className="material-symbols-outlined text-sm">calendar_month</span>
+                                                            Publicar los 3 días ({weekendMatchCount})
                                                         </button>
                                                         <button
                                                             type="button"
@@ -2214,7 +2429,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
                                                         <h4 className="font-bold text-slate-800 flex items-center gap-2">
                                                             <span className="material-symbols-outlined text-purple-600">psychology</span>
-                                                            Generación IA (sólo afecta al borrador activo)
+                                                            Generación IA
+                                                            {activeDraft?.scheduleDay ? ` (${activeDraft.scheduleDay})` : ' (borrador activo)'}
                                                         </h4>
                                                         <div className="flex gap-2 flex-wrap">
                                                             <input type="file" id="excel-upload" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleExcelImport} />
@@ -2258,18 +2474,48 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </div>
                                                         {simulationMode === 'REAL' ? (
                                                             <p className="text-sm text-slate-700 leading-relaxed">
-                                                                Se simulará usando los{' '}
-                                                                <strong>{teams.filter((t) => t.paymentStatus === 'PAID').length}</strong> equipos reales que
-                                                                han pagado.
+                                                                {activeDraft?.scheduleDay ? (
+                                                                    <>
+                                                                        Se simulará con{' '}
+                                                                        <strong>{paidTeamsForSimulation.length}</strong> equipos reales pagados de{' '}
+                                                                        <strong>{activeDraft.scheduleDay}</strong>
+                                                                        {simulationDivisions.length > 0 && (
+                                                                            <>
+                                                                                {' '}
+                                                                                (
+                                                                                {simulationDivisions
+                                                                                    .map((d) => d.replace(' Femenino', ' F').replace(' Masculino', ' M'))
+                                                                                    .join(', ')}
+                                                                                )
+                                                                            </>
+                                                                        )}
+                                                                        .
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        Se simulará usando los{' '}
+                                                                        <strong>{paidTeamsForSimulation.length}</strong> equipos reales que han pagado.
+                                                                    </>
+                                                                )}
                                                             </p>
                                                         ) : (
                                                             <div className="rounded-lg border border-amber-100 bg-amber-50/90 p-4">
                                                                 <p className="text-xs text-amber-950 mb-3 leading-relaxed">
-                                                                    Ajusta cuántos equipos de prueba hay por categoría. No se guardan en la base de datos; sólo
-                                                                    alimentan esta generación de borrador.
+                                                                    {activeDraft?.scheduleDay ? (
+                                                                        <>
+                                                                            Equipos ficticios solo para categorías de{' '}
+                                                                            <strong>{activeDraft.scheduleDay}</strong> (sugerencia: 12 por categoría). No se
+                                                                            guardan en la base de datos.
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            Ajusta cuántos equipos de prueba hay por categoría. No se guardan en la base de
+                                                                            datos; sólo alimentan esta generación de borrador.
+                                                                        </>
+                                                                    )}
                                                                 </p>
                                                                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                                                    {DIVISIONS_LIST.map((division) => (
+                                                                    {simulationDivisions.map((division) => (
                                                                         <label
                                                                             key={division}
                                                                             className="flex flex-col gap-1 rounded-md border border-amber-200/80 bg-white/70 px-2 py-2"
@@ -2361,24 +2607,46 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             reparto automático; dos grupos → semis + final.
                                                         </p>
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => void handleGenerateMuskizWeekend()}
-                                                        disabled={generatingMuskiz || !activeDraftId}
-                                                        className="w-full sm:w-auto bg-teal-700 hover:bg-teal-800 text-white py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                                                    >
-                                                        {generatingMuskiz ? (
-                                                            <span className="material-symbols-outlined animate-spin">progress_activity</span>
-                                                        ) : (
-                                                            <span className="material-symbols-outlined">calendar_month</span>
-                                                        )}
-                                                        {generatingMuskiz ? 'Generando…' : 'Generar calendario fin de semana en el borrador'}
-                                                    </button>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void handleGenerateMuskizActiveDay()}
+                                                            disabled={generatingMuskiz || !activeDraft?.scheduleDay}
+                                                            className="flex-1 min-w-[200px] bg-teal-700 hover:bg-teal-800 text-white py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                                                        >
+                                                            {generatingMuskiz ? (
+                                                                <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                                                            ) : (
+                                                                <span className="material-symbols-outlined">today</span>
+                                                            )}
+                                                            {generatingMuskiz
+                                                                ? 'Generando…'
+                                                                : activeDraft?.scheduleDay
+                                                                  ? `Generar ${activeDraft.scheduleDay}`
+                                                                  : 'Generar día activo'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void handleGenerateMuskizAllDays()}
+                                                            disabled={generatingMuskiz || weekendDrafts.length < 3}
+                                                            className="flex-1 min-w-[200px] bg-indigo-700 hover:bg-indigo-800 text-white py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                                                        >
+                                                            {generatingMuskiz ? (
+                                                                <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                                                            ) : (
+                                                                <span className="material-symbols-outlined">calendar_month</span>
+                                                            )}
+                                                            {generatingMuskiz ? 'Generando…' : 'Generar los 3 días'}
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 {activeDraft && activeDraft.matches.length > 0 && (
                                                     <div className="mt-6">
-                                                        <SimulationScheduleGridTabs matches={activeDraft.matches} />
+                                                        <SimulationScheduleGridTabs
+                                                            matches={activeDraft.matches}
+                                                            fixedDay={activeDraft.scheduleDay}
+                                                        />
                                                     </div>
                                                 )}
 
@@ -2942,8 +3210,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             <div key={team.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <h4 className="font-bold text-lg border-b border-slate-100 pb-2 mb-4 text-center">{team.name}</h4>
                                                 <div className="space-y-3">
-                                                    {team.players.length === 0 && <p className="text-sm text-slate-400 text-center italic">Sin jugadores registrados.</p>}
-                                                    {team.players.map(player => {
+                                                    {playersEligibleForMatch(team.players).length === 0 && (
+                                                        <p className="text-sm text-slate-400 text-center italic">
+                                                            Ningún jugador con DNI y seguro aprobados.
+                                                        </p>
+                                                    )}
+                                                    {playersEligibleForMatch(team.players).map(player => {
                                                         const stat = selectedMatchForReport.report?.playerStats?.find(s => s.playerId === player.id) || { goals: 0 };
                                                         return (
                                                             <div key={player.id} className="flex justify-between items-center text-sm">

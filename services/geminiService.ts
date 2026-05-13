@@ -38,6 +38,24 @@ const getLocalChatFallback = (newMessage: string, realTimeData: string): string 
 };
 
 // --- Bracket Generation ---
+
+function parseBracketError(raw: string): string {
+  if (raw.includes('API key expired') || raw.includes('API_KEY_INVALID')) {
+    return 'La clave GEMINI_API_KEY del servidor ha caducado. Renueva el secret en Supabase Edge Functions, o usa el simulador determinístico («Generar Viernes» / «Generar los 3 días»).';
+  }
+  if (raw.includes('GEMINI_API_KEY not configured')) {
+    return 'Falta configurar GEMINI_API_KEY en los secrets de Supabase.';
+  }
+  try {
+    const inner = JSON.parse(raw);
+    const msg = inner?.error?.message ?? inner?.message ?? inner?.error;
+    if (typeof msg === 'string' && msg.length > 0) return parseBracketError(msg);
+  } catch {
+    /* texto plano */
+  }
+  return raw.length > 280 ? `${raw.slice(0, 280)}…` : raw;
+}
+
 export const generateBracketAI = async (
   teams: Team[],
   config: {
@@ -48,18 +66,31 @@ export const generateBracketAI = async (
     lunchBreak: boolean,
     customPrompt: string
   }
-): Promise<Match[]> => {
+): Promise<{ matches: Match[]; error?: string }> => {
   try {
     const { data, error } = await supabase.functions.invoke('generate-bracket', {
       body: { teams, config }
     });
 
-    if (error) throw error;
-    const raw = (data?.matches ?? []) as Match[];
-    return raw.map((m) => ({ ...m, isPublic: m.isPublic ?? true }));
+    const payload = data as { matches?: Match[]; error?: string } | null;
+
+    if (payload?.error) {
+      return { matches: [], error: parseBracketError(payload.error) };
+    }
+
+    if (error) {
+      const msg = payload?.error ?? error.message ?? 'Error al invocar generate-bracket';
+      return { matches: [], error: parseBracketError(String(msg)) };
+    }
+
+    const raw = (payload?.matches ?? []) as Match[];
+    return {
+      matches: raw.map((m) => ({ ...m, isPublic: m.isPublic ?? true })),
+    };
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
     console.error('Bracket Generation Error:', error);
-    return [];
+    return { matches: [], error: parseBracketError(msg) };
   }
 };
 

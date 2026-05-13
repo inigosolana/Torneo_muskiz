@@ -290,6 +290,37 @@ function dayBucketForDivision(division: Team['division']): MuskizScheduleDayLabe
     return 'Domingo';
 }
 
+export function divisionBelongsToScheduleDay(division: Team['division'], day: MuskizScheduleDayLabel): boolean {
+    return dayBucketForDivision(division) === day;
+}
+
+export function getMuskizDayGenDefaults(day: MuskizScheduleDayLabel): {
+    startTime: string;
+    endTime: string;
+    intervalMins: number;
+    courtsInput: string;
+    lunchBreak: boolean;
+    customPrompt: string;
+} {
+    const configs = defaultConfigs();
+    const cfg = configs[day];
+    const courts = cfg.courts.join(', ');
+    const categories =
+        day === 'Viernes'
+            ? 'cadete femenino y cadete masculino'
+            : day === 'Sábado'
+              ? 'juvenil y senior (femenino y masculino)'
+              : 'infantil femenino e infantil masculino';
+    return {
+        startTime: cfg.playStart,
+        endTime: cfg.playEndExclusive,
+        intervalMins: 35,
+        courtsInput: courts,
+        lunchBreak: !!cfg.lunch,
+        customPrompt: `Solo categorías de ${day} (${categories}). Fase de grupos por categoría y solo la gran final (sin cuartos ni semifinales). Reparte horarios y pistas sin solapes. Todo debe caber entre ${cfg.playStart} y ${cfg.playEndExclusive}.`,
+    };
+}
+
 interface DayConfig {
     label: MuskizScheduleDayLabel;
     dayShort: string;
@@ -395,8 +426,13 @@ function scheduleGreedy(day: MuskizScheduleDayLabel, specs: RawMatchSpec[], conf
 
 /**
  * Equipos incluidos: pagados (`paymentStatus === 'PAID'`).
+ * Genera partidos de un solo día de competición.
  */
-export function buildMuskizWeekendDraftMatches(allTeams: Team[], options?: MuskizSimulatorOptions): MuskizBuildResult {
+export function buildMuskizDayDraftMatches(
+    allTeams: Team[],
+    targetDay: MuskizScheduleDayLabel,
+    options?: MuskizSimulatorOptions
+): MuskizBuildResult {
     const slotMins = options?.slotDurationMins ?? 35;
     const lunchStart = options?.lunchStart ?? '13:00';
     const lunchEnd = options?.lunchEnd ?? '14:00';
@@ -414,11 +450,7 @@ export function buildMuskizWeekendDraftMatches(allTeams: Team[], options?: Muski
         configs.Sábado = { ...configs.Sábado, lunch: { start: lunchStart, end: lunchEnd } };
     }
 
-    const allSpecs: { day: MuskizScheduleDayLabel; list: RawMatchSpec[] }[] = [
-        { day: 'Viernes', list: [] },
-        { day: 'Sábado', list: [] },
-        { day: 'Domingo', list: [] },
-    ];
+    const specs: RawMatchSpec[] = [];
 
     const orderDiv: Team['division'][] = [
         'Cadete Femenino',
@@ -432,13 +464,14 @@ export function buildMuskizWeekendDraftMatches(allTeams: Team[], options?: Muski
     ];
 
     for (const div of orderDiv) {
+        if (dayBucketForDivision(div) !== targetDay) continue;
         const list = byDivision.get(div);
         if (!list?.length || list.length < 2) continue;
-        let specs = specsForPaidDivision(list);
+        let divSpecs = specsForPaidDivision(list);
         const realNames = new Set(list.map((t) => t.name));
-        specs = ensureMinRealMatchesPerTeam(list, specs, minReal);
+        divSpecs = ensureMinRealMatchesPerTeam(list, divSpecs, minReal);
 
-        const m = countRealRealMatches(specs, realNames);
+        const m = countRealRealMatches(divSpecs, realNames);
         for (const t of list) {
             if ((m.get(t.name) ?? 0) < minReal) {
                 return {
@@ -448,70 +481,84 @@ export function buildMuskizWeekendDraftMatches(allTeams: Team[], options?: Muski
             }
         }
 
-        const day = dayBucketForDivision(div);
-        const cap = daySlotsCourtCapacity(day, configs, slotMins);
-        const bucket = allSpecs.find((d) => d.day === day);
-        if (bucket && bucket.list.length + specs.length > cap) {
+        const cap = daySlotsCourtCapacity(targetDay, configs, slotMins);
+        if (specs.length + divSpecs.length > cap) {
             return {
                 matches: [],
-                error: `No caben todos los partidos de «${div}» en ${day} (${bucket.list.length + specs.length} partidos, capacidad máx. ${cap} con bloques de ${slotMins} min). Reduce categorías simultáneas, acorta bloques o amplía horario.`,
+                error: `No caben todos los partidos de «${div}» en ${targetDay} (${specs.length + divSpecs.length} partidos, capacidad máx. ${cap} con bloques de ${slotMins} min). Reduce categorías simultáneas, acorta bloques o amplía horario.`,
             };
         }
-        if (bucket) bucket.list.push(...specs);
+        specs.push(...divSpecs);
     }
 
-    const cells: ScheduledCell[] = [];
-    const failed: RawMatchSpec[] = [];
-    for (const { day, list } of allSpecs) {
-        if (!list.length) continue;
-        const { placed, unplaced } = scheduleGreedy(day, list, configs, slotMins);
-        cells.push(...placed);
-        failed.push(...unplaced);
+    if (!specs.length) {
+        return { matches: [] };
     }
 
-    if (failed.length > 0) {
-        const sample = failed
+    const { placed, unplaced } = scheduleGreedy(targetDay, specs, configs, slotMins);
+    if (unplaced.length > 0) {
+        const sample = unplaced
             .slice(0, 3)
             .map((s) => `${s.teamA} vs ${s.teamB} (${DIVISION_CODE[s.division]})`)
             .join('; ');
         return {
             matches: [],
-            error: `No todos los partidos caben dentro de las franjas horarias y pistas (${failed.length} sin hueco). Ej.: ${sample}. Revisa solapes entre categorías el mismo día o reduce partidos.`,
+            error: `No todos los partidos caben dentro de las franjas de ${targetDay} (${unplaced.length} sin hueco). Ej.: ${sample}.`,
         };
     }
 
-    const dayOrder = (d: MuskizScheduleDayLabel) => (d === 'Viernes' ? 0 : d === 'Sábado' ? 1 : 2);
-    cells.sort((a, b) => {
-        const da = dayBucketForDivision(a.spec.division);
-        const db = dayBucketForDivision(b.spec.division);
-        const od = dayOrder(da) - dayOrder(db);
-        if (od !== 0) return od;
-        if (a.timeMin !== b.timeMin) return a.timeMin - b.timeMin;
-        return a.courtIdx - b.courtIdx;
-    });
-
     const now = Date.now();
-    const matches = cells.map((c, idx) => {
-        const dayLabel = dayBucketForDivision(c.spec.division);
-        const dayCfg = configs[dayLabel];
-        const timeStr = minutesToTime(c.timeMin);
-        const roundPrefix = `${dayCfg.dayShort} · ${timeStr}`;
-        const schedDay: Match['scheduleDay'] = dayCfg.label;
-        return {
-            id: `draft_muskiz_${now}_${idx}`,
-            time: timeStr,
-            court: c.courtName,
-            teamA: c.spec.teamA,
-            teamB: c.spec.teamB,
-            scoreA: null,
-            scoreB: null,
-            status: 'SCHEDULED' as const,
-            round: `${roundPrefix} · ${c.spec.roundLabel}`,
-            scheduleDay: schedDay,
-            isPublic: true,
-        };
-    });
+    const dayCfg = configs[targetDay];
+    const matches = placed
+        .sort((a, b) => {
+            if (a.timeMin !== b.timeMin) return a.timeMin - b.timeMin;
+            return a.courtIdx - b.courtIdx;
+        })
+        .map((c, idx) => {
+            const timeStr = minutesToTime(c.timeMin);
+            const roundPrefix = `${dayCfg.dayShort} · ${timeStr}`;
+            return {
+                id: `draft_muskiz_${targetDay}_${now}_${idx}`,
+                time: timeStr,
+                court: c.courtName,
+                teamA: c.spec.teamA,
+                teamB: c.spec.teamB,
+                scoreA: null,
+                scoreB: null,
+                status: 'SCHEDULED' as const,
+                round: `${roundPrefix} · ${c.spec.roundLabel}`,
+                scheduleDay: dayCfg.label,
+                isPublic: true,
+            };
+        });
 
+    return { matches };
+}
+
+export function buildMuskizWeekendDraftsByDay(
+    allTeams: Team[],
+    options?: MuskizSimulatorOptions
+): { byDay: Record<MuskizScheduleDayLabel, Match[]>; error?: string } {
+    const byDay: Record<MuskizScheduleDayLabel, Match[]> = {
+        Viernes: [],
+        Sábado: [],
+        Domingo: [],
+    };
+    for (const day of ['Viernes', 'Sábado', 'Domingo'] as MuskizScheduleDayLabel[]) {
+        const { matches, error } = buildMuskizDayDraftMatches(allTeams, day, options);
+        if (error) return { byDay, error };
+        byDay[day] = matches;
+    }
+    return { byDay };
+}
+
+/**
+ * Equipos incluidos: pagados (`paymentStatus === 'PAID'`).
+ */
+export function buildMuskizWeekendDraftMatches(allTeams: Team[], options?: MuskizSimulatorOptions): MuskizBuildResult {
+    const { byDay, error } = buildMuskizWeekendDraftsByDay(allTeams, options);
+    if (error) return { matches: [], error };
+    const matches = [...byDay.Viernes, ...byDay.Sábado, ...byDay.Domingo];
     return { matches };
 }
 

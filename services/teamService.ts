@@ -162,7 +162,8 @@ export const teamService = {
                 number: player.number,
                 position: player.position,
                 dni_status: player.dniStatus || 'EMPTY',
-                insurance_status: player.insuranceStatus || 'EMPTY'
+                insurance_status: player.insuranceStatus || 'EMPTY',
+                role: player.role || 'PLAYER',
             }])
             .select()
             .single();
@@ -207,7 +208,8 @@ export const teamService = {
                 insurance_status: player.insuranceStatus,
                 dni_url: player.dniUrl,
                 insurance_url: player.insuranceUrl,
-                avatar_url: player.avatarUrl
+                avatar_url: player.avatarUrl,
+                role: player.role || 'PLAYER',
             })
             .eq('id', player.id);
 

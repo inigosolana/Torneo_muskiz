@@ -7,39 +7,53 @@ const DAY_LABELS: MuskizScheduleDayLabel[] = ['Viernes', 'Sábado', 'Domingo'];
 
 interface SimulationDayGridProps {
     matches: Match[];
+    /** Si el borrador es de un solo día, fija la cuadrícula sin pestañas. */
+    fixedDay?: Match['scheduleDay'];
 }
 
 /** Vista tipo hoja Excel: filas = horas, columnas = campos. */
-export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({ matches }) => {
-    const [day, setDay] = React.useState<MuskizScheduleDayLabel>('Sábado');
-    const { courts, times, grid } = groupMatchesForDayGrid(matches, day);
+export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({ matches, fixedDay }) => {
+    const [day, setDay] = React.useState<MuskizScheduleDayLabel>(fixedDay ?? 'Sábado');
+    const viewDay = fixedDay ?? day;
+    const { courts, times, grid } = groupMatchesForDayGrid(matches, viewDay);
+
+    React.useEffect(() => {
+        if (fixedDay) setDay(fixedDay);
+    }, [fixedDay]);
 
     return (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-            <div className="flex flex-wrap gap-1 border-b border-slate-100 bg-slate-50 px-2 py-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 self-center mr-2">
-                    Vista cuadrícula
-                </span>
-                {DAY_LABELS.map((d) => (
-                    <button
-                        key={d}
-                        type="button"
-                        onClick={() => setDay(d)}
-                        className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-colors ${
-                            day === d
-                                ? 'bg-teal-700 text-white shadow'
-                                : 'bg-white text-slate-600 border border-slate-200 hover:border-teal-300'
-                        }`}
-                    >
-                        {d}
-                    </button>
-                ))}
-            </div>
+            {!fixedDay && (
+                <div className="flex flex-wrap gap-1 border-b border-slate-100 bg-slate-50 px-2 py-2">
+                    <span className="text-[10px] font-black uppercase text-slate-400 self-center mr-2">
+                        Vista cuadrícula
+                    </span>
+                    {DAY_LABELS.map((d) => (
+                        <button
+                            key={d}
+                            type="button"
+                            onClick={() => setDay(d)}
+                            className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-colors ${
+                                day === d
+                                    ? 'bg-teal-700 text-white shadow'
+                                    : 'bg-white text-slate-600 border border-slate-200 hover:border-teal-300'
+                            }`}
+                        >
+                            {d}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {fixedDay && (
+                <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase text-teal-800">
+                    Cuadrícula · {fixedDay}
+                </div>
+            )}
 
             {!times.length || !courts.length ? (
                 <div className="p-6 text-center text-sm text-slate-400">
-                    No hay partidos con fecha imprimida para este día. Usa el simulador Muskiz o revisa{' '}
-                    <span className="font-mono">scheduleDay</span> / prefijo Vie· Sab· Dom· en «Ronda».
+                    No hay partidos para este día en el borrador.
                 </div>
             ) : (
                 <div className="overflow-x-auto">

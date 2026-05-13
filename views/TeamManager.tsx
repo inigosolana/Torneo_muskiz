@@ -4,6 +4,17 @@ import { toast, Toaster } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { teamService } from '../services/teamService';
 import { supabase } from '../services/supabaseClient';
+import {
+    MAX_STAFF_PER_TEAM,
+    MATCH_DAY_PLAYER_COUNT,
+    MIN_PLAYERS_PER_TEAM,
+    canAddSquadMember,
+    countSquadPlayers,
+    countSquadStaff,
+    isPlayerRole,
+    maxPlayersForDivision,
+    playerRoleLabel,
+} from '../utils/squadLimits';
 
 interface TeamManagerProps {
     teams: Team[];
@@ -81,17 +92,25 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         );
     }
 
-    const currentPlayerCount = selectedTeam.players.filter(p => p.role === 'PLAYER').length;
-    const maxPlayers = 12;
-    const minPlayers = 6;
-    const canAddMore = currentPlayerCount < maxPlayers;
+    const currentPlayerCount = countSquadPlayers(selectedTeam.players);
+    const currentStaffCount = countSquadStaff(selectedTeam.players);
+    const maxPlayers = maxPlayersForDivision(selectedTeam.division);
+    const minPlayers = MIN_PLAYERS_PER_TEAM;
+    const canAddMore =
+        currentPlayerCount < maxPlayers || currentStaffCount < MAX_STAFF_PER_TEAM;
 
     const handleManualAdd = async () => {
         if (!manualPlayer.name) {
             toast.error('El nombre es obligatorio');
             return;
         }
-        if ((manualPlayer.role ?? 'PLAYER') === 'PLAYER' && !manualPlayer.dniNumber?.trim()) {
+        const role = (manualPlayer.role as Player['role']) || 'PLAYER';
+        const slot = canAddSquadMember(selectedTeam.players, selectedTeam.division, role);
+        if (!slot.ok) {
+            toast.error(slot.reason ?? 'No puedes añadir más miembros');
+            return;
+        }
+        if (isPlayerRole(role) && !manualPlayer.dniNumber?.trim()) {
             toast.error('El DNI es obligatorio para jugadores');
             return;
         }
@@ -102,7 +121,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             name: manualPlayer.name,
             number: manualPlayer.number || 0,
             position: manualPlayer.position || 'Universal',
-            role: (manualPlayer.role as any) || 'PLAYER',
+            role,
             verified: false,
             dniNumber: manualPlayer.dniNumber?.trim() || undefined,
             dniStatus: manualPlayer.dniNumber?.trim() ? 'PENDING' : 'EMPTY',
@@ -227,14 +246,24 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
 
             for (const line of lines) {
                 if (!line.trim()) continue;
-                const [name, number, position, role] = line.split(',');
+                const [name, number, position, roleRaw] = line.split(',');
+                const role = ((roleRaw?.trim().toUpperCase() as Player['role']) || 'PLAYER');
+                const slot = canAddSquadMember(
+                    [...selectedTeam.players, ...newPlayers],
+                    selectedTeam.division,
+                    role
+                );
+                if (!slot.ok) {
+                    toast.error(slot.reason ?? 'Límite de plantilla alcanzado en CSV');
+                    break;
+                }
                 const p: Player = {
                     id: `p-${Date.now()}-${Math.random()}`,
                     teamId: selectedTeam.id,
                     name: name.trim(),
                     number: parseInt(number) || 0,
                     position: position?.trim() || 'Universal',
-                    role: (role?.trim().toUpperCase() as any) || 'PLAYER',
+                    role,
                     verified: false,
                     dniStatus: 'EMPTY',
                     insuranceStatus: 'EMPTY'
@@ -377,7 +406,12 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                     style={{ width: `${(currentPlayerCount / maxPlayers) * 100}%` }}
                                                 ></div>
                                             </div>
-                                            <span className="text-[10px] font-bold text-slate-400">{currentPlayerCount}/{maxPlayers}</span>
+                                            <span className="text-[10px] font-bold text-slate-400">
+                                                {currentPlayerCount}/{maxPlayers} jug. · {currentStaffCount}/{MAX_STAFF_PER_TEAM} staff
+                                            </span>
+                                            <p className="text-[9px] text-slate-400 mt-0.5">
+                                                En partido: hasta {MATCH_DAY_PLAYER_COUNT} jugadores
+                                            </p>
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
@@ -403,7 +437,10 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                         <h4 className="font-bold text-slate-900 dark:text-white leading-tight">{player.name}</h4>
                                                         <div className="flex items-center gap-2 mt-0.5">
                                                             <span className="text-[10px] font-black text-primary uppercase">#{player.number || '--'}</span>
-                                                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">{player.role === 'PLAYER' ? (player.position || 'Universal') : player.role}</span>
+                                                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+                                                                {playerRoleLabel(player.role)}
+                                                                {isPlayerRole(player.role) ? ` · ${player.position || 'Universal'}` : ''}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -472,7 +509,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                     <div className="grid grid-cols-1 gap-4">
                                         <button onClick={() => setShowManualModal(true)} className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-slate-50 transition-all">
                                             <span className="material-symbols-outlined text-3xl text-slate-300 mb-2">edit_note</span>
-                                            <p className="text-xs font-bold text-slate-500">Añadir jugador manualmente</p>
+                                            <p className="text-xs font-bold text-slate-500">Añadir a la plantilla</p>
                                         </button>
                                     </div>
                                 )}
@@ -534,7 +571,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
                         <div className="p-6 border-b border-slate-100 dark:border-white/10 flex justify-between items-center">
-                            <h3 className="font-bold text-slate-900 dark:text-white">Añadir Jugador Manual</h3>
+                            <h3 className="font-bold text-slate-900 dark:text-white">Añadir a la plantilla</h3>
                             <button onClick={() => setShowManualModal(false)} className="text-slate-400 hover:text-slate-600"><span className="material-symbols-outlined">close</span></button>
                         </div>
                         <div className="p-6 space-y-4">
@@ -587,17 +624,24 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                             <div>
                                 <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Rol</label>
                                 <div className="flex gap-2">
-                                    {['PLAYER', 'COACH', 'OFFICIAL'].map(r => (
-                                        <button 
-                                            key={r}
-                                            onClick={() => setManualPlayer({...manualPlayer, role: r as any})}
+                                    {(
+                                        [
+                                            { value: 'PLAYER' as const, label: 'Jugador' },
+                                            { value: 'COACH' as const, label: 'Entrenador' },
+                                            { value: 'OFFICIAL' as const, label: 'Oficial' },
+                                        ] as const
+                                    ).map(({ value, label }) => (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            onClick={() => setManualPlayer({ ...manualPlayer, role: value })}
                                             className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${
-                                                manualPlayer.role === r
+                                                manualPlayer.role === value
                                                     ? 'bg-primary text-white shadow-md'
                                                     : 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300'
                                             }`}
                                         >
-                                            {r}
+                                            {label}
                                         </button>
                                     ))}
                                 </div>

@@ -108,6 +108,8 @@ export interface Match {
 export interface CalendarDraft {
   id: string;
   name: string;
+  /** Día de competición asociado (Viernes cadetes, Sábado juvenil/senior, Domingo infantil). */
+  scheduleDay?: Match['scheduleDay'];
   /** Nota libre: formato del torneo, fases, etc. */
   formatDescription?: string;
   createdAt: string;

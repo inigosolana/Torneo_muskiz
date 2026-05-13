@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import type { Match, Player, Team } from '../types';
 import { matchService, teamService } from '../services/teamService';
 import { siteContent } from '../constants/siteContent';
+import { playersEligibleForMatch } from '../utils/squadLimits';
 
 /** Filas del tanteo punto a punto según modelo acta playa (Kolosaurios / RFEBM). */
 const GRID_ROWS = 44;
@@ -23,9 +24,9 @@ function formatPlayerName(p: Player): string {
 
 function playersForActa(team: Team | undefined): Player[] {
     if (!team) return [];
-    return [...team.players]
-        .filter((p) => p.role === 'PLAYER')
-        .sort((a, b) => (Number(a.number) || 999) - (Number(b.number) || 999));
+    return playersEligibleForMatch(team.players).sort(
+        (a, b) => (Number(a.number) || 999) - (Number(b.number) || 999)
+    );
 }
 
 function buildRosterRows(
