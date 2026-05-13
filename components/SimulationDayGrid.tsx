@@ -72,14 +72,18 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({ m
                         </thead>
                         <tbody>
                             {times.map((t) => (
-                                <tr key={t} className="hover:bg-teal-50/40">
-                                    <td className="border border-slate-200 bg-slate-50 font-mono font-bold px-1 py-1 text-center whitespace-nowrap">
+                                <tr key={t} className={t === 'PENDIENTE' ? 'bg-amber-50/80' : 'hover:bg-teal-50/40'}>
+                                    <td className={`border border-slate-200 font-mono font-bold px-1 py-1 text-center whitespace-nowrap ${
+                                        t === 'PENDIENTE' ? 'bg-amber-100 text-amber-900' : 'bg-slate-50'
+                                    }`}>
                                         {t}
                                     </td>
                                     {courts.map((c) => {
                                         const m = grid[t]?.[c] ?? null;
                                         return (
-                                            <td key={c} className="border border-slate-200 align-top p-1 min-h-[40px] max-w-[140px]">
+                                            <td key={c} className={`border border-slate-200 align-top p-1 min-h-[40px] max-w-[140px] ${
+                                                m?.time === 'PENDIENTE' ? 'bg-amber-50' : ''
+                                            }`}>
                                                 {m ? (
                                                     <div className="rounded bg-white leading-tight">
                                                         <div className="text-[9px] font-semibold text-slate-700 line-clamp-2">

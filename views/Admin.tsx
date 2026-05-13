@@ -838,7 +838,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         setGeneratingMuskiz(true);
         try {
-            const { matches: newMatches, error: muskizError } = buildMuskizDayDraftMatches(teams, day);
+            const { matches: newMatches, error: muskizError, warning: muskizWarning } = buildMuskizDayDraftMatches(teams, day);
             if (muskizError) {
                 toast.error(muskizError);
                 return;
@@ -853,8 +853,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             );
             setSimDrafts(nextDrafts);
             await persistSimDraftsAsync(nextDrafts, activeDraftId);
+            if (muskizWarning) {
+                toast.warning(`${day}: borrador generado con avisos — ${muskizWarning}`, { duration: 12000 });
+            }
             toast.success(
-                `${day}: ${normalized.length} partidos (mín. ${MIN_REAL_MATCHES_PER_TEAM} reales por equipo).`
+                `${day}: ${normalized.length} partidos${muskizWarning ? ' (revisa los marcados PENDIENTE)' : ` (mín. ${MIN_REAL_MATCHES_PER_TEAM} reales por equipo)`}.`
             );
         } finally {
             setGeneratingMuskiz(false);
@@ -868,7 +871,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         setGeneratingMuskiz(true);
         try {
-            const { byDay, error: muskizError } = buildMuskizWeekendDraftsByDay(teams);
+            const { byDay, error: muskizError, warning: muskizWarning } = buildMuskizWeekendDraftsByDay(teams);
             if (muskizError) {
                 toast.error(muskizError);
                 return;
@@ -884,8 +887,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             });
             setSimDrafts(nextDrafts);
             await persistSimDraftsAsync(nextDrafts, activeDraftId);
+            if (muskizWarning) {
+                toast.warning(`Borradores generados con avisos — ${muskizWarning}`, { duration: 12000 });
+            }
             toast.success(
-                `3 calendarios generados: Viernes ${byDay.Viernes.length}, Sábado ${byDay.Sábado.length}, Domingo ${byDay.Domingo.length} partidos.`
+                `3 calendarios generados: Viernes ${byDay.Viernes.length}, Sábado ${byDay.Sábado.length}, Domingo ${byDay.Domingo.length} partidos${muskizWarning ? ' (revisa PENDIENTE)' : ''}.`
             );
         } finally {
             setGeneratingMuskiz(false);
@@ -2605,8 +2611,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             <strong>Sábado:</strong> juvenil/senior 9:00–21:00, comida 13:00–14:00, <strong>6 campos</strong>.{' '}
                                                             <strong>Domingo:</strong> infantiles 9:00–15:00, <strong>4 campos</strong>. Huecos{' '}
                                                             <strong>35 min</strong>. Como mínimo <strong>{MIN_REAL_MATCHES_PER_TEAM} partidos</strong>{' '}
-                                                            entre equipos reales por equipo; se añaden duelos de grupo extra si hace falta. Si no cabe todo en
-                                                            esas franjas, no se genera el calendario y se muestra el motivo. Grupos con «competición» en ficha o
+                                                            entre equipos reales por equipo; se añaden duelos de grupo extra si hace falta. Si no cabe todo,
+                                                            se genera igual: los partidos sin hueco aparecen como <strong>PENDIENTE</strong> para que puedas
+                                                            revisarlos. Grupos con «competición» en ficha o
                                                             reparto automático; dos grupos → semis + final.
                                                         </p>
                                                     </div>
@@ -2662,7 +2669,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             <div className="text-center text-slate-400 py-8 border rounded-lg border-dashed">Sin partidos en este borrador</div>
                                                         ) : (
                                                             activeDraft.matches.map((match) => (
-                                                                <div key={match.id} className="flex flex-col lg:flex-row flex-wrap justify-between items-stretch lg:items-center gap-3 p-4 border border-teal-100 rounded-lg bg-teal-50/30">
+                                                                <div key={match.id} className={`flex flex-col lg:flex-row flex-wrap justify-between items-stretch lg:items-center gap-3 p-4 border rounded-lg ${
+                                                                    match.time === 'PENDIENTE'
+                                                                        ? 'border-amber-300 bg-amber-50/80'
+                                                                        : 'border-teal-100 bg-teal-50/30'
+                                                                }`}>
                                                                     <div className="flex items-center gap-2 flex-wrap">
                                                                         {match.scheduleDay && (
                                                                             <span className="bg-teal-200/80 text-teal-900 text-[10px] font-black px-2 py-0.5 rounded uppercase">

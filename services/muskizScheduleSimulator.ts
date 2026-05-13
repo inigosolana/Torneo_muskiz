@@ -10,9 +10,9 @@
  * si no → reparto automático (2 grupos lo más igualados si hay más de 5 equipos).
  * Eliminaciones: si 2 grupos → 2 semifinales (1ºA vs 2ºB, 1ºB vs 2ºA) + final; si 1 grupo → final 1º vs 2º.
  *
- * Restricciones duras:
- * - Todo el calendario debe caber en las franjas (no se colocan partidos fuera del último hueco válido).
- * - Cada equipo real participa en al menos {@link MIN_REAL_MATCHES_PER_TEAM} partidos entre equipos reales (grupos + suplementarios).
+ * Restricciones:
+ * - Se intenta colocar todo en las franjas; lo que no cabe se devuelve igual con hora «PENDIENTE» y aviso.
+ * - Cada equipo real debería tener al menos {@link MIN_REAL_MATCHES_PER_TEAM} partidos reales; si no, se avisa pero se genera lo posible.
  */
 import type { Match, Team } from '../types';
 
@@ -23,8 +23,10 @@ export const MIN_REAL_MATCHES_PER_TEAM = 3;
 
 export interface MuskizBuildResult {
     matches: Match[];
-    /** Si no cabe en franjas o no se puede cumplir el mínimo de partidos. */
+    /** Bloqueo total (p. ej. sin equipos). */
     error?: string;
+    /** Aviso: borrador generado pero revisar huecos o mínimos. */
+    warning?: string;
 }
 
 export interface MuskizSimulatorOptions {
@@ -451,6 +453,7 @@ export function buildMuskizDayDraftMatches(
     }
 
     const specs: RawMatchSpec[] = [];
+    const warnings: string[] = [];
 
     const orderDiv: Team['division'][] = [
         'Cadete Femenino',
@@ -472,21 +475,18 @@ export function buildMuskizDayDraftMatches(
         divSpecs = ensureMinRealMatchesPerTeam(list, divSpecs, minReal);
 
         const m = countRealRealMatches(divSpecs, realNames);
-        for (const t of list) {
-            if ((m.get(t.name) ?? 0) < minReal) {
-                return {
-                    matches: [],
-                    error: `No se puede asegurar ${minReal} partidos reales por equipo en «${div}» (revisa tamaños de grupo o equipos inscritos).`,
-                };
-            }
+        const underMin = list.filter((t) => (m.get(t.name) ?? 0) < minReal);
+        if (underMin.length > 0) {
+            warnings.push(
+                `«${div}»: ${underMin.length} equipo(s) con menos de ${minReal} partidos reales (p. ej. ${underMin[0]!.name}).`
+            );
         }
 
         const cap = daySlotsCourtCapacity(targetDay, configs, slotMins);
         if (specs.length + divSpecs.length > cap) {
-            return {
-                matches: [],
-                error: `No caben todos los partidos de «${div}» en ${targetDay} (${specs.length + divSpecs.length} partidos, capacidad máx. ${cap} con bloques de ${slotMins} min). Reduce categorías simultáneas, acorta bloques o amplía horario.`,
-            };
+            warnings.push(
+                `«${div}»: ${specs.length + divSpecs.length} partidos previstos, capacidad teórica ${cap} (${slotMins} min). Revisa horarios o reduce fases.`
+            );
         }
         specs.push(...divSpecs);
     }
@@ -501,15 +501,14 @@ export function buildMuskizDayDraftMatches(
             .slice(0, 3)
             .map((s) => `${s.teamA} vs ${s.teamB} (${DIVISION_CODE[s.division]})`)
             .join('; ');
-        return {
-            matches: [],
-            error: `No todos los partidos caben dentro de las franjas de ${targetDay} (${unplaced.length} sin hueco). Ej.: ${sample}.`,
-        };
+        warnings.push(
+            `${unplaced.length} partido(s) sin hueco en ${targetDay} (hora «PENDIENTE»). Ej.: ${sample}.`
+        );
     }
 
     const now = Date.now();
     const dayCfg = configs[targetDay];
-    const matches = placed
+    const placedMatches = placed
         .sort((a, b) => {
             if (a.timeMin !== b.timeMin) return a.timeMin - b.timeMin;
             return a.courtIdx - b.courtIdx;
@@ -532,34 +531,55 @@ export function buildMuskizDayDraftMatches(
             };
         });
 
-    return { matches };
+    const overflowMatches = unplaced.map((spec, idx) => ({
+        id: `draft_muskiz_${targetDay}_${now}_pending_${idx}`,
+        time: 'PENDIENTE',
+        court: 'Sin asignar',
+        teamA: spec.teamA,
+        teamB: spec.teamB,
+        scoreA: null,
+        scoreB: null,
+        status: 'SCHEDULED' as const,
+        round: `${dayCfg.dayShort} · PENDIENTE · sin hueco · ${spec.roundLabel}`,
+        scheduleDay: dayCfg.label,
+        isPublic: true,
+    }));
+
+    const matches = [...placedMatches, ...overflowMatches];
+
+    return {
+        matches,
+        warning: warnings.length > 0 ? warnings.join(' ') : undefined,
+    };
 }
 
 export function buildMuskizWeekendDraftsByDay(
     allTeams: Team[],
     options?: MuskizSimulatorOptions
-): { byDay: Record<MuskizScheduleDayLabel, Match[]>; error?: string } {
+): { byDay: Record<MuskizScheduleDayLabel, Match[]>; error?: string; warning?: string } {
     const byDay: Record<MuskizScheduleDayLabel, Match[]> = {
         Viernes: [],
         Sábado: [],
         Domingo: [],
     };
+    const warnings: string[] = [];
     for (const day of ['Viernes', 'Sábado', 'Domingo'] as MuskizScheduleDayLabel[]) {
-        const { matches, error } = buildMuskizDayDraftMatches(allTeams, day, options);
+        const { matches, error, warning } = buildMuskizDayDraftMatches(allTeams, day, options);
         if (error) return { byDay, error };
         byDay[day] = matches;
+        if (warning) warnings.push(`${day}: ${warning}`);
     }
-    return { byDay };
+    return { byDay, warning: warnings.length > 0 ? warnings.join(' | ') : undefined };
 }
 
 /**
  * Equipos incluidos: pagados (`paymentStatus === 'PAID'`).
  */
 export function buildMuskizWeekendDraftMatches(allTeams: Team[], options?: MuskizSimulatorOptions): MuskizBuildResult {
-    const { byDay, error } = buildMuskizWeekendDraftsByDay(allTeams, options);
+    const { byDay, error, warning } = buildMuskizWeekendDraftsByDay(allTeams, options);
     if (error) return { matches: [], error };
     const matches = [...byDay.Viernes, ...byDay.Sábado, ...byDay.Domingo];
-    return { matches };
+    return { matches, warning };
 }
 
 /** Para la cuadrícula: agrupa por día y ordena huecos temporales únicos + columnas campo. */
@@ -583,9 +603,11 @@ export function groupMatchesForDayGrid(matches: Match[], day: MuskizScheduleDayL
         const nb = parseInt(/\d+/.exec(b)?.[0] ?? '0', 10);
         return na - nb || a.localeCompare(b, 'es');
     });
-    const timesSet = [...new Set(dayMatches.map((x) => x.time))].sort(
-        (a, b) => timeToMinutes(a) - timeToMinutes(b)
-    );
+    const timesSet = [...new Set(dayMatches.map((x) => x.time))].sort((a, b) => {
+        if (a === 'PENDIENTE') return 1;
+        if (b === 'PENDIENTE') return -1;
+        return timeToMinutes(a) - timeToMinutes(b);
+    });
     const grid: Record<string, Record<string, Match | null>> = {};
     for (const t of timesSet) grid[t] = Object.fromEntries(courts.map((c) => [c, null])) as Record<string, Match | null>;
     for (const m of dayMatches) {
