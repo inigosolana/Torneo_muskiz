@@ -24,11 +24,14 @@ import { competitionGroupsForDivision, computeStandings } from '../utils/compute
 import {
     buildMuskizDayDraftMatches,
     buildMuskizWeekendDraftsByDay,
+    buildDivisionMinMatchesFromCategories,
     countMatchesPerTeamForDivision,
     divisionBelongsToScheduleDay,
     MIN_REAL_MATCHES_PER_TEAM,
     MIN_TEAMS_PER_GROUP,
     resolveMatchDivision,
+    resolveMinMatchesForDivision,
+    type MuskizSimulatorOptions,
 } from '../services/muskizScheduleSimulator';
 import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
 import { CompetitionResultsTable } from '../components/CompetitionResultsTable';
@@ -146,6 +149,10 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         const { data } = await supabase.from('categories').select('*').order('name');
         if (data) setCategories(data);
     };
+
+    const muskizSimulatorOptions = useMemo((): MuskizSimulatorOptions => ({
+        divisionMinMatches: buildDivisionMinMatchesFromCategories(categories),
+    }), [categories]);
 
     const fetchSponsors = async () => {
         setSponsorsLoading(true);
@@ -815,7 +822,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         setGeneratingMuskiz(true);
         try {
             const { matches: newMatches, error: muskizError, warning: muskizWarning, lunchUsed } =
-                buildMuskizDayDraftMatches(teams, day);
+                buildMuskizDayDraftMatches(teams, day, muskizSimulatorOptions);
             if (muskizError) {
                 toast.error(muskizError);
                 return;
@@ -850,7 +857,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         setGeneratingMuskiz(true);
         try {
-            const { byDay, error: muskizError, warning: muskizWarning } = buildMuskizWeekendDraftsByDay(teams);
+            const { byDay, error: muskizError, warning: muskizWarning } = buildMuskizWeekendDraftsByDay(teams, muskizSimulatorOptions);
             if (muskizError) {
                 toast.error(muskizError);
                 return;
@@ -2377,6 +2384,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     <h4 className="font-bold text-slate-800 text-sm mb-1">Partidos por equipo</h4>
                                                     <p className="text-xs text-slate-500">
                                                         Previsto con el formato actual (grupos + eliminatorias). Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo.
+                                                        Mín. partidos/equipo en esta categoría:{' '}
+                                                        <strong>{resolveMinMatchesForDivision(structureDivision, muskizSimulatorOptions)}</strong>.
                                                     </p>
                                                 </div>
                                                 <div className="flex items-center gap-2">
@@ -2405,7 +2414,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </p>
                                                     );
                                                 }
-                                                const rows = countMatchesPerTeamForDivision(paidInDiv);
+                                                const rows = countMatchesPerTeamForDivision(paidInDiv, muskizSimulatorOptions);
+                                                const minForDiv = resolveMinMatchesForDivision(structureDivision, muskizSimulatorOptions);
                                                 return (
                                                     <table className="w-full text-sm">
                                                         <thead>
@@ -2416,7 +2426,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-50">
                                                             {rows.map((r) => (
-                                                                <tr key={r.name}>
+                                                                <tr key={r.name} className={r.matches < minForDiv ? 'bg-amber-50' : undefined}>
                                                                     <td className="py-2 font-medium text-slate-800">{r.name}</td>
                                                                     <td className="py-2 text-right font-black text-primary">{r.matches}</td>
                                                                 </tr>
@@ -2729,17 +2739,45 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </h4>
                                                         <p className="text-xs text-teal-800 mt-2 leading-relaxed max-w-3xl">
                                                             <strong>Viernes:</strong> cadetes 17:00–21:00, 6 campos.{' '}
-                                                            <strong>Sábado:</strong> juvenil/senior 9:00–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida 14:00–15:30/15:50/16:00, 6 campos.{' '}
+                                                            <strong>Sábado:</strong> juvenil/senior 9:00–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida fija 14:15–15:45, 6 campos.{' '}
                                                             <strong>Domingo:</strong> infantiles 9:00–15:00, 4 campos.{' '}
-                                                            Huecos <strong>35 min</strong>. Objetivo <strong>4 partidos reales</strong> por equipo (mínimo {MIN_REAL_MATCHES_PER_TEAM}).{' '}
-                                                            ≤5 equipos → liguilla + semis + final · 6–10 → 2 grupos + semis + final · 11 → 3 grupos + semis + final · ≥12 → 4 grupos + cuartos + semis + final.{' '}
-                                                            Siempre mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo en todas las categorías.{' '}
-                                                            Categorías mezcladas en el horario. Intenta que ningún equipo juegue <strong>dos partidos seguidos</strong>. Partidos sin hueco: <strong>PENDIENTE</strong>.
+                                                            Huecos <strong>35 min</strong>. Mínimo de partidos por equipo configurable en cada categoría (por defecto {MIN_REAL_MATCHES_PER_TEAM}).{' '}
+                                                            2–6 → liguilla + final · 7–10 → 2 grupos + semis + final · ≥11 → 3 grupos + cuartos + semis + final.{' '}
+                                                            Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo cuando hay varios grupos.{' '}
+                                                            Categorías mezcladas en el horario. Intenta evitar <strong>dos partidos seguidos</strong>, pero los permite si no caben todos (menos PENDIENTE). Partidos sin hueco: <strong>PENDIENTE</strong>.
                                                         </p>
+                                                        <div className="mt-3 rounded-lg border border-teal-200 bg-white/70 p-3">
+                                                            <p className="text-[11px] font-bold uppercase tracking-wide text-teal-900 mb-2">
+                                                                Mín. partidos por equipo (por categoría)
+                                                            </p>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                                                                {categories.map((cat) => (
+                                                                    <label key={cat.id} className="flex items-center justify-between gap-2 text-xs text-teal-900">
+                                                                        <span className="truncate font-medium" title={cat.name}>{cat.name}</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            min={1}
+                                                                            max={20}
+                                                                            defaultValue={cat.min_matches_per_team ?? MIN_REAL_MATCHES_PER_TEAM}
+                                                                            onBlur={(e) => {
+                                                                                const value = Math.max(1, Math.min(20, Number(e.target.value) || MIN_REAL_MATCHES_PER_TEAM));
+                                                                                if (value !== Number(cat.min_matches_per_team ?? MIN_REAL_MATCHES_PER_TEAM)) {
+                                                                                    void handleUpdateCategory(cat.id, { min_matches_per_team: value });
+                                                                                }
+                                                                            }}
+                                                                            className="w-14 border border-teal-200 rounded px-2 py-1 text-center font-bold bg-white outline-none focus:ring-1 focus:ring-teal-600"
+                                                                        />
+                                                                    </label>
+                                                                ))}
+                                                            </div>
+                                                            <p className="mt-2 text-[10px] text-teal-700">
+                                                                Se guarda al salir del campo. También editable en la pestaña Categorías.
+                                                            </p>
+                                                        </div>
                                                         <p className="mt-2 text-[11px] text-teal-800">
-                                                            La comida del sábado empieza a las 14:00 (tras los huecos de 35 min de la mañana) y dura 1h30, 1h50 (15:50) o 2h; la tarde arranca justo al terminar.
-                                                            Semifinales y finales solo después de terminar todos los partidos de grupos.
-                                                            Orden estricto: fase de grupos → cuartos (≥12 equipos) → semis → finales al cierre del día.
+                                                            La comida del sábado es fija de 14:15 a 15:45 para todas las categorías; la tarde arranca justo al terminar.
+                                                            Semifinales, cuartos y finales solo después de terminar todos los partidos de grupos.
+                                                            Orden estricto: fase de grupos → cuartos (≥11 equipos) → semis → finales al cierre del día.
                                                             La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).
                                                             Ajusta partidos a mano en la lista de abajo o en Calendario (tabla / cuadrícula).
                                                         </p>
@@ -3336,7 +3374,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                                 <div className="p-6 border-b border-slate-100">
                                     <h3 className="font-bold text-lg text-slate-800">Gestión de Categorías y Precios</h3>
-                                    <p className="text-xs text-slate-500 mt-1">Configura los límites de equipos y los precios de inscripción.</p>
+                                    <p className="text-xs text-slate-500 mt-1">Configura límites de equipos, precios y mínimo de partidos por equipo en el simulador.</p>
                                 </div>
                                 <div className="p-6">
                                     <div className="overflow-x-auto">
@@ -3346,6 +3384,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     <th className="px-6 py-4 font-bold uppercase text-[10px]">Categoría</th>
                                                     <th className="px-6 py-4 font-bold uppercase text-[10px]">Precio (€)</th>
                                                     <th className="px-6 py-4 font-bold uppercase text-[10px]">Límite Equipos</th>
+                                                    <th className="px-6 py-4 font-bold uppercase text-[10px]">Mín. partidos/equipo</th>
                                                     <th className="px-6 py-4 font-bold uppercase text-[10px] text-right">Acciones</th>
                                                 </tr>
                                             </thead>
@@ -3367,6 +3406,20 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                                 defaultValue={cat.max_teams}
                                                                 onBlur={(e) => handleUpdateCategory(cat.id, { max_teams: Number(e.target.value) })}
                                                                 className="w-20 border border-slate-200 rounded px-2 py-1 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                                            />
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <input
+                                                                type="number"
+                                                                min={1}
+                                                                max={20}
+                                                                defaultValue={cat.min_matches_per_team ?? MIN_REAL_MATCHES_PER_TEAM}
+                                                                onBlur={(e) => {
+                                                                    const value = Math.max(1, Math.min(20, Number(e.target.value) || MIN_REAL_MATCHES_PER_TEAM));
+                                                                    handleUpdateCategory(cat.id, { min_matches_per_team: value });
+                                                                }}
+                                                                className="w-20 border border-slate-200 rounded px-2 py-1 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                                                title="Mínimo de partidos reales por equipo en el simulador"
                                                             />
                                                         </td>
                                                         <td className="px-6 py-4 text-right">

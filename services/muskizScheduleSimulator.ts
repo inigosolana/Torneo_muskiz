@@ -3,15 +3,13 @@
  *
  * Reglas por defecto:
  * - Viernes: solo cadetes (♀♂), 17:00–22:00, 6 campos.
- * - Sábado: juvenil + senior (♀♂), 9:00–22:00 (cuadrícula hasta ~21:00), comida 14:00–15:30/15:50/16:00, 6 campos.
+ * - Sábado: juvenil + senior (♀♂), 9:00–22:00 (cuadrícula hasta ~21:00), comida fija 14:15–15:45, 6 campos.
  * - Domingo: infantiles (♀♂), 9:00–15:00, 4 campos.
  *
- * Formato por número de equipos en la categoría:
- * - ≤3 equipos : liguilla → final 1º vs 2º
- * - 4–5 equipos: liguilla → semis (1ºA vs 3ºA, 2ºA vs 4ºA) → final
- * - 6–10 equipos: 2 grupos → semis (1ºA vs 2ºB, 1ºB vs 2ºA) → final
- * - 11 equipos   : 3 grupos (mín. 3 por grupo) → semis → final
- * - ≥12 equipos  : 4 grupos (mín. 3 por grupo) → cuartos → semis → final
+ * Formato por número de equipos en la categoría (Viernes, Sábado y Domingo):
+ * - 2–6 equipos : liguilla (1 grupo) → final 1º vs 2º (sin semifinales)
+ * - 7–10 equipos: 2 grupos → semis (1ºA vs 2ºB, 1ºB vs 2ºA) → final
+ * - ≥11 equipos  : 3 grupos (mín. 3 por grupo) → cuartos (6 primeros + 2 mejores 3º) → semis → final
  *
  * El simulador intenta que cada equipo juegue ≥4 partidos reales; si no cabe, baja a ≥3.
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
@@ -19,7 +17,8 @@
  * Las finales se reservan en las últimas franjas del día (cierre del calendario).
  * Orden estricto: todos los grupos → cuartos → semis → finales (sin mezclar fases).
  * Se mezclan categorías en la tabla (interleaved) para mayor variedad.
- * Evita en lo posible que un equipo juegue dos partidos seguidos (franjas consecutivas).
+ * Evita partidos seguidos del mismo equipo cuando hay hueco; si no caben todos,
+ * permite partidos consecutivos para reducir PENDIENTE.
  */
 import type { Match, Team } from '../types';
 
@@ -28,16 +27,16 @@ export type MuskizScheduleDayLabel = 'Viernes' | 'Sábado' | 'Domingo';
 /** Mínimo de equipos por grupo de competición. */
 export const MIN_TEAMS_PER_GROUP = 3;
 
-/** Mínimo de partidos "reales" (ambos rivales son equipos inscritos) por equipo. */
+/** Mínimo global por defecto si la categoría no tiene valor configurado. */
 export const MIN_REAL_MATCHES_PER_TEAM = 3;
-/** Objetivo preferido de partidos reales por equipo (si cabe). */
+/** @deprecated Usar min_matches_per_team por categoría (tabla categories). */
 export const TARGET_REAL_MATCHES_PER_TEAM = 4;
 
-/** Duraciones de comida (min) desde las 14:00: 1h30, 1h50 (ej. 15:50), 2h. */
-const LUNCH_DURATION_MINS_OPTIONS = [90, 110, 120] as const;
-/** Inicio comida sábado: tras la mañana (último hueco habitual ~13:05). */
-const SATURDAY_LUNCH_START = '14:00';
-const SATURDAY_LUNCH_DEFAULT_END = '15:50';
+export type DivisionMinMatchesMap = Partial<Record<Team['division'], number>>;
+
+/** Comida sábado fija para todas las categorías. */
+const SATURDAY_LUNCH_START = '14:15';
+const SATURDAY_LUNCH_DEFAULT_END = '15:45';
 
 export interface MuskizBuildResult {
     matches: Match[];
@@ -45,16 +44,45 @@ export interface MuskizBuildResult {
     error?: string;
     /** Aviso: borrador generado pero revisar huecos o mínimos. */
     warning?: string;
-    /** Comida aplicada en sábado (si se optimizó automáticamente). */
+    /** Comida fija del sábado (14:15–15:45). */
     lunchUsed?: { start: string; end: string };
 }
 
 export interface MuskizSimulatorOptions {
     /** Minutos por bloque partido+cambio (Excel referencia ~35). */
     slotDurationMins?: number;
+    /** @deprecated La comida del sábado es fija (14:15–15:45); se ignora. */
     lunchStart?: string;
-    /** Fin de comida. Por defecto 15:50 (1h50 desde 14:00). */
+    /** @deprecated La comida del sábado es fija (14:15–15:45); se ignora. */
     lunchEnd?: string;
+    /** Mínimo (y objetivo) de partidos reales por equipo, por categoría. */
+    divisionMinMatches?: DivisionMinMatchesMap;
+}
+
+/** Construye el mapa categoría → mínimo desde filas de `categories`. */
+export function buildDivisionMinMatchesFromCategories(
+    categories: { name: string; min_matches_per_team?: number | null }[]
+): DivisionMinMatchesMap {
+    const out: DivisionMinMatchesMap = {};
+    for (const cat of categories) {
+        const n = Number(cat.min_matches_per_team);
+        if (cat.name && Number.isFinite(n) && n >= 1) {
+            out[cat.name as Team['division']] = Math.floor(n);
+        }
+    }
+    return out;
+}
+
+/** Mínimo de partidos reales para una categoría (fallback global 3). */
+export function resolveMinMatchesForDivision(
+    division: Team['division'],
+    options?: MuskizSimulatorOptions
+): number {
+    const configured = options?.divisionMinMatches?.[division];
+    if (configured != null && Number.isFinite(configured) && configured >= 1) {
+        return Math.floor(configured);
+    }
+    return MIN_REAL_MATCHES_PER_TEAM;
 }
 
 // ─── División → código corto ───────────────────────────────────────────────
@@ -136,11 +164,10 @@ function roundRobinPairs(names: string[]): { a: string; b: string }[] {
 
 // ─── Cálculo de grupos ─────────────────────────────────────────────────────
 function autoGroupCount(n: number): number {
-    if (n < MIN_TEAMS_PER_GROUP) return n >= 2 ? 1 : 0;
-    if (n <= 5) return 1;
-    if (n <= 8) return 2;
-    if (n <= 11) return 3; // 11 → 3 grupos (p. ej. 4+4+3), nunca 4
-    return 4; // ≥12 → 4 grupos (p. ej. 3+3+3+3), siempre ≥3 por grupo
+    if (n < 2) return 0;
+    if (n <= 6) return 1; // liguilla → final
+    if (n <= 10) return 2; // 2 grupos → semis → final
+    return 3; // ≥11 → 3 grupos (mín. 3 por grupo) → cuartos → semis → final
 }
 
 function splitNamesIntoGroups(sorted: string[], groupCount: number): { key: string; names: string[] }[] {
@@ -215,10 +242,14 @@ export function computeGroups(teamList: Team[]): { key: string; names: string[] 
 }
 
 /** Partidos previstos por equipo en la categoría (fase grupos + extras hasta objetivo). */
-export function countMatchesPerTeamForDivision(teamList: Team[]): { name: string; matches: number }[] {
+export function countMatchesPerTeamForDivision(
+    teamList: Team[],
+    options?: MuskizSimulatorOptions
+): { name: string; matches: number }[] {
     if (teamList.length === 0) return [];
+    const min = resolveMinMatchesForDivision(divisionForTeams(teamList), options);
     const base = specsForPaidDivision(teamList);
-    const specs = ensureMinRealMatchesPerTeam(teamList, base, TARGET_REAL_MATCHES_PER_TEAM);
+    const specs = ensureMinRealMatchesPerTeam(teamList, base, min);
     const realNames = new Set(teamList.map((t) => t.name));
     const counts = countRealRealMatches(specs, realNames);
     return teamList
@@ -232,11 +263,9 @@ function divisionForTeams(teams: Team[]): Team['division'] {
 
 // ─── Especificaciones de partido (sin hora ni pista) ───────────────────────
 /**
- * ≤3 equipos  → liguilla + final
- * 4–5 equipos → liguilla + semis (1º vs 3º, 2º vs 4º) + final
- * 6–10 equipos → 2 grupos + semis + final
- * 11 equipos   → 3 grupos + semis + final (mín. 3 por grupo)
- * ≥12 equipos  → 4 grupos + cuartos + semis + final (mín. 3 por grupo)
+ * 2–6 equipos  → liguilla (1 grupo) + final
+ * 7–10 equipos → 2 grupos + semis + final
+ * ≥11 equipos  → 3 grupos + cuartos + semis + final
  */
 function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     const div = divisionForTeams(teams);
@@ -260,45 +289,30 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     }
 
     // ── Fases eliminatorias ─────────────────────────────────────────────────
-    if (numGroups >= 4) {
-        // ≥12 equipos (4 grupos, mín. 3 por grupo): cuartos → semis → final
-        const [ga, gb, gc, gd] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B', gkeys[2] ?? 'C', gkeys[3] ?? 'D'];
+    if (numGroups === 3) {
+        // ≥11 equipos: 1º y 2º de cada grupo (6) + 2 mejores 3º → cuartos → semis → final
+        const [ga, gb, gc] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B', gkeys[2] ?? 'C'];
         out.push(
             { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 1` },
             { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 2` },
-            { teamA: `1º Gr.${gc}`, teamB: `2º Gr.${gd}`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 3` },
-            { teamA: `1º Gr.${gd}`, teamB: `2º Gr.${gc}`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 4` },
+            { teamA: `1º Gr.${gc}`, teamB: `3º mejor 2`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 3` },
+            { teamA: `2º Gr.${gc}`, teamB: `3º mejor 1`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 4` },
         );
         out.push(
             { teamA: `Gan.Ctos ${code} 1`, teamB: `Gan.Ctos ${code} 2`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 1` },
             { teamA: `Gan.Ctos ${code} 3`, teamB: `Gan.Ctos ${code} 4`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 2` },
         );
         out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 3, roundLabel: `Final · ${code}` });
-    } else if (numGroups === 3) {
-        // 11 equipos (3 grupos): mejores 4 a semis → final
-        const [ga, gb, gc] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B', gkeys[2] ?? 'C'];
-        out.push(
-            { teamA: `1º Grupo ${ga}`, teamB: `2º mejor 3G`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 1` },
-            { teamA: `1º Grupo ${gb}`, teamB: `1º Grupo ${gc}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 2` },
-        );
-        out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 2, roundLabel: `Final · ${code}` });
     } else if (numGroups >= 2) {
-        // 6–10 equipos: semis + final
+        // 7–10 equipos: semis + final
         const [ga, gb] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B'];
         out.push(
             { teamA: `1º Grupo ${ga}`, teamB: `2º Grupo ${gb}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 1` },
             { teamA: `1º Grupo ${gb}`, teamB: `2º Grupo ${ga}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 2` },
         );
         out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 2, roundLabel: `Final · ${code}` });
-    } else if (n >= 4) {
-        // 4–5 equipos, 1 grupo: liguilla + semis (1vs3, 2vs4) + final
-        out.push(
-            { teamA: `1º Grupo A`, teamB: `3º Grupo A`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 1` },
-            { teamA: `2º Grupo A`, teamB: `4º Grupo A`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 2` },
-        );
-        out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 2, roundLabel: `Final · ${code}` });
     } else {
-        // 2–3 equipos: solo final
+        // 2–6 equipos, 1 grupo: liguilla → final 1º vs 2º (sin semifinales)
         out.push({ teamA: '1º Clasificado', teamB: '2º Clasificado', division: div, phase: 'FINAL', phaseOrder: 1, roundLabel: `Final · ${code}` });
     }
 
@@ -317,7 +331,8 @@ function countRealRealMatches(specs: RawMatchSpec[], realNames: Set<string>): Ma
 }
 
 /**
- * Añade partidos de grupo repetidos hasta que cada equipo tenga al menos `min` enfrentamientos reales.
+ * Añade partidos de liguilla/grupo repetidos hasta que cada equipo tenga al menos `min` enfrentamientos reales.
+ * Los extras se generan siempre dentro del mismo grupo de competición.
  */
 function ensureMinRealMatchesPerTeam(teams: Team[], specs: RawMatchSpec[], min: number): RawMatchSpec[] {
     const realNames = new Set(teams.map((t) => t.name));
@@ -330,6 +345,14 @@ function ensureMinRealMatchesPerTeam(teams: Team[], specs: RawMatchSpec[], min: 
     let supIdx = 1;
 
     const counts = (): Map<string, number> => countRealRealMatches(out, realNames);
+
+    const existingGroupPair = (a: string, b: string, groupKey: string): boolean =>
+        out.some(
+            (s) =>
+                s.phase === 'GRUPOS' &&
+                s.roundLabel.includes(`${code}-${groupKey}`) &&
+                ((s.teamA === a && s.teamB === b) || (s.teamA === b && s.teamB === a))
+        );
 
     for (let iter = 0; iter < 800; iter++) {
         const m = counts();
@@ -347,8 +370,14 @@ function ensureMinRealMatchesPerTeam(teams: Team[], specs: RawMatchSpec[], min: 
         const g = groups.find((gr) => gr.names.includes(needy!));
         if (!g || g.names.length < 2) break;
 
-        const others = g.names.filter((n) => n !== needy).sort((a, b) => (m.get(a) ?? 0) - (m.get(b) ?? 0));
-        const partner = others[0];
+        const others = g.names
+            .filter((n) => n !== needy)
+            .sort((a, b) => {
+                const diff = (m.get(a) ?? 0) - (m.get(b) ?? 0);
+                if (diff !== 0) return diff;
+                return a.localeCompare(b, 'es');
+            });
+        const partner = others.find((n) => !existingGroupPair(needy!, n, g.key)) ?? others[0];
         if (!partner) break;
 
         out.push({
@@ -460,20 +489,21 @@ const DEFAULT_COURTS_4 = ['Campo 1', 'Campo 2', 'Campo 3', 'Campo 4'];
 export function defaultConfigs(): Record<MuskizScheduleDayLabel, DayConfig> {
     return {
         Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:00', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6 },
-        Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:00', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6, lunch: { start: '14:00', end: '15:50' } },
+        Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:00', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6, lunch: { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END } },
         Domingo: { label: 'Domingo', dayShort: 'Dom', playStart: '09:00', playEndExclusive: '15:00', courts: DEFAULT_COURTS_4 },
     };
 }
 
 export function getDayScheduleConfig(
     day: MuskizScheduleDayLabel,
-    options?: MuskizSimulatorOptions
+    _options?: MuskizSimulatorOptions
 ): DayConfig {
     const configs = defaultConfigs();
     if (day === 'Sábado') {
-        const start = options?.lunchStart ?? configs.Sábado.lunch?.start ?? SATURDAY_LUNCH_START;
-        const end = options?.lunchEnd ?? configs.Sábado.lunch?.end ?? SATURDAY_LUNCH_DEFAULT_END;
-        configs.Sábado = { ...configs.Sábado, lunch: { start, end } };
+        configs.Sábado = {
+            ...configs.Sábado,
+            lunch: { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END },
+        };
     }
     return configs[day];
 }
@@ -487,42 +517,6 @@ export function buildFullDayTimeSlots(
     return generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch).map(minutesToTime);
 }
 
-/** Elige duración de comida (90, 110 o 120 min desde 14:00) que maximice partidos colocados. */
-function pickOptimalSaturdayLunch(
-    day: MuskizScheduleDayLabel,
-    specs: RawMatchSpec[],
-    configs: Record<MuskizScheduleDayLabel, DayConfig>,
-    slotMins: number
-): { start: string; end: string } {
-    const fallback = { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END };
-    if (day !== 'Sábado' || !configs.Sábado.lunch) return fallback;
-
-    const startMin = timeToMinutes(SATURDAY_LUNCH_START);
-    let best: { start: string; end: string; placed: number; endMin: number } = {
-        ...fallback,
-        placed: -1,
-        endMin: timeToMinutes(fallback.end),
-    };
-
-    for (const duration of LUNCH_DURATION_MINS_OPTIONS) {
-        const endMin = startMin + duration;
-        if (endMin + slotMins > timeToMinutes('22:00')) continue;
-        const lunch = { start: minutesToTime(startMin), end: minutesToTime(endMin) };
-        const trialConfigs = {
-            ...configs,
-            Sábado: { ...configs.Sábado, lunch },
-        };
-        const { placed } = scheduleGreedy(day, specs, trialConfigs, slotMins);
-        if (
-            placed.length > best.placed ||
-            (placed.length === best.placed && endMin < best.endMin)
-        ) {
-            best = { start: lunch.start, end: lunch.end, placed: placed.length, endMin };
-        }
-    }
-    return { start: best.start, end: best.end };
-}
-
 // ─── Planificador greedy ───────────────────────────────────────────────────
 interface ScheduledCell {
     timeMin: number;
@@ -534,7 +528,7 @@ interface ScheduledCell {
 /** Equipos ficticios de cruces (no aplican descanso entre partidos). */
 function isPlaceholderTeamName(name: string): boolean {
     return (
-        /grupo|gr\.\s*[a-d]\b|clasificado|gan\.|ganador|ctos?\b/i.test(name) ||
+        /grupo|gr\.\s*[a-d]\b|clasificado|gan\.|ganador|ctos?\b|mejor/i.test(name) ||
         /^\d+º/i.test(name)
     );
 }
@@ -574,13 +568,23 @@ function scheduleSpecBatch(
         forbiddenSlotStarts?: number[];
         /** Ningún partido de este lote antes de este minuto (fin de la fase anterior). */
         minSlotStartMin?: number;
+        /** Solo considera huecos aunque el equipo juegue la franja anterior (sin descanso). */
+        allowBackToBackOnly?: boolean;
+        /** Ignora franjas prohibidas/reservadas para intentar colocar partidos sin hueco. */
+        relaxSlotRestrictions?: boolean;
+        /** En recuperación: ignora también el mínimo de fase anterior. */
+        relaxPhaseMinStart?: boolean;
     }
 ): void {
     const { slotStartsMin, courts, slotMins, assigned } = state;
     const allowedSet =
-        options.allowedSlotStarts != null ? new Set(options.allowedSlotStarts) : null;
+        options.relaxSlotRestrictions || options.allowedSlotStarts == null
+            ? null
+            : new Set(options.allowedSlotStarts);
     const forbiddenSet =
-        options.forbiddenSlotStarts != null ? new Set(options.forbiddenSlotStarts) : null;
+        options.relaxSlotRestrictions || options.forbiddenSlotStarts == null
+            ? null
+            : new Set(options.forbiddenSlotStarts);
 
     const courtUsage = () => courts.map((_, ci) => assigned.filter((x) => x.courtIdx === ci).length);
 
@@ -664,7 +668,7 @@ function scheduleSpecBatch(
             slotTimePolicy === 'earliest' ? slotStartsMin : [...slotStartsMin].reverse();
 
         for (const ts of slotOrder) {
-            if (options.minSlotStartMin != null && ts < options.minSlotStartMin) continue;
+            if (!options.relaxPhaseMinStart && options.minSlotStartMin != null && ts < options.minSlotStartMin) continue;
             if (allowedSet && !allowedSet.has(ts)) continue;
             if (forbiddenSet?.has(ts)) continue;
 
@@ -691,8 +695,12 @@ function scheduleSpecBatch(
 
     for (const spec of sortedSpecs) {
         const teamsPair: [string, string] = [spec.teamA, spec.teamB];
-        let best = findBestSlot(teamsPair, false, options.slotTimePolicy);
-        if (!best) best = findBestSlot(teamsPair, true, options.slotTimePolicy);
+        let best = options.allowBackToBackOnly
+            ? findBestSlot(teamsPair, true, options.slotTimePolicy)
+            : findBestSlot(teamsPair, false, options.slotTimePolicy);
+        if (!best && !options.allowBackToBackOnly) {
+            best = findBestSlot(teamsPair, true, options.slotTimePolicy);
+        }
 
         if (best) {
             const te = best.ts + slotMins;
@@ -746,8 +754,46 @@ function specsByPhase(specs: RawMatchSpec[]) {
 }
 
 /**
+ * Reintenta colocar partidos PENDIENTE permitiendo partidos seguidos y relajando reservas de franja.
+ */
+function scheduleUnplacedRecovery(state: ScheduleGreedyState, slotStartsMin: number[]): void {
+    if (!state.unplaced.length) return;
+
+    const remaining = [...state.unplaced];
+    state.unplaced = [];
+
+    const phaseOrder: Phase[] = ['GRUPOS', 'CUARTOS', 'SEMIS', 'FINAL'];
+    for (const phase of phaseOrder) {
+        const batch = remaining.filter((s) => s.phase === phase);
+        if (!batch.length) continue;
+
+        const minAfterPrevious =
+            phase === 'GRUPOS' ? undefined : nextPhaseSlotMin(slotStartsMin, state);
+
+        scheduleSpecBatch(state, batch, {
+            slotTimePolicy: phase === 'FINAL' ? 'latest' : 'earliest',
+            allowBackToBackOnly: true,
+            relaxSlotRestrictions: true,
+            minSlotStartMin: minAfterPrevious,
+        });
+    }
+
+    if (!state.unplaced.length) return;
+
+    const still = [...state.unplaced];
+    state.unplaced = [];
+    scheduleSpecBatch(state, still, {
+        slotTimePolicy: 'earliest',
+        allowBackToBackOnly: true,
+        relaxSlotRestrictions: true,
+        relaxPhaseMinStart: true,
+    });
+}
+
+/**
  * Asigna horas y pistas evitando solapamiento de pista/equipo y, en lo posible,
- * dos partidos seguidos del mismo equipo (sin al menos una franja de descanso).
+ * dos partidos seguidos del mismo equipo. Si quedan sin hueco, reintenta permitiendo
+ * partidos consecutivos para reducir PENDIENTE.
  * Orden estricto: grupos → cuartos → semis → finales (al cierre del día).
  */
 function scheduleGreedy(
@@ -809,6 +855,8 @@ function scheduleGreedy(
         });
     }
 
+    scheduleUnplacedRecovery(state, slotStartsMin);
+
     return { placed: state.placed, unplaced: state.unplaced };
 }
 
@@ -868,7 +916,7 @@ export function buildMuskizDayDraftMatches(
 
         const groups = computeGroups(list);
         for (const g of groups ?? []) {
-            if (g.names.length < MIN_TEAMS_PER_GROUP) {
+            if (g.names.length < MIN_TEAMS_PER_GROUP && list.length > 6) {
                 warnings.push(
                     `«${div}» grupo ${g.key}: ${g.names.length} equipos (mínimo ${MIN_TEAMS_PER_GROUP}).`
                 );
@@ -877,19 +925,20 @@ export function buildMuskizDayDraftMatches(
 
         const baseSpecs = specsForPaidDivision(list);
         const realNames = new Set(list.map((t) => t.name));
+        const divMin = resolveMinMatchesForDivision(div, options);
 
-        // Intentar TARGET (4), bajar a MIN (3) si no caben
-        let divSpecs = ensureMinRealMatchesPerTeam(list, [...baseSpecs], TARGET_REAL_MATCHES_PER_TEAM);
-        if (allDivSpecs.length + divSpecs.length > cap) {
-            divSpecs = ensureMinRealMatchesPerTeam(list, [...baseSpecs], MIN_REAL_MATCHES_PER_TEAM);
+        let divSpecs = ensureMinRealMatchesPerTeam(list, [...baseSpecs], divMin);
+        let effectiveMin = divMin;
+        if (allDivSpecs.length + divSpecs.length > cap && divMin > 2) {
+            effectiveMin = Math.max(2, divMin - 1);
+            divSpecs = ensureMinRealMatchesPerTeam(list, [...baseSpecs], effectiveMin);
         }
 
-        // Verificar mínimo alcanzado
         const m = countRealRealMatches(divSpecs, realNames);
-        const underMin = list.filter((t) => (m.get(t.name) ?? 0) < MIN_REAL_MATCHES_PER_TEAM);
+        const underMin = list.filter((t) => (m.get(t.name) ?? 0) < effectiveMin);
         if (underMin.length > 0) {
             warnings.push(
-                `«${div}»: ${underMin.length} equipo(s) con menos de ${MIN_REAL_MATCHES_PER_TEAM} partidos reales (ej. ${underMin[0]!.name}).`
+                `«${div}»: ${underMin.length} equipo(s) con menos de ${effectiveMin} partidos reales (ej. ${underMin[0]!.name}).`
             );
         }
 
@@ -904,18 +953,19 @@ export function buildMuskizDayDraftMatches(
     const interleaved = interleaveSpecsByDivision(allDivSpecs);
 
     if (targetDay === 'Sábado') {
-        const lunch = pickOptimalSaturdayLunch(targetDay, interleaved, configs, slotMins);
-        configs.Sábado = { ...configs.Sábado, lunch };
-    } else if (options?.lunchStart && options?.lunchEnd) {
-        configs.Sábado = { ...configs.Sábado, lunch: { start: options.lunchStart, end: options.lunchEnd } };
+        configs.Sábado = {
+            ...configs.Sábado,
+            lunch: { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END },
+        };
     }
 
     const { placed, unplaced } = scheduleGreedy(targetDay, interleaved, configs, slotMins);
 
     const backToBack = countBackToBackTeamSlots(placed, slotMins);
     if (backToBack > 0) {
+        const pendingNote = unplaced.length > 0 ? ' Algunos siguen sin hueco (PENDIENTE).' : '';
         warnings.push(
-            `${backToBack} caso(s) de equipo con dos partidos seguidos (sin franja de descanso); revisa si puedes moverlos en la cuadrícula.`
+            `${backToBack} equipo(s) con dos partidos seguidos (permitido para encajar el calendario).${pendingNote} Puedes moverlos en la cuadrícula si quieres más descanso.`
         );
     }
 
