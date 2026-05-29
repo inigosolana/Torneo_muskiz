@@ -28,6 +28,8 @@ import {
     MIN_REAL_MATCHES_PER_TEAM,
 } from '../services/muskizScheduleSimulator';
 import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
+import { CompetitionPreviewToggle } from '../components/CompetitionPreviewToggle';
+import { CompetitionResultsTable } from '../components/CompetitionResultsTable';
 import {
     isPlayerRole,
     isPlayerEligibleForMatch,
@@ -118,8 +120,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const [structureDivision, setStructureDivision] = useState<Team['division']>('Senior Masculino');
     const [standingsDivision, setStandingsDivision] = useState<Team['division']>('Senior Masculino');
     const [standingsGroupFilter, setStandingsGroupFilter] = useState<string>('all');
-    const [standingsPreviewMode, setStandingsPreviewMode] = useState<'official' | 'simulation'>('official');
-    const [resultsPreviewMode, setResultsPreviewMode] = useState<'official' | 'simulation'>('official');
+    /** Simulación vs oficial en Calendario, Resultados y Clasificación */
+    const [compPreviewMode, setCompPreviewMode] = useState<'official' | 'simulation'>('official');
 
     // Acta Management State
     const [selectedMatchForReport, setSelectedMatchForReport] = useState<Match | null>(null);
@@ -342,7 +344,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     }, [activeTab]);
 
     // Competition Sub-tabs
-    const [compSubTab, setCompSubTab] = useState<'structure' | 'simulations' | 'published' | 'results' | 'standings'>('structure');
+    const [compSubTab, setCompSubTab] = useState<
+        'structure' | 'simulations' | 'calendar' | 'results' | 'standings'
+    >('structure');
 
     // --- Team Filters ---
     const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -387,6 +391,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         [simDrafts]
     );
 
+    const compPreviewMatches = useMemo(
+        () => (compPreviewMode === 'simulation' ? allSimDraftMatches : matches),
+        [compPreviewMode, allSimDraftMatches, matches]
+    );
+
     const standingsGroupsAvailable = useMemo(
         () => competitionGroupsForDivision(teams, standingsDivision, false),
         [teams, standingsDivision]
@@ -394,12 +403,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     const standings = useMemo(
         () =>
-            computeStandings(teams, standingsPreviewMode === 'simulation' ? allSimDraftMatches : matches, {
+            computeStandings(teams, compPreviewMode === 'simulation' ? allSimDraftMatches : matches, {
                 division: standingsDivision,
                 group: standingsGroupFilter,
                 onlyPaidTeams: true,
             }),
-        [matches, allSimDraftMatches, standingsPreviewMode, teams, standingsDivision, standingsGroupFilter]
+        [matches, allSimDraftMatches, compPreviewMode, teams, standingsDivision, standingsGroupFilter]
     );
 
     const officialCalendarStatus = useMemo(() => {
@@ -2153,11 +2162,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setCompSubTab('published')}
-                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'published' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                    onClick={() => setCompSubTab('calendar')}
+                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'calendar' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                                 >
-                                    <span className="material-symbols-outlined text-lg">calendar_month</span>
-                                    Oficial
+                                    <span className="material-symbols-outlined text-lg">calendar_view_month</span>
+                                    Calendario
                                 </button>
                                 <button
                                     type="button"
@@ -2165,7 +2174,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                     className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'results' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                                 >
                                     <span className="material-symbols-outlined text-lg">scoreboard</span>
-                                    Resultados y Actas
+                                    Resultados
                                 </button>
                                 <button
                                     type="button"
@@ -2693,17 +2702,10 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     </div>
                                                 </div>
 
-                                                {allSimDraftMatches.length > 0 && (
-                                                    <div className="mt-6">
-                                                        <CompetitionCalendarViews
-                                                            matches={allSimDraftMatches}
-                                                            teams={teams}
-                                                            title="Calendario de simulación (Viernes · Sábado · Domingo)"
-                                                            onUpdateMatch={(id, patch) => void handleUpdateDraftMatch(id, patch)}
-                                                            emptyMessage="Genera un borrador para ver el calendario en tabla."
-                                                        />
-                                                    </div>
-                                                )}
+                                                <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 px-4 py-3 text-xs text-indigo-950">
+                                                    El <strong>calendario en tabla</strong>, los <strong>resultados con horario</strong> y la{' '}
+                                                    <strong>clasificación</strong> están en sus pestañas. Usa el interruptor Simulación / Oficial en cada una.
+                                                </div>
 
                                                 <div>
                                                     <h4 className="text-sm font-black uppercase text-slate-500 mb-3">
@@ -2747,282 +2749,153 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                     </div>
                                 )}
 
-                                {/* 3. CALENDARIO OFICIAL (tabla matches) */}
-                                {compSubTab === 'published' && (
+                                {/* Calendario general (tabla por día / por categoría) */}
+                                {compSubTab === 'calendar' && (
                                     <div className="space-y-6">
-                                        <div
-                                            className={`rounded-xl border p-4 text-sm ${
-                                                officialCalendarStatus.variant === 'official'
-                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
-                                                    : officialCalendarStatus.variant === 'draft'
-                                                      ? 'border-amber-200 bg-amber-50 text-amber-950'
-                                                      : officialCalendarStatus.variant === 'mixed'
-                                                        ? 'border-violet-200 bg-violet-50 text-violet-950'
-                                                        : 'border-slate-200 bg-slate-50 text-slate-700'
-                                            }`}
-                                        >
-                                            <p className="text-xs font-black uppercase tracking-wide opacity-80 mb-1">Estado (tabla matches)</p>
-                                            <p className="font-black text-base">{officialCalendarStatus.headline}</p>
-                                            <p className="mt-1 leading-relaxed">{officialCalendarStatus.sub}</p>
-                                            <p className="mt-2 text-xs opacity-90">
-                                                El interruptor global sigue en <strong>Simulaciones</strong>; además, cada partido tiene su propio{' '}
-                                                <code className="rounded bg-white/70 px-1">is_public</code>.
-                                            </p>
-                                        </div>
-
-                                        <div className="bg-slate-100 border border-slate-200 p-4 rounded-lg text-sm text-slate-700">
-                                            <p>
-                                                <strong>Calendario oficial</strong>: lo que hay en la base de datos <code className="bg-white px-1 rounded">matches</code>.
-                                                Aquí ves <strong>todos</strong> los partidos (públicos y privados). Los visitantes sólo ven los públicos.
-                                            </p>
-                                        </div>
-
-                                        <div className="flex flex-wrap gap-2 items-center">
-                                            {matches.length > 0 && (
-                                                <>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => void handleMakeAllMatchesPublic()}
-                                                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-wide flex items-center gap-2 shadow-sm"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">visibility</span>
-                                                        Hacer público el calendario actual
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (
-                                                                window.confirm(
-                                                                    '¿Borrar TODOS los partidos oficiales de la base de datos? Esta acción deja sin calendario publicado hasta que guardes otra vez.',
-                                                                )
-                                                            ) {
-                                                                void onUpdateMatches([]);
-                                                            }
-                                                        }}
-                                                        className="bg-red-50 text-red-600 border border-red-100 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">delete_sweep</span>
-                                                        Limpiar calendario oficial
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
-
-                                        {matches.length > 0 && (
-                                            <CompetitionCalendarViews
-                                                matches={matches}
-                                                teams={teams}
-                                                title="Calendario oficial (Viernes · Sábado · Domingo)"
-                                                emptyMessage="No hay partidos en la tabla oficial."
-                                            />
-                                        )}
-
-                                        <div className="grid gap-4">
-                                            <h4 className="text-sm font-black uppercase text-slate-500">Lista de partidos oficiales</h4>
-                                            {matches.length === 0 ? (
-                                                <div className="text-center text-slate-400 py-8">No hay partidos en la tabla oficial.</div>
-                                            ) : (
-                                                matches.map((match) => (
-                                                    <div
-                                                        key={match.id}
-                                                        className="flex flex-col lg:flex-row flex-wrap justify-between items-stretch lg:items-center gap-3 p-4 border border-slate-100 rounded-lg bg-slate-50/50"
-                                                    >
-                                                        <div className="flex flex-col mb-2 sm:mb-0 gap-1">
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                <span
-                                                                    className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                                                                        match.isPublic
-                                                                            ? 'bg-emerald-100 text-emerald-800'
-                                                                            : 'bg-amber-100 text-amber-900'
-                                                                    }`}
-                                                                >
-                                                                    {match.isPublic ? 'Público' : 'Privado'}
-                                                                </span>
-                                                                <span className="bg-primary/10 text-primary-dark text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                                                                    {match.round || 'Partido'}
-                                                                </span>
-                                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">
-                                                                    {match.time}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-6">
-                                                            <span className="font-bold text-slate-800">{match.teamA}</span>
-                                                            <span className="text-xs text-slate-400">vs</span>
-                                                            <span className="font-bold text-slate-800">{match.teamB}</span>
-                                                        </div>
-                                                        <div className="text-xs text-slate-500 flex items-center gap-1 lg:mr-auto">
-                                                            <span className="material-symbols-outlined text-sm">location_on</span> {match.court}
-                                                        </div>
-                                                        {match.id && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => navigate(`/admin/match-report/${match.id}`)}
-                                                                className="inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm hover:border-primary hover:text-primary"
-                                                            >
-                                                                <span className="material-symbols-outlined text-[16px]">print</span>
-                                                                Generar Acta
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* 2. RESULTS VIEW (With Actas) */}
-                                {compSubTab === 'results' && (
-                                    <div className="grid gap-4">
-                                        {/* Toggle Simulación / Oficial */}
-                                        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                                            <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 p-1">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setResultsPreviewMode('official')}
-                                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 ${resultsPreviewMode === 'official' ? 'bg-teal-700 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
-                                                >
-                                                    <span className="material-symbols-outlined text-sm">public</span>
-                                                    Oficial
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setResultsPreviewMode('simulation')}
-                                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 ${resultsPreviewMode === 'simulation' ? 'bg-purple-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
-                                                >
-                                                    <span className="material-symbols-outlined text-sm">science</span>
-                                                    Simulación
-                                                </button>
-                                            </div>
-                                            {resultsPreviewMode === 'simulation' && (
-                                                <span className="text-[11px] text-purple-700 font-medium flex items-center gap-1">
-                                                    <span className="material-symbols-outlined text-sm">info</span>
-                                                    Vista previa — los partidos de simulación no tienen resultados reales
-                                                </span>
-                                            )}
-                                        </div>
-                                        {resultsPreviewMode === 'official' && (
-                                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg flex items-start gap-3">
-                                            <span className="material-symbols-outlined text-blue-500">info</span>
-                                            <p className="text-sm text-blue-700">Edita el resultado rápido o pulsa en "Acta" para subir foto o gestionar goles por jugador.</p>
-                                        </div>
-                                        )}
-                                        {resultsPreviewMode === 'simulation' && allSimDraftMatches.length > 0 && (
-                                            <CompetitionCalendarViews
-                                                matches={allSimDraftMatches}
-                                                teams={teams}
-                                                title="Calendario simulado"
-                                                onUpdateMatch={(id, patch) => void handleUpdateDraftMatch(id, patch)}
-                                            />
-                                        )}
-                                        {(resultsPreviewMode === 'official' ? matches : allSimDraftMatches).map(match => (
-                                            <div key={match.id} className={`flex flex-col md:flex-row justify-between items-center p-4 border rounded-lg hover:shadow-sm transition-shadow ${resultsPreviewMode === 'simulation' ? 'bg-purple-50/40 border-purple-100' : 'bg-white border-slate-200'}`}>
-                                                <div className="flex flex-col w-full md:w-auto mb-4 md:mb-0">
-                                                    <span className="text-xs text-slate-400 font-mono">{match.round} - {match.time}</span>
-                                                    <span className="text-[10px] text-slate-400">{match.court}</span>
-                                                </div>
-
-                                                <div className="flex items-center gap-4 justify-center flex-1">
-                                                    <span className="font-bold text-slate-800 w-32 text-right truncate">{match.teamA}</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <input
-                                                            type="number"
-                                                            readOnly={resultsPreviewMode === 'simulation'}
-                                                            className={`w-14 text-center text-lg font-bold border rounded-lg p-1 ${resultsPreviewMode === 'simulation' ? 'bg-purple-50 border-purple-200 text-purple-400 cursor-not-allowed' : 'bg-slate-50 border-slate-300'}`}
-                                                            value={match.scoreA ?? ''}
-                                                            onChange={(e) => resultsPreviewMode === 'official' && updateMatchScore(match.id, e.target.value, match.scoreB?.toString() || '')}
-                                                            placeholder="-"
-                                                        />
-                                                        <span>:</span>
-                                                        <input
-                                                            type="number"
-                                                            readOnly={resultsPreviewMode === 'simulation'}
-                                                            className={`w-14 text-center text-lg font-bold border rounded-lg p-1 ${resultsPreviewMode === 'simulation' ? 'bg-purple-50 border-purple-200 text-purple-400 cursor-not-allowed' : 'bg-slate-50 border-slate-300'}`}
-                                                            value={match.scoreB ?? ''}
-                                                            onChange={(e) => resultsPreviewMode === 'official' && updateMatchScore(match.id, match.scoreA?.toString() || '', e.target.value)}
-                                                            placeholder="-"
-                                                        />
-                                                    </div>
-                                                    <span className="font-bold text-slate-800 w-32 truncate">{match.teamB}</span>
-                                                </div>
-
-                                                <div className="w-full md:w-auto flex flex-wrap justify-end gap-2 mt-4 md:mt-0">
-                                                    {resultsPreviewMode === 'simulation' && (
-                                                        <span className="text-[9px] text-purple-500 font-black px-1.5 py-0.5 bg-purple-50 rounded border border-purple-100 self-center">SIMULACIÓN</span>
-                                                    )}
-                                                    {match.id && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => navigate(`/admin/match-report/${match.id}`)}
-                                                            className="px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 border border-teal-200 bg-teal-50 text-teal-900 hover:bg-teal-100 transition-colors"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">print</span>
-                                                            Generar Acta
-                                                        </button>
-                                                    )}
-                                                    {match.status === 'FINISHED' && (
-                                                        <button
-                                                            onClick={() => handleGenerateSocialPost(match)}
-                                                            className="px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">auto_awesome</span>
-                                                            Post IG
-                                                        </button>
-                                                    )}
-                                                    <button
-                                                        onClick={() => openReportModal(match)}
-                                                        className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 border transition-colors ${match.report ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-primary hover:text-primary'}`}
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">description</span>
-                                                        {match.report ? 'Ver Acta' : 'Crear Acta'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* 5. STANDINGS */}
-                                {compSubTab === 'standings' && (
-                                    <div className="space-y-4">
-                                        {/* Toggle Simulación / Oficial */}
-                                        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                                            <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 p-1">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setStandingsPreviewMode('official')}
-                                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 ${standingsPreviewMode === 'official' ? 'bg-teal-700 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
-                                                >
-                                                    <span className="material-symbols-outlined text-sm">public</span>
-                                                    Oficial
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setStandingsPreviewMode('simulation')}
-                                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 ${standingsPreviewMode === 'simulation' ? 'bg-purple-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
-                                                >
-                                                    <span className="material-symbols-outlined text-sm">science</span>
-                                                    Simulación
-                                                </button>
-                                            </div>
-                                            {standingsPreviewMode === 'simulation' && (
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-[11px] text-purple-700 font-medium flex items-center gap-1">
-                                                        <span className="material-symbols-outlined text-sm">info</span>
-                                                        Vista previa con borradores ({allSimDraftMatches.length} partidos)
-                                                    </span>
+                                        <CompetitionPreviewToggle
+                                            mode={compPreviewMode}
+                                            onChange={setCompPreviewMode}
+                                            simMatchCount={allSimDraftMatches.length}
+                                            extra={
+                                                compPreviewMode === 'simulation' ? (
                                                     <button
                                                         type="button"
                                                         onClick={() => void handlePublishActiveDraft()}
                                                         disabled={!activeDraft || activeDraft.matches.length === 0}
-                                                        className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors"
+                                                        className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5"
                                                     >
                                                         <span className="material-symbols-outlined text-sm">publish</span>
                                                         Publicar borrador activo
                                                     </button>
+                                                ) : undefined
+                                            }
+                                        />
+                                        {compPreviewMode === 'official' && (
+                                            <>
+                                                <div
+                                                    className={`rounded-xl border p-4 text-sm ${
+                                                        officialCalendarStatus.variant === 'official'
+                                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                                                            : officialCalendarStatus.variant === 'draft'
+                                                              ? 'border-amber-200 bg-amber-50 text-amber-950'
+                                                              : officialCalendarStatus.variant === 'mixed'
+                                                                ? 'border-violet-200 bg-violet-50 text-violet-950'
+                                                                : 'border-slate-200 bg-slate-50 text-slate-700'
+                                                    }`}
+                                                >
+                                                    <p className="text-xs font-black uppercase tracking-wide opacity-80 mb-1">Estado BD</p>
+                                                    <p className="font-black text-base">{officialCalendarStatus.headline}</p>
+                                                    <p className="mt-1 leading-relaxed">{officialCalendarStatus.sub}</p>
                                                 </div>
-                                            )}
-                                        </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {matches.length > 0 && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => void handleMakeAllMatchesPublic()}
+                                                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase flex items-center gap-2"
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">visibility</span>
+                                                                Hacer público el calendario
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (
+                                                                        window.confirm(
+                                                                            '¿Borrar TODOS los partidos oficiales de la base de datos?',
+                                                                        )
+                                                                    ) {
+                                                                        void onUpdateMatches([]);
+                                                                    }
+                                                                }}
+                                                                className="bg-red-50 text-red-600 border border-red-100 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2"
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">delete_sweep</span>
+                                                                Limpiar calendario oficial
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </>
+                                        )}
+                                        <CompetitionCalendarViews
+                                            matches={compPreviewMatches}
+                                            teams={teams}
+                                            title={
+                                                compPreviewMode === 'simulation'
+                                                    ? 'Calendario simulado (Viernes · Sábado · Domingo)'
+                                                    : 'Calendario oficial (Viernes · Sábado · Domingo)'
+                                            }
+                                            onUpdateMatch={
+                                                compPreviewMode === 'simulation'
+                                                    ? (id, patch) => void handleUpdateDraftMatch(id, patch)
+                                                    : undefined
+                                            }
+                                            emptyMessage={
+                                                compPreviewMode === 'simulation'
+                                                    ? 'Genera borradores en Simulaciones para ver el calendario en tabla.'
+                                                    : 'No hay partidos oficiales. Publica desde Simulaciones.'
+                                            }
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Resultados con horario */}
+                                {compSubTab === 'results' && (
+                                    <div className="space-y-4">
+                                        <CompetitionPreviewToggle
+                                            mode={compPreviewMode}
+                                            onChange={setCompPreviewMode}
+                                            simMatchCount={allSimDraftMatches.length}
+                                        />
+                                        {compPreviewMode === 'official' && (
+                                            <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg flex items-start gap-3 text-sm text-blue-700">
+                                                <span className="material-symbols-outlined text-blue-500">info</span>
+                                                <p>
+                                                    Tabla ordenada por <strong>día, hora y campo</strong>. Edita el marcador o abre el acta en cada fila.
+                                                </p>
+                                            </div>
+                                        )}
+                                        <CompetitionResultsTable
+                                            matches={compPreviewMatches}
+                                            previewMode={compPreviewMode}
+                                            onUpdateScore={
+                                                compPreviewMode === 'official' ? updateMatchScore : undefined
+                                            }
+                                            onOpenReport={compPreviewMode === 'official' ? openReportModal : undefined}
+                                            onNavigateActa={
+                                                compPreviewMode === 'official'
+                                                    ? (id) => navigate(`/admin/match-report/${id}`)
+                                                    : undefined
+                                            }
+                                            onSocialPost={
+                                                compPreviewMode === 'official' ? handleGenerateSocialPost : undefined
+                                            }
+                                            emptyMessage={
+                                                compPreviewMode === 'simulation'
+                                                    ? 'No hay partidos en los borradores. Genera el calendario en Simulaciones.'
+                                                    : 'No hay partidos oficiales con horario.'
+                                            }
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Clasificación */}
+                                {compSubTab === 'standings' && (
+                                    <div className="space-y-4">
+                                        <CompetitionPreviewToggle
+                                            mode={compPreviewMode}
+                                            onChange={setCompPreviewMode}
+                                            simMatchCount={allSimDraftMatches.length}
+                                        />
+                                        {compPreviewMatches.length === 0 && (
+                                            <p className="text-sm text-slate-500 text-center py-6 border border-dashed rounded-lg">
+                                                {compPreviewMode === 'simulation'
+                                                    ? 'Sin partidos en borradores: la clasificación se calculará cuando haya resultados en los partidos simulados.'
+                                                    : 'Sin partidos oficiales todavía.'}
+                                            </p>
+                                        )}
                                         <div className="flex flex-col gap-3">
                                             <div className="flex overflow-x-auto gap-2 pb-1">
                                                 {DIVISIONS_LIST.map((cat) => (
