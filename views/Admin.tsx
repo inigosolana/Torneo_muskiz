@@ -118,6 +118,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const [structureDivision, setStructureDivision] = useState<Team['division']>('Senior Masculino');
     const [standingsDivision, setStandingsDivision] = useState<Team['division']>('Senior Masculino');
     const [standingsGroupFilter, setStandingsGroupFilter] = useState<string>('all');
+    const [standingsPreviewMode, setStandingsPreviewMode] = useState<'official' | 'simulation'>('official');
+    const [resultsPreviewMode, setResultsPreviewMode] = useState<'official' | 'simulation'>('official');
 
     // Acta Management State
     const [selectedMatchForReport, setSelectedMatchForReport] = useState<Match | null>(null);
@@ -380,6 +382,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         return [...ordered, ...extras];
     }, [categories, rosterTeamsFiltered]);
 
+    const allSimDraftMatches = useMemo(
+        () => simDrafts.flatMap((d) => d.matches),
+        [simDrafts]
+    );
+
     const standingsGroupsAvailable = useMemo(
         () => competitionGroupsForDivision(teams, standingsDivision, false),
         [teams, standingsDivision]
@@ -387,12 +394,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     const standings = useMemo(
         () =>
-            computeStandings(teams, matches, {
+            computeStandings(teams, standingsPreviewMode === 'simulation' ? allSimDraftMatches : matches, {
                 division: standingsDivision,
                 group: standingsGroupFilter,
                 onlyPaidTeams: true,
             }),
-        [matches, teams, standingsDivision, standingsGroupFilter]
+        [matches, allSimDraftMatches, standingsPreviewMode, teams, standingsDivision, standingsGroupFilter]
     );
 
     const officialCalendarStatus = useMemo(() => {
@@ -2859,11 +2866,40 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 {/* 2. RESULTS VIEW (With Actas) */}
                                 {compSubTab === 'results' && (
                                     <div className="grid gap-4">
-                                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg mb-4 flex items-start gap-3">
+                                        {/* Toggle Simulación / Oficial */}
+                                        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                            <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 p-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setResultsPreviewMode('official')}
+                                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 ${resultsPreviewMode === 'official' ? 'bg-teal-700 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">public</span>
+                                                    Oficial
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setResultsPreviewMode('simulation')}
+                                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 ${resultsPreviewMode === 'simulation' ? 'bg-purple-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">science</span>
+                                                    Simulación
+                                                </button>
+                                            </div>
+                                            {resultsPreviewMode === 'simulation' && (
+                                                <span className="text-[11px] text-purple-700 font-medium flex items-center gap-1">
+                                                    <span className="material-symbols-outlined text-sm">info</span>
+                                                    Vista previa — los partidos de simulación no tienen resultados reales
+                                                </span>
+                                            )}
+                                        </div>
+                                        {resultsPreviewMode === 'official' && (
+                                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg flex items-start gap-3">
                                             <span className="material-symbols-outlined text-blue-500">info</span>
                                             <p className="text-sm text-blue-700">Edita el resultado rápido o pulsa en "Acta" para subir foto o gestionar goles por jugador.</p>
                                         </div>
-                                        {matches.map(match => (
+                                        )}
+                                        {(resultsPreviewMode === 'official' ? matches : allSimDraftMatches).map(match => (
                                             <div key={match.id} className="flex flex-col md:flex-row justify-between items-center p-4 border border-slate-200 rounded-lg hover:shadow-sm transition-shadow bg-white">
                                                 <div className="flex flex-col w-full md:w-auto mb-4 md:mb-0">
                                                     <span className="text-xs text-slate-400 font-mono">{match.round} - {match.time}</span>
@@ -2893,7 +2929,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 </div>
 
                                                 <div className="w-full md:w-auto flex flex-wrap justify-end gap-2 mt-4 md:mt-0">
-                                                    {match.id && (
+                                                    {resultsPreviewMode === 'official' && match.id && (
                                                         <button
                                                             type="button"
                                                             onClick={() => navigate(`/admin/match-report/${match.id}`)}
@@ -2903,7 +2939,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             Generar Acta
                                                         </button>
                                                     )}
-                                                    {match.status === 'FINISHED' && (
+                                                    {resultsPreviewMode === 'official' && match.status === 'FINISHED' && (
                                                         <button
                                                             onClick={() => handleGenerateSocialPost(match)}
                                                             className="px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors"
@@ -2912,6 +2948,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             Post IG
                                                         </button>
                                                     )}
+                                                    {resultsPreviewMode === 'official' && (
                                                     <button
                                                         onClick={() => openReportModal(match)}
                                                         className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 border transition-colors ${match.report ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-primary hover:text-primary'}`}
@@ -2919,6 +2956,10 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         <span className="material-symbols-outlined text-sm">description</span>
                                                         {match.report ? 'Ver Acta' : 'Crear Acta'}
                                                     </button>
+                                                    )}
+                                                    {resultsPreviewMode === 'simulation' && (
+                                                        <span className="text-[10px] text-purple-500 font-bold px-2 py-1 bg-purple-50 rounded border border-purple-100">BORRADOR</span>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
@@ -2928,6 +2969,44 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 {/* 5. STANDINGS */}
                                 {compSubTab === 'standings' && (
                                     <div className="space-y-4">
+                                        {/* Toggle Simulación / Oficial */}
+                                        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                            <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 p-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setStandingsPreviewMode('official')}
+                                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 ${standingsPreviewMode === 'official' ? 'bg-teal-700 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">public</span>
+                                                    Oficial
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setStandingsPreviewMode('simulation')}
+                                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 ${standingsPreviewMode === 'simulation' ? 'bg-purple-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">science</span>
+                                                    Simulación
+                                                </button>
+                                            </div>
+                                            {standingsPreviewMode === 'simulation' && (
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-[11px] text-purple-700 font-medium flex items-center gap-1">
+                                                        <span className="material-symbols-outlined text-sm">info</span>
+                                                        Vista previa con borradores ({allSimDraftMatches.length} partidos)
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handlePublishActiveDraft()}
+                                                        disabled={!activeDraft || activeDraft.matches.length === 0}
+                                                        className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">publish</span>
+                                                        Publicar borrador activo
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                         <div className="flex flex-col gap-3">
                                             <div className="flex overflow-x-auto gap-2 pb-1">
                                                 {DIVISIONS_LIST.map((cat) => (
