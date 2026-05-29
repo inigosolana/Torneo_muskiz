@@ -61,6 +61,13 @@ export const siteContent: SiteContent = {
       tier: 'Gold',
       websiteUrl: 'https://www.disfrutabizkaia.com/establecimiento/itxas-mendi-montemar-bar/',
     },
+    {
+      id: 's-xbotgo',
+      name: 'XbotGo',
+      logoUrl: '/patrocinadores/xbotgo.png',
+      tier: 'Gold',
+      websiteUrl: 'https://www.xbotgo.com/',
+    },
     { id: 's3b', name: 'Lurpelan', logoUrl: '/patrocinadores/lurpelan.png', tier: 'Gold' },
     { id: 's4', name: 'Artecarne', logoUrl: '/patrocinadores/artecarne.png', tier: 'Gold' },
     { id: 's5', name: 'Garmendia', logoUrl: '/patrocinadores/garmendia.jpg', tier: 'Gold' },
