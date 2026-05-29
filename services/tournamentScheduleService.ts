@@ -9,7 +9,7 @@ export const WEEKEND_SCHEDULE_DAYS: MuskizScheduleDayLabel[] = ['Viernes', 'Sáb
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function matchScheduleDay(m: Match): MuskizScheduleDayLabel | null {
+export function inferMatchScheduleDay(m: Match): MuskizScheduleDayLabel | null {
     if (m.scheduleDay && WEEKEND_SCHEDULE_DAYS.includes(m.scheduleDay as MuskizScheduleDayLabel)) {
         return m.scheduleDay as MuskizScheduleDayLabel;
     }
@@ -59,7 +59,7 @@ export function normalizeCalendarSimulations(payload: CalendarSimulationsPayload
                 matchesByDay[day].push(...d.matches);
             } else {
                 for (const m of d.matches) {
-                    const md = matchScheduleDay(m) ?? day;
+                    const md = inferMatchScheduleDay(m) ?? day;
                     matchesByDay[md].push(m);
                 }
             }
@@ -72,7 +72,7 @@ export function normalizeCalendarSimulations(payload: CalendarSimulationsPayload
         if (!d.scheduleDay) {
             let assigned = false;
             for (const m of d.matches) {
-                const md = matchScheduleDay(m);
+                const md = inferMatchScheduleDay(m);
                 if (md) {
                     matchesByDay[md].push(m);
                     assigned = true;

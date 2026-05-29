@@ -27,7 +27,7 @@ import {
     getMuskizDayGenDefaults,
     MIN_REAL_MATCHES_PER_TEAM,
 } from '../services/muskizScheduleSimulator';
-import { SimulationScheduleGridTabs } from '../components/SimulationDayGrid';
+import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
 import {
     isPlayerRole,
     isPlayerEligibleForMatch,
@@ -1050,25 +1050,21 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         matchId: string,
         patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>
     ) => {
-        if (!activeDraftId) return;
-        const next = simDrafts.map((d) =>
-            d.id !== activeDraftId
-                ? d
-                : {
-                      ...d,
-                      matches: d.matches.map((m) =>
-                          m.id === matchId
-                              ? {
-                                    ...m,
-                                    ...patch,
-                                    round: patch.time && patch.time !== m.time
-                                        ? m.round?.replace(/\d{2}:\d{2}/, patch.time) ?? m.round
-                                        : m.round,
-                                }
-                              : m
-                      ),
-                  }
-        );
+        const next = simDrafts.map((d) => ({
+            ...d,
+            matches: d.matches.map((m) =>
+                m.id === matchId
+                    ? {
+                          ...m,
+                          ...patch,
+                          round:
+                              patch.time && patch.time !== m.time
+                                  ? (m.round?.replace(/\d{2}:\d{2}/, patch.time) ?? m.round)
+                                  : m.round,
+                      }
+                    : m
+            ),
+        }));
         setSimDrafts(next);
         await persistSimDraftsAsync(next, activeDraftId);
     };
@@ -2697,19 +2693,21 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     </div>
                                                 </div>
 
-                                                {activeDraft && activeDraft.matches.length > 0 && (
+                                                {allSimDraftMatches.length > 0 && (
                                                     <div className="mt-6">
-                                                        <SimulationScheduleGridTabs
-                                                            matches={activeDraft.matches}
-                                                            fixedDay={activeDraft.scheduleDay}
+                                                        <CompetitionCalendarViews
+                                                            matches={allSimDraftMatches}
+                                                            teams={teams}
+                                                            title="Calendario de simulación (Viernes · Sábado · Domingo)"
                                                             onUpdateMatch={(id, patch) => void handleUpdateDraftMatch(id, patch)}
+                                                            emptyMessage="Genera un borrador para ver el calendario en tabla."
                                                         />
                                                     </div>
                                                 )}
 
                                                 <div>
                                                     <h4 className="text-sm font-black uppercase text-slate-500 mb-3">
-                                                        Vista previa del borrador ({activeDraft?.matches.length ?? 0} partidos)
+                                                        Lista del borrador activo ({activeDraft?.matches.length ?? 0} partidos)
                                                     </h4>
                                                     <div className="grid gap-4">
                                                         {!activeDraft || activeDraft.matches.length === 0 ? (
@@ -2810,7 +2808,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             )}
                                         </div>
 
+                                        {matches.length > 0 && (
+                                            <CompetitionCalendarViews
+                                                matches={matches}
+                                                teams={teams}
+                                                title="Calendario oficial (Viernes · Sábado · Domingo)"
+                                                emptyMessage="No hay partidos en la tabla oficial."
+                                            />
+                                        )}
+
                                         <div className="grid gap-4">
+                                            <h4 className="text-sm font-black uppercase text-slate-500">Lista de partidos oficiales</h4>
                                             {matches.length === 0 ? (
                                                 <div className="text-center text-slate-400 py-8">No hay partidos en la tabla oficial.</div>
                                             ) : (
@@ -2898,6 +2906,14 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             <span className="material-symbols-outlined text-blue-500">info</span>
                                             <p className="text-sm text-blue-700">Edita el resultado rápido o pulsa en "Acta" para subir foto o gestionar goles por jugador.</p>
                                         </div>
+                                        )}
+                                        {resultsPreviewMode === 'simulation' && allSimDraftMatches.length > 0 && (
+                                            <CompetitionCalendarViews
+                                                matches={allSimDraftMatches}
+                                                teams={teams}
+                                                title="Calendario simulado"
+                                                onUpdateMatch={(id, patch) => void handleUpdateDraftMatch(id, patch)}
+                                            />
                                         )}
                                         {(resultsPreviewMode === 'official' ? matches : allSimDraftMatches).map(match => (
                                             <div key={match.id} className={`flex flex-col md:flex-row justify-between items-center p-4 border rounded-lg hover:shadow-sm transition-shadow ${resultsPreviewMode === 'simulation' ? 'bg-purple-50/40 border-purple-100' : 'bg-white border-slate-200'}`}>

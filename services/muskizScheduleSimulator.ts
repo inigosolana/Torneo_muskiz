@@ -615,10 +615,30 @@ function matchBelongsToDay(m: Match, day: MuskizScheduleDayLabel): boolean {
 }
 
 /** Extrae el código de categoría (CF, CM, JF…) del campo `round`. */
+const CODE_TO_DIVISION: Record<string, Team['division']> = {
+    CF: 'Cadete Femenino',
+    CM: 'Cadete Masculino',
+    JF: 'Juvenil Femenino',
+    JM: 'Juvenil Masculino',
+    SF: 'Senior Femenino',
+    SM: 'Senior Masculino',
+    IF: 'Infantil Femenino',
+    IM: 'Infantil Masculino',
+};
+
 export function getDivisionCodeFromRound(round?: string): string | null {
     if (!round) return null;
     const m = /\b(CF|CM|JF|JM|SF|SM|IF|IM)\b/.exec(round);
     return m?.[1] ?? null;
+}
+
+export function resolveMatchDivision(match: Match, teams: Team[]): Team['division'] | null {
+    const code = getDivisionCodeFromRound(match.round);
+    if (code && CODE_TO_DIVISION[code]) return CODE_TO_DIVISION[code];
+    const ta = teams.find((t) => t.name === match.teamA);
+    if (ta) return ta.division;
+    const tb = teams.find((t) => t.name === match.teamB);
+    return tb?.division ?? null;
 }
 
 export function groupMatchesForDayGrid(
