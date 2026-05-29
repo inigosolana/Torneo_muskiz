@@ -11,6 +11,12 @@ import {
 } from '../utils/matchGridColors';
 
 const DAY_LABELS: MuskizScheduleDayLabel[] = ['Viernes', 'Sábado', 'Domingo'];
+const MATCH_DRAG_MIME = 'application/x-torneo-match-id';
+
+function isDragLeaveEvent(current: EventTarget, related: EventTarget | null): boolean {
+    if (!related || !(related instanceof Node)) return true;
+    return !(current instanceof Node && current.contains(related));
+}
 
 // ─── Modal edición de partido ──────────────────────────────────────────────
 interface EditModalProps {
@@ -193,17 +199,32 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                         return (
                                             <td
                                                 key={c}
-                                                className={`border border-slate-200 align-top p-0.5 min-h-[44px] max-w-[140px] transition-colors ${isDropTarget ? 'bg-teal-100 border-2 border-teal-400' : m ? colors.cell : ''}`}
-                                                onDragOver={(e) => {
+                                                className={`border border-slate-200 align-top p-0.5 min-h-[48px] h-[48px] max-w-[140px] transition-colors ${isDropTarget ? 'bg-teal-100 border-2 border-teal-400' : m ? colors.cell : onUpdateMatch ? 'bg-slate-50/80' : ''}`}
+                                                onDragEnter={(e) => {
                                                     if (!onUpdateMatch) return;
                                                     e.preventDefault();
                                                     setDropTarget({ time: t, court: c });
                                                 }}
-                                                onDragLeave={() => setDropTarget(null)}
+                                                onDragOver={(e) => {
+                                                    if (!onUpdateMatch) return;
+                                                    e.preventDefault();
+                                                    e.dataTransfer.dropEffect = 'move';
+                                                    setDropTarget({ time: t, court: c });
+                                                }}
+                                                onDragLeave={(e) => {
+                                                    if (isDragLeaveEvent(e.currentTarget, e.relatedTarget)) {
+                                                        setDropTarget((prev) =>
+                                                            prev?.time === t && prev?.court === c ? null : prev
+                                                        );
+                                                    }
+                                                }}
                                                 onDrop={(e) => {
                                                     e.preventDefault();
+                                                    e.stopPropagation();
                                                     setDropTarget(null);
-                                                    const draggedId = dragMatchId.current;
+                                                    const draggedId =
+                                                        e.dataTransfer.getData(MATCH_DRAG_MIME) ||
+                                                        dragMatchId.current;
                                                     if (!onUpdateMatch || !draggedId) return;
                                                     onUpdateMatch(draggedId, { time: t, court: c });
                                                     dragMatchId.current = null;
@@ -212,15 +233,17 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                                 {m ? (
                                                     <div
                                                         draggable={!!onUpdateMatch}
-                                                        onDragStart={() => {
+                                                        onDragStart={(e) => {
                                                             dragMatchId.current = m.id;
+                                                            e.dataTransfer.setData(MATCH_DRAG_MIME, m.id);
+                                                            e.dataTransfer.effectAllowed = 'move';
                                                         }}
                                                         onDragEnd={() => {
                                                             dragMatchId.current = null;
                                                             setDropTarget(null);
                                                         }}
                                                         onClick={() => onUpdateMatch && setEditingMatch(m)}
-                                                        className={`rounded leading-tight p-1 h-full min-h-[40px] cursor-${onUpdateMatch ? 'grab active:cursor-grabbing' : 'default'} ${colors.cell} border ${colors.drag} select-none`}
+                                                        className={`rounded leading-tight p-1 h-full min-h-[44px] ${onUpdateMatch ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} ${colors.cell} border ${colors.drag} select-none`}
                                                     >
                                                         <div className="text-[9px] font-semibold text-slate-800 line-clamp-2">
                                                             {m.teamA} <span className="text-slate-400">vs</span> {m.teamB}
@@ -237,8 +260,8 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                                 ) : (
                                                     onUpdateMatch && (
                                                         <div
-                                                            className="min-h-[40px] h-full rounded border border-dashed border-slate-200/80 bg-slate-50/50"
-                                                            title="Hueco libre — arrastra un partido aquí"
+                                                            className="min-h-[44px] h-full w-full rounded border border-dashed border-slate-300/80 bg-transparent pointer-events-none"
+                                                            aria-hidden
                                                         />
                                                     )
                                                 )}

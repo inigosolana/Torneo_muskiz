@@ -1021,16 +1021,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         matchId: string,
         patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>
     ) => {
-        const active = simDrafts.find((d) => d.id === activeDraftId);
-        const moving = active?.matches.find((m) => m.id === matchId);
-        if (!moving || !activeDraftId) return;
+        const ownerDraft = simDrafts.find((d) => d.matches.some((m) => m.id === matchId));
+        const moving = ownerDraft?.matches.find((m) => m.id === matchId);
+        if (!moving || !ownerDraft) return;
 
+        const ownerDraftId = ownerDraft.id;
         const newTime = patch.time ?? moving.time;
         const newCourt = patch.court ?? moving.court;
         const slotChange = patch.time !== undefined || patch.court !== undefined;
         const occupant =
             slotChange && newTime !== 'PENDIENTE'
-                ? active.matches.find(
+                ? ownerDraft.matches.find(
                       (m) => m.id !== matchId && m.time === newTime && m.court === newCourt
                   )
                 : undefined;
@@ -1041,7 +1042,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         };
 
         const next = simDrafts.map((d) => {
-            if (d.id !== activeDraftId) return d;
+            if (d.id !== ownerDraftId) return d;
             return {
                 ...d,
                 matches: d.matches.map((m) => {

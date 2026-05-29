@@ -63,6 +63,11 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
 
     const findTeamById = (id: string) => teams.find((t) => t.id === id);
 
+    const isDragLeaveEvent = (current: EventTarget, related: EventTarget | null): boolean => {
+        if (!related || !(related instanceof Node)) return true;
+        return !(current instanceof Node && current.contains(related));
+    };
+
     const handleDragStart = (e: React.DragEvent, team: Team) => {
         if (!editable) return;
         e.dataTransfer.setData(DRAG_MIME, team.id);
@@ -82,14 +87,15 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
         setDropTargetGroup(groupKey);
     };
 
-    const handleDragLeave = (groupKey: string) => {
+    const handleDragLeave = (e: React.DragEvent, groupKey: string) => {
+        if (!isDragLeaveEvent(e.currentTarget, e.relatedTarget)) return;
         setDropTargetGroup((prev) => (prev === groupKey ? null : prev));
     };
 
     const handleDrop = (e: React.DragEvent, groupKey: string) => {
         if (!editable) return;
         e.preventDefault();
-        const teamId = e.dataTransfer.getData(DRAG_MIME);
+        const teamId = e.dataTransfer.getData(DRAG_MIME) || draggingTeamId || '';
         const team = findTeamById(teamId);
         if (team && groupKey) {
             const current = (team.competitionGroup ?? '').trim();
@@ -168,8 +174,13 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
                     return (
                         <div
                             key={g.key}
+                            onDragEnter={(e) => {
+                                if (!editable || !draggingTeamId) return;
+                                e.preventDefault();
+                                setDropTargetGroup(g.key);
+                            }}
                             onDragOver={(e) => handleDragOver(e, g.key)}
-                            onDragLeave={() => handleDragLeave(g.key)}
+                            onDragLeave={(e) => handleDragLeave(e, g.key)}
                             onDrop={(e) => handleDrop(e, g.key)}
                             className={`rounded-xl border-2 p-3 min-h-[120px] transition-colors ${GROUP_COLORS[idx % GROUP_COLORS.length]} ${
                                 isDropTarget ? 'ring-2 ring-teal-500 ring-offset-2 border-teal-500' : ''
@@ -197,12 +208,26 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
                     className={`rounded-xl border border-amber-200 bg-amber-50 p-3 ${
                         dropTargetGroup === '__unassigned__' && draggingTeamId ? 'ring-2 ring-amber-500' : ''
                     }`}
-                    onDragOver={(e) => {
+                    onDragEnter={(e) => {
                         if (!editable) return;
                         e.preventDefault();
                         setDropTargetGroup('__unassigned__');
                     }}
-                    onDragLeave={() => handleDragLeave('__unassigned__')}
+                    onDragOver={(e) => {
+                        if (!editable) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        setDropTargetGroup('__unassigned__');
+                    }}
+                    onDragLeave={(e) => handleDragLeave(e, '__unassigned__')}
+                    onDrop={(e) => {
+                        if (!editable) return;
+                        e.preventDefault();
+                        const teamId = e.dataTransfer.getData(DRAG_MIME);
+                        const team = findTeamById(teamId);
+                        if (team) onMoveTeam(team, '');
+                        handleDragEnd();
+                    }}
                 >
                     <p className="text-xs font-bold text-amber-900 mb-2">Sin grupo asignado — arrastra a una columna</p>
                     <ul className="flex flex-wrap gap-2">
