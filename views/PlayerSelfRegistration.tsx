@@ -3,6 +3,8 @@ import { Team, Player } from '../types';
 import SignatureCanvas from 'react-signature-canvas';
 import { useNavigate } from 'react-router-dom';
 import { useTournamentData } from '../context/TournamentDataContext';
+import { canAddSquadMember, countSquadPlayers, maxPlayersForDivision } from '../utils/squadLimits';
+import { toast } from 'sonner';
 
 interface PlayerSelfRegistrationProps {
     onUpdateTeam: (team: Team) => void;
@@ -54,8 +56,20 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
         );
     }
 
+    const rosterLimit = team
+        ? canAddSquadMember(team.players, team.division, 'PLAYER')
+        : { ok: false as const, reason: 'Equipo no disponible' };
+    const playerSlotsUsed = team ? countSquadPlayers(team.players) : 0;
+    const playerSlotsMax = team ? maxPlayersForDivision(team.division) : 0;
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!team) return;
+        const slot = canAddSquadMember(team.players, team.division, 'PLAYER');
+        if (!slot.ok) {
+            toast.error(slot.reason ?? 'La plantilla de jugadores está completa');
+            return;
+        }
         setIsSubmitting(true);
         setTimeout(() => {
             const newPlayer: Player = {
@@ -105,6 +119,16 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
                     <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
                         Estás a punto de inscribirte en <span className="font-bold text-primary">{team.name}</span>. Completa el siguiente formulario.
                     </p>
+                    {!rosterLimit.ok && (
+                        <p className="mt-3 text-sm text-amber-700 dark:text-amber-300 font-medium text-center">
+                            {rosterLimit.reason}
+                        </p>
+                    )}
+                    {rosterLimit.ok && (
+                        <p className="mt-3 text-sm text-slate-500 text-center">
+                            Plazas de jugador: {playerSlotsUsed}/{playerSlotsMax}
+                        </p>
+                    )}
                 </div>
 
                 <div className="bg-white dark:bg-surface-dark py-8 px-6 shadow-2xl rounded-2xl border border-slate-200 dark:border-white/5">
@@ -190,8 +214,8 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
 
                         <button
                             type="submit"
-                            disabled={isSubmitting}
-                            className="w-full mt-8 bg-primary text-background-dark font-extrabold py-4 px-8 rounded-xl shadow-lg shadow-primary/30 hover:opacity-90 transition-all flex justify-center items-center gap-2 text-lg"
+                            disabled={isSubmitting || !rosterLimit.ok}
+                            className="w-full mt-8 bg-primary text-background-dark font-extrabold py-4 px-8 rounded-xl shadow-lg shadow-primary/30 hover:opacity-90 transition-all flex justify-center items-center gap-2 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isSubmitting ? (
                                 <span className="material-symbols-outlined animate-spin">progress_activity</span>

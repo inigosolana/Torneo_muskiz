@@ -17,6 +17,8 @@ export interface ComputeStandingsOpts {
     group: string | 'all';
     /** Si true (defecto), solo equipos con pago PAID entran en la clasificación */
     onlyPaidTeams?: boolean;
+    /** Plantilla fija (p. ej. misma distribución que los cuadros de grupos del admin) */
+    rosterOverride?: Team[];
 }
 
 /**
@@ -29,12 +31,14 @@ export function computeStandings(
     opts: ComputeStandingsOpts
 ): StandingsRow[] {
     const onlyPaid = opts.onlyPaidTeams !== false;
-    const roster = teams.filter((t) => {
-        if (t.division !== opts.division) return false;
-        if (onlyPaid && t.paymentStatus !== 'PAID') return false;
-        if (opts.group !== 'all' && (t.competitionGroup ?? '') !== opts.group) return false;
-        return true;
-    });
+    const roster =
+        opts.rosterOverride ??
+        teams.filter((t) => {
+            if (t.division !== opts.division) return false;
+            if (onlyPaid && t.paymentStatus !== 'PAID') return false;
+            if (opts.group !== 'all' && (t.competitionGroup ?? '').trim() !== opts.group) return false;
+            return true;
+        });
     const rosterNames = new Set(roster.map((t) => t.name));
 
     const stats: Record<string, StandingsRow> = {};

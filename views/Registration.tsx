@@ -360,7 +360,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
                                     <ol className="list-decimal list-inside space-y-1">
                                         <li>Esperamos la validación de tu pago (máx. 24h)</li>
                                         <li>Accede al <strong>Panel de Gestión</strong> con tus credenciales</li>
-                                        <li>Inscribe a los jugadores de cada equipo (mín. 6 — máx. 12 en Senior, 14 en el resto)</li>
+                                        <li>Inscribe jugadores (mín. 6; máx. 12 Senior / 14 resto), 1 entrenador y 1 oficial por equipo</li>
                                     </ol>
                                 </div>
                             </div>

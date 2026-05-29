@@ -7,7 +7,11 @@ export type AdminPreviewMode = 'official' | 'simulation';
 export interface AdminUiPersistedState {
     activeTab?: AdminMainTab;
     compSubTab?: AdminCompSubTab;
+    /** Simulación vs Oficial en Competición */
     compPreviewMode?: AdminPreviewMode;
+    compArenaMode?: AdminPreviewMode;
+    /** Borrador concreto o «all» en vistas simulación */
+    simulationViewDraftId?: string | 'all';
     structureDivision?: string;
     standingsDivision?: string;
 }

@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
             </p>
             ${bulkBasketHtml}
             <p style="color: #334155; line-height: 1.65; font-size: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin: 14px 0 0;">
-              <strong>Importante:</strong> entra en la <strong>gestión de responsables</strong> y completa la plantilla de <strong>cada equipo</strong> (jugadores, DNI y seguro). El cupo máximo de jugadores en pista depende de la categoría de cada equipo (Senior: hasta 12; otras categorías: hasta 14).
+              <strong>Importante:</strong> entra en la <strong>gestión de responsables</strong> y completa la plantilla de <strong>cada equipo</strong> (jugadores, DNI y seguro). Plantilla: Senior hasta 12 jugadores, resto hasta 14. En partido se convocan hasta 10 (Senior) o 12 (resto), más 1 entrenador y 1 oficial.
             </p>
             <div style="text-align: center; margin: 28px 0;">
               <a href="${magicLink}" style="background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 15px; display: inline-block;">
@@ -169,6 +169,7 @@ Deno.serve(async (req) => {
     const divisionStr = String(division ?? '');
     const isSeniorCategory = divisionStr.toLowerCase().includes('senior');
     const maxJugadores = isSeniorCategory ? 12 : 14;
+    const maxConvocados = isSeniorCategory ? 10 : 12;
 
     // 5. Send approval email with credentials
     emailBody = {
@@ -244,18 +245,19 @@ Deno.serve(async (req) => {
               <h4 style="margin: 0 0 10px; color: #1e40af; font-size: 14px;">👥 Cupo de jugadores en pista</h4>
               <ul style="margin: 0; padding-left: 18px; color: #1e3a8a; font-size: 13px; line-height: 1.75;">
                 <li><strong>Mínimo 6 jugadores</strong> en la plantilla.</li>
-                <li><strong>Máximo de jugadores según categoría:</strong> en <strong>Senior</strong> (masculino y femenino) hasta <strong>12</strong>; en el <strong>resto de categorías</strong> hasta <strong>14</strong>.</li>
-                <li>Tu equipo está inscrito en <strong>${divisionStr || 'N/D'}</strong> → el cupo que te aplica es de <strong>hasta ${maxJugadores} jugadores</strong>.</li>
+                <li><strong>Plantilla (inscripción):</strong> Senior hasta <strong>12</strong> jugadores; Infantil, Cadete y Juvenil hasta <strong>14</strong>.</li>
+                <li><strong>Convocatoria por partido:</strong> Senior hasta <strong>10</strong> jugadores; resto de categorías hasta <strong>12</strong>.</li>
+                <li>Tu equipo está inscrito en <strong>${divisionStr || 'N/D'}</strong> → plantilla hasta <strong>${maxJugadores}</strong> jugadores y convocatoria hasta <strong>${maxConvocados}</strong>.</li>
               </ul>
             </div>
 
             <!-- Entrenador y oficiales -->
             <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px 18px; margin: 16px 0;">
-              <h4 style="margin: 0 0 10px; color: #166534; font-size: 14px;">🛡️ Entrenador y oficiales de mesa</h4>
+              <h4 style="margin: 0 0 10px; color: #166534; font-size: 14px;">🛡️ Entrenador y oficial</h4>
               <p style="margin: 0; color: #14532d; font-size: 13px; line-height: 1.75;">
-                Además de los jugadores, en el mismo panel debes dar de alta:
-                <strong>1 entrenador/a</strong> (rol Entrenador) y <strong>2 oficiales de mesa</strong> (rol Oficial).
-                Estas <strong>3 personas no cuentan</strong> dentro del cupo máximo de jugadores indicado arriba.
+                Además de los jugadores, en el mismo panel debes dar de alta
+                <strong>1 entrenador/a</strong> (rol Entrenador) y <strong>1 oficial</strong> (rol Oficial).
+                No cuentan dentro del cupo de jugadores de la plantilla.
               </p>
             </div>
 
@@ -266,7 +268,7 @@ Deno.serve(async (req) => {
                 <li>Entra en <strong>Gestión de responsables</strong> con el botón de arriba o en <a href="https://torneomuskizbmplaya.es/manager-login" style="color:#0d9488;">manager-login</a>.</li>
                 <li>Completa la ficha del equipo y <strong>registra jugadores</strong> (nombre, dorsal, posición) poco a poco.</li>
                 <li>Sube <strong>DNI y seguro</strong> de cada jugador y espera la validación del organizador.</li>
-                <li>Añade <strong>1 entrenador</strong> y <strong>2 oficiales</strong> con sus roles; no ocupan plaza de jugador.</li>
+                <li>Añade <strong>1 entrenador</strong> y <strong>1 oficial</strong> con sus roles; no ocupan plaza de jugador.</li>
                 <li>Respeta el <strong>mínimo 6</strong> y el <strong>máximo ${maxJugadores}</strong> jugadores para tu categoría, y el plazo del <strong>2 de junio de 2026</strong>.</li>
               </ol>
             </div>

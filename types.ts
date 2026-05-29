@@ -81,11 +81,23 @@ export interface PlayerStat {
   redCards: number;
 }
 
+/** Tanteo por set + shootout (balonmano playa). scoreA/scoreB del partido = sets ganados (2:0, 2:1, …). */
+export interface BeachSetScores {
+  set1A: number | null;
+  set1B: number | null;
+  set2A: number | null;
+  set2B: number | null;
+  shootoutA: number | null;
+  shootoutB: number | null;
+}
+
 export interface MatchReport {
   type: 'DIGITAL' | 'IMAGE';
   imageUri?: string; // For photo of physical report
   playerStats?: PlayerStat[]; // For digital report
   observations?: string;
+  /** Detalle de sets; el marcador visible es solo sets ganados (2:0, 2:1, 0:2, 1:2). */
+  setScores?: BeachSetScores;
 }
 
 export interface Match {

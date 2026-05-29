@@ -43,7 +43,7 @@ export interface MuskizSimulatorOptions {
 }
 
 // ─── División → código corto ───────────────────────────────────────────────
-const DIVISION_CODE: Record<Team['division'], string> = {
+export const DIVISION_CODE: Record<Team['division'], string> = {
     'Infantil Femenino': 'IF',
     'Infantil Masculino': 'IM',
     'Cadete Femenino': 'CF',
@@ -125,7 +125,8 @@ function roundRobinPairs(names: string[]): { a: string; b: string }[] {
  * Si no: asigna automáticamente según número de equipos:
  *  ≤5 → 1 grupo;  6–10 → 2 grupos;  ≥11 → 4 grupos.
  */
-function computeGroups(teamList: Team[]): { key: string; names: string[] }[] | null {
+/** Grupos de competición para una lista de equipos (respeta competitionGroup si todos lo tienen). */
+export function computeGroups(teamList: Team[]): { key: string; names: string[] }[] | null {
     if (teamList.length === 0) return [];
     const n = teamList.length;
 

@@ -5,13 +5,16 @@ import { useNavigate } from 'react-router-dom';
 import { teamService } from '../services/teamService';
 import { supabase } from '../services/supabaseClient';
 import {
-    MAX_STAFF_PER_TEAM,
-    MATCH_DAY_PLAYER_COUNT,
+    MAX_COACHES_PER_TEAM,
+    MAX_OFFICIALS_PER_TEAM,
     MIN_PLAYERS_PER_TEAM,
+    canAddMoreSquadMembers,
     canAddSquadMember,
+    countSquadCoaches,
+    countSquadOfficials,
     countSquadPlayers,
-    countSquadStaff,
     isPlayerRole,
+    matchDayPlayerCountForDivision,
     maxPlayersForDivision,
     playerRoleLabel,
 } from '../utils/squadLimits';
@@ -93,11 +96,14 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     }
 
     const currentPlayerCount = countSquadPlayers(selectedTeam.players);
-    const currentStaffCount = countSquadStaff(selectedTeam.players);
+    const currentCoachCount = countSquadCoaches(selectedTeam.players);
+    const currentOfficialCount = countSquadOfficials(selectedTeam.players);
     const maxPlayers = maxPlayersForDivision(selectedTeam.division);
+    const matchDayCount = matchDayPlayerCountForDivision(selectedTeam.division);
     const minPlayers = MIN_PLAYERS_PER_TEAM;
-    const canAddMore =
-        currentPlayerCount < maxPlayers || currentStaffCount < MAX_STAFF_PER_TEAM;
+    const canAddMore = canAddMoreSquadMembers(selectedTeam.players, selectedTeam.division);
+    const hasCoach = currentCoachCount >= MAX_COACHES_PER_TEAM;
+    const hasOfficial = currentOfficialCount >= MAX_OFFICIALS_PER_TEAM;
 
     const handleManualAdd = async () => {
         if (!manualPlayer.name) {
@@ -407,10 +413,10 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                                 ></div>
                                             </div>
                                             <span className="text-[10px] font-bold text-slate-400">
-                                                {currentPlayerCount}/{maxPlayers} jug. · {currentStaffCount}/{MAX_STAFF_PER_TEAM} staff
+                                                {currentPlayerCount}/{maxPlayers} jug. · {currentCoachCount}/{MAX_COACHES_PER_TEAM} ent. · {currentOfficialCount}/{MAX_OFFICIALS_PER_TEAM} of.
                                             </span>
                                             <p className="text-[9px] text-slate-400 mt-0.5">
-                                                En partido: hasta {MATCH_DAY_PLAYER_COUNT} jugadores
+                                                Convocatoria partido: hasta {matchDayCount} jugadores
                                             </p>
                                         </div>
                                     </div>
@@ -630,23 +636,32 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                             { value: 'COACH' as const, label: 'Entrenador' },
                                             { value: 'OFFICIAL' as const, label: 'Oficial' },
                                         ] as const
-                                    ).map(({ value, label }) => (
+                                    ).map(({ value, label }) => {
+                                        const roleFull =
+                                            (value === 'COACH' && hasCoach) ||
+                                            (value === 'OFFICIAL' && hasOfficial);
+                                        return (
                                         <button
                                             key={value}
                                             type="button"
+                                            disabled={roleFull}
+                                            title={roleFull ? `Ya hay un ${label.toLowerCase()} en la plantilla` : undefined}
                                             onClick={() => setManualPlayer({ ...manualPlayer, role: value })}
                                             className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${
-                                                manualPlayer.role === value
+                                                roleFull
+                                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed dark:bg-white/5 dark:text-slate-600'
+                                                    : manualPlayer.role === value
                                                     ? 'bg-primary text-white shadow-md'
                                                     : 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300'
                                             }`}
                                         >
                                             {label}
                                         </button>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
-                            <button onClick={handleManualAdd} className="w-full bg-primary text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-primary/20 transition-all mt-4">Guardar Jugador</button>
+                            <button onClick={handleManualAdd} className="w-full bg-primary text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-primary/20 transition-all mt-4">Guardar en plantilla</button>
                         </div>
                     </div>
                 </div>

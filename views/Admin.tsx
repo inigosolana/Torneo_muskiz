@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Team, Match, CategoryLimits, MatchReport, PlayerStat, Player, CalendarDraft } from '../types';
+import { Team, Match, CategoryLimits, MatchReport, PlayerStat, Player, CalendarDraft, type BeachSetScores } from '../types';
+import { applySetScoresToMatch } from '../utils/beachSetScoring';
 import { generateBracketAI, generateSocialMediaPost } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
@@ -26,10 +27,12 @@ import {
     divisionBelongsToScheduleDay,
     getMuskizDayGenDefaults,
     MIN_REAL_MATCHES_PER_TEAM,
+    resolveMatchDivision,
 } from '../services/muskizScheduleSimulator';
 import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
-import { CompetitionPreviewToggle } from '../components/CompetitionPreviewToggle';
 import { CompetitionResultsTable } from '../components/CompetitionResultsTable';
+import { CompetitionDraftPicker } from '../components/CompetitionDraftPicker';
+import { saveBulkActasPayload } from '../utils/bulkActasSession';
 import {
     isPlayerRole,
     isPlayerEligibleForMatch,
@@ -38,7 +41,17 @@ import {
     memberDocsPending,
     playerRoleLabel,
     playersEligibleForMatch,
+    playersListedOnActa,
 } from '../utils/squadLimits';
+import { buildInitialDigitalReportStats } from '../utils/actaBuildContext';
+import { downloadActaDocx, downloadActasZip, printActaHtml } from '../services/actaExportService';
+import { MatchReportSheet } from '../components/MatchReportSheet';
+import { CompetitionGroupManager } from '../components/CompetitionGroupManager';
+import {
+    getGroupDistributionForDivision,
+    getTeamsInDivisionGroup,
+    remapMatchesAfterGroupChange,
+} from '../utils/groupMatchSync';
 import {
     loadAdminUiState,
     saveAdminUiState,
@@ -133,10 +146,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const [standingsDivision, setStandingsDivision] = useState<Team['division']>(
         (savedAdminUi.standingsDivision as Team['division']) || 'Senior Masculino'
     );
-    const [standingsGroupFilter, setStandingsGroupFilter] = useState<string>('all');
-    /** Simulación vs oficial en Calendario, Resultados y Clasificación */
-    const [compPreviewMode, setCompPreviewMode] = useState<AdminPreviewMode>(
-        savedAdminUi.compPreviewMode ?? 'official'
+    const [standingsGroupFilter, setStandingsGroupFilter] = useState<string>('A');
+    const [resultsDivisionFilter, setResultsDivisionFilter] = useState<Team['division'] | 'all'>('all');
+    /** Simulación vs Oficial (toda la sección Competición) */
+    const [compArenaMode, setCompArenaMode] = useState<AdminPreviewMode>(
+        savedAdminUi.compArenaMode ?? savedAdminUi.compPreviewMode ?? 'simulation'
+    );
+    /** Borrador para previsualizar en Calendario / Resultados / Clasificación (modo Simulación) */
+    const [simulationViewDraftId, setSimulationViewDraftId] = useState<string | 'all'>(
+        savedAdminUi.simulationViewDraftId ?? 'all'
     );
     const [loginSubmitting, setLoginSubmitting] = useState(false);
 
@@ -367,11 +385,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         saveAdminUiState({
             activeTab,
             compSubTab,
-            compPreviewMode,
+            compArenaMode,
+            simulationViewDraftId,
             structureDivision,
             standingsDivision,
         });
-    }, [activeTab, compSubTab, compPreviewMode, structureDivision, standingsDivision]);
+    }, [activeTab, compSubTab, compArenaMode, simulationViewDraftId, structureDivision, standingsDivision]);
 
     // --- Team Filters ---
     const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -416,25 +435,85 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         [simDrafts]
     );
 
-    const compPreviewMatches = useMemo(
-        () => (compPreviewMode === 'simulation' ? allSimDraftMatches : matches),
-        [compPreviewMode, allSimDraftMatches, matches]
+    const simulationViewMatches = useMemo(() => {
+        if (simulationViewDraftId === 'all') return allSimDraftMatches;
+        return simDrafts.find((d) => d.id === simulationViewDraftId)?.matches ?? [];
+    }, [simulationViewDraftId, simDrafts, allSimDraftMatches]);
+
+    const compDisplayMatches = useMemo(
+        () => (compArenaMode === 'simulation' ? simulationViewMatches : matches),
+        [compArenaMode, simulationViewMatches, matches]
     );
 
-    const standingsGroupsAvailable = useMemo(
-        () => competitionGroupsForDivision(teams, standingsDivision, false),
-        [teams, standingsDivision]
+    const resultsMatchCountByDivision = useMemo(() => {
+        const counts = new Map<Team['division'], number>();
+        for (const m of compDisplayMatches) {
+            const d = resolveMatchDivision(m, teams);
+            if (!d) continue;
+            counts.set(d, (counts.get(d) ?? 0) + 1);
+        }
+        return counts;
+    }, [compDisplayMatches, teams]);
+
+    const resultsFilteredMatches = useMemo(() => {
+        if (resultsDivisionFilter === 'all') return compDisplayMatches;
+        return compDisplayMatches.filter((m) => resolveMatchDivision(m, teams) === resultsDivisionFilter);
+    }, [compDisplayMatches, resultsDivisionFilter, teams]);
+
+    /** Grupos reales de la categoría (BD o distribución calculada). Sin «Todos». */
+    const standingsGroupKeys = useMemo(() => {
+        const fromDb = competitionGroupsForDivision(teams, standingsDivision, false);
+        if (fromDb.length > 0) return fromDb;
+        return getGroupDistributionForDivision(teams, standingsDivision, false)
+            .map((g) => g.key)
+            .filter((k) => k && k !== '—');
+    }, [teams, standingsDivision]);
+
+    useEffect(() => {
+        if (standingsGroupKeys.length === 0) return;
+        if (!standingsGroupKeys.includes(standingsGroupFilter)) {
+            setStandingsGroupFilter(standingsGroupKeys[0]!);
+        }
+    }, [standingsDivision, standingsGroupKeys, standingsGroupFilter]);
+
+    const standingsRoster = useMemo(
+        () =>
+            getTeamsInDivisionGroup(
+                teams,
+                standingsDivision,
+                standingsGroupKeys.includes(standingsGroupFilter)
+                    ? standingsGroupFilter
+                    : standingsGroupKeys[0] ?? 'A',
+                false
+            ),
+        [teams, standingsDivision, standingsGroupFilter, standingsGroupKeys]
     );
 
     const standings = useMemo(
         () =>
-            computeStandings(teams, compPreviewMode === 'simulation' ? allSimDraftMatches : matches, {
+            computeStandings(teams, compArenaMode === 'simulation' ? simulationViewMatches : matches, {
                 division: standingsDivision,
-                group: standingsGroupFilter,
-                onlyPaidTeams: true,
+                group: 'all',
+                onlyPaidTeams: false,
+                rosterOverride: standingsRoster,
             }),
-        [matches, allSimDraftMatches, compPreviewMode, teams, standingsDivision, standingsGroupFilter]
+        [
+            matches,
+            simulationViewMatches,
+            compArenaMode,
+            teams,
+            standingsDivision,
+            standingsRoster,
+        ]
     );
+
+    const compSubTabs: { id: AdminCompSubTab; label: string; icon: string }[] = [
+        { id: 'structure', label: 'Estructura', icon: 'account_tree' },
+        { id: 'simulations', label: 'Simulaciones', icon: 'science' },
+        { id: 'calendar', label: 'Calendario', icon: 'calendar_view_month' },
+        { id: 'results', label: 'Resultados', icon: 'scoreboard' },
+        { id: 'standings', label: 'Clasificación', icon: 'leaderboard' },
+    ];
 
     const officialCalendarStatus = useMemo(() => {
         if (matches.length === 0) {
@@ -1132,38 +1211,167 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
-    const updateMatchScore = (matchId: string, scoreA: string, scoreB: string) => {
-        const updatedMatches = matches.map(m => {
-            if (m.id === matchId) {
-                return {
-                    ...m,
-                    scoreA: scoreA === '' ? null : parseInt(scoreA),
-                    scoreB: scoreB === '' ? null : parseInt(scoreB),
-                    status: (scoreA !== '' && scoreB !== '') ? 'FINISHED' as const : 'SCHEDULED' as const
-                };
-            }
-            return m;
-        });
+    const handleMoveTeamToGroup = async (team: Team, newGroup: string) => {
+        const oldGroup = (team.competitionGroup ?? '').trim() || null;
+        const nextGroup = newGroup.trim();
+        if (!nextGroup || oldGroup === nextGroup) {
+            if (!nextGroup) await handleChangeTeamGroup(team, '');
+            return;
+        }
+
+        try {
+            await onUpdateTeam({ ...team, competitionGroup: nextGroup });
+        } catch {
+            toast.error('No se pudo guardar el grupo del equipo.');
+            return;
+        }
+
+        const updatedTeams = teams.map((t) =>
+            t.id === team.id ? { ...t, competitionGroup: nextGroup } : t
+        );
+
+        let matchUpdates = 0;
+        if (compArenaMode === 'simulation') {
+            const nextDrafts = simDrafts.map((d) => {
+                const remapped = remapMatchesAfterGroupChange(
+                    d.matches,
+                    updatedTeams,
+                    team.name,
+                    oldGroup,
+                    nextGroup,
+                    team.division
+                );
+                matchUpdates += remapped.length - d.matches.length;
+                return { ...d, matches: remapped };
+            });
+            setSimDrafts(nextDrafts);
+            await persistSimDraftsAsync(nextDrafts, activeDraftId);
+        } else {
+            const remapped = remapMatchesAfterGroupChange(
+                matches,
+                updatedTeams,
+                team.name,
+                oldGroup,
+                nextGroup,
+                team.division
+            );
+            matchUpdates = remapped.length - matches.length;
+            onUpdateMatches(remapped);
+        }
+
+        toast.success(
+            `${team.name} → Grupo ${nextGroup}. Partidos de grupos actualizados${
+                matchUpdates !== 0 ? ` (${matchUpdates > 0 ? '+' : ''}${matchUpdates})` : ''
+            }.`
+        );
+    };
+
+    const updateMatchSetScores = (matchId: string, setScores: BeachSetScores) => {
+        const updatedMatches = matches.map((m) =>
+            m.id === matchId ? applySetScoresToMatch(m, setScores) : m
+        );
         onUpdateMatches(updatedMatches);
+    };
+
+    const isDraftMatchId = useCallback(
+        (matchId: string) => simDrafts.some((d) => d.matches.some((m) => m.id === matchId)),
+        [simDrafts]
+    );
+
+    const [actaExporting, setActaExporting] = useState(false);
+
+    const handleDownloadCategoryActas = async (division: Team['division'], catMatches: Match[]) => {
+        if (catMatches.length === 0) {
+            toast.error('No hay partidos en esta categoría.');
+            return;
+        }
+        setActaExporting(true);
+        try {
+            await downloadActasZip(division, catMatches, teams, 'docx');
+            toast.success(`${catMatches.length} actas DOCX descargadas (ZIP).`);
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Error al generar actas.');
+        } finally {
+            setActaExporting(false);
+        }
+    };
+
+    const handleDownloadAllActasDocx = async () => {
+        if (resultsFilteredMatches.length === 0) {
+            toast.error('No hay partidos en la lista actual.');
+            return;
+        }
+        setActaExporting(true);
+        try {
+            const label =
+                compArenaMode === 'simulation'
+                    ? simulationViewDraftId === 'all'
+                        ? 'simulacion_todos'
+                        : simDrafts.find((d) => d.id === simulationViewDraftId)?.name ?? 'simulacion'
+                    : 'oficial';
+            const cat =
+                resultsDivisionFilter !== 'all' ? `_${resultsDivisionFilter.replace(/\s+/g, '_')}` : '';
+            await downloadActasZip(`${label}${cat}`, resultsFilteredMatches, teams, 'docx');
+            toast.success(`ZIP con ${resultsFilteredMatches.length} actas DOCX.`);
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Error al generar actas.');
+        } finally {
+            setActaExporting(false);
+        }
+    };
+
+    const handleOpenBulkActas = () => {
+        if (resultsFilteredMatches.length === 0) {
+            toast.error('No hay partidos en la lista actual.');
+            return;
+        }
+        let label = compArenaMode === 'official' ? 'Calendario oficial' : 'Borrador simulación';
+        if (compArenaMode === 'simulation') {
+            if (simulationViewDraftId === 'all') {
+                label = 'Todos los días (Viernes + Sábado + Domingo)';
+            } else {
+                const d = simDrafts.find((x) => x.id === simulationViewDraftId);
+                label = d?.scheduleDay ? `${d.scheduleDay} · ${d.name}` : d?.name ?? label;
+            }
+        }
+        if (resultsDivisionFilter !== 'all') {
+            label = `${label} · ${resultsDivisionFilter}`;
+        }
+        try {
+            saveBulkActasPayload({
+                label,
+                source: compArenaMode,
+                matches: resultsFilteredMatches,
+                savedAt: new Date().toISOString(),
+            });
+            window.open('/admin/match-reports-bulk', '_blank', 'noopener,noreferrer');
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'No se pudieron preparar las actas.');
+        }
+    };
+
+    const updateDraftMatchSetScores = async (matchId: string, setScores: BeachSetScores) => {
+        const next = simDrafts.map((d) => ({
+            ...d,
+            matches: d.matches.map((m) => (m.id === matchId ? applySetScoresToMatch(m, setScores) : m)),
+        }));
+        setSimDrafts(next);
+        await persistSimDraftsAsync(next, activeDraftId);
     };
 
     // --- Report (Acta) Logic ---
     const openReportModal = (match: Match) => {
+        const teamAObj = teams.find((t) => t.name === match.teamA);
+        const teamBObj = teams.find((t) => t.name === match.teamB);
+
         if (!match.report) {
-            const teamAObj = teams.find(t => t.name === match.teamA);
-            const teamBObj = teams.find(t => t.name === match.teamB);
-
-            const initialStats: PlayerStat[] = [];
-            teamAObj?.players.filter(isPlayerEligibleForMatch).forEach(p => initialStats.push({ playerId: p.id, goals: 0, yellowCards: 0, redCards: 0 }));
-            teamBObj?.players.filter(isPlayerEligibleForMatch).forEach(p => initialStats.push({ playerId: p.id, goals: 0, yellowCards: 0, redCards: 0 }));
-
             const tempMatch = {
                 ...match,
                 report: {
                     type: 'DIGITAL' as const,
-                    playerStats: initialStats,
-                    imageUri: ''
-                }
+                    playerStats: buildInitialDigitalReportStats(teamAObj, teamBObj),
+                    imageUri: '',
+                },
             };
             setSelectedMatchForReport(tempMatch);
             setReportMode('DIGITAL');
@@ -1183,10 +1391,24 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
-    const saveReport = () => {
+    const saveReport = async () => {
         if (!selectedMatchForReport) return;
-        const updatedMatches = matches.map(m => m.id === selectedMatchForReport.id ? selectedMatchForReport : m);
-        onUpdateMatches(updatedMatches);
+        if (isDraftMatchId(selectedMatchForReport.id)) {
+            const next = simDrafts.map((d) => ({
+                ...d,
+                matches: d.matches.map((m) =>
+                    m.id === selectedMatchForReport.id ? selectedMatchForReport : m
+                ),
+            }));
+            setSimDrafts(next);
+            await persistSimDraftsAsync(next, activeDraftId);
+            toast.success('Acta guardada en el borrador.');
+        } else {
+            const updatedMatches = matches.map((m) =>
+                m.id === selectedMatchForReport.id ? selectedMatchForReport : m
+            );
+            onUpdateMatches(updatedMatches);
+        }
         setSelectedMatchForReport(null);
     };
 
@@ -2167,49 +2389,92 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                     {activeTab === 'competition' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
 
-                            {/* Sub-tabs */}
-                            <div className="flex flex-wrap border-b border-slate-200 mb-6 gap-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setCompSubTab('structure')}
-                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'structure' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                                >
-                                    <span className="material-symbols-outlined text-lg">account_tree</span>
-                                    Estructura
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCompSubTab('simulations')}
-                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'simulations' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                                >
-                                    <span className="material-symbols-outlined text-lg">science</span>
-                                    Simulaciones
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCompSubTab('calendar')}
-                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'calendar' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                                >
-                                    <span className="material-symbols-outlined text-lg">calendar_view_month</span>
-                                    Calendario
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCompSubTab('results')}
-                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'results' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                                >
-                                    <span className="material-symbols-outlined text-lg">scoreboard</span>
-                                    Resultados
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setCompSubTab('standings')}
-                                    className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${compSubTab === 'standings' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                                >
-                                    <span className="material-symbols-outlined text-lg">leaderboard</span>
-                                    Clasificación
-                                </button>
+                            {/* Simulación | Oficial */}
+                            <div className="mb-5 space-y-2">
+                                <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1 shadow-sm">
+                                    <button
+                                        type="button"
+                                        onClick={() => setCompArenaMode('simulation')}
+                                        className={`px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${
+                                            compArenaMode === 'simulation'
+                                                ? 'bg-purple-600 text-white shadow'
+                                                : 'text-slate-600 hover:bg-white'
+                                        }`}
+                                    >
+                                        <span className="material-symbols-outlined text-lg">science</span>
+                                        Simulación
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCompArenaMode('official')}
+                                        className={`px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${
+                                            compArenaMode === 'official'
+                                                ? 'bg-teal-700 text-white shadow'
+                                                : 'text-slate-600 hover:bg-white'
+                                        }`}
+                                    >
+                                        <span className="material-symbols-outlined text-lg">public</span>
+                                        Oficial
+                                    </button>
+                                </div>
+                                <p className="text-xs text-slate-500 max-w-3xl">
+                                    {compArenaMode === 'simulation' ? (
+                                        <>
+                                            Borradores de prueba: genera, edita y previsualiza. El calendario público{' '}
+                                            <strong>solo cambia</strong> al pulsar <strong>Publicar</strong> en Simulaciones.
+                                        </>
+                                    ) : (
+                                        <>
+                                            Lo que ven visitantes y equipos (tabla <code className="bg-slate-100 px-1 rounded">matches</code>
+                                            ). No se modifica aquí: publica desde <strong>Simulación → Simulaciones</strong>.
+                                        </>
+                                    )}
+                                </p>
                             </div>
+
+                            {/* Sub-tabs (iguales en Simulación y Oficial) */}
+                            <div className="flex flex-wrap border-b border-slate-200 mb-6 gap-1">
+                                {compSubTabs.map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        type="button"
+                                        onClick={() => setCompSubTab(tab.id)}
+                                        className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
+                                            compSubTab === tab.id
+                                                ? compArenaMode === 'simulation'
+                                                    ? 'border-purple-600 text-purple-700'
+                                                    : 'border-teal-700 text-teal-800'
+                                                : 'border-transparent text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        <span className="material-symbols-outlined text-lg">{tab.icon}</span>
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Selector de borrador (solo Simulación + calendario/resultados/clasificación) */}
+                            {compArenaMode === 'simulation' &&
+                                (compSubTab === 'calendar' || compSubTab === 'results' || compSubTab === 'standings') && (
+                                    <CompetitionDraftPicker
+                                        drafts={simDrafts}
+                                        value={simulationViewDraftId}
+                                        onChange={setSimulationViewDraftId}
+                                        disabled={!simulationsLoaded}
+                                    />
+                                )}
+
+                            {compArenaMode === 'official' &&
+                                (compSubTab === 'calendar' || compSubTab === 'results' || compSubTab === 'standings') && (
+                                    <div className="mb-4 p-3 rounded-xl bg-teal-50 border border-teal-200 text-sm text-teal-900 flex items-start gap-2">
+                                        <span className="material-symbols-outlined shrink-0">info</span>
+                                        <span>
+                                            Vista <strong>oficial</strong> (solo lectura respecto a borradores). Para editar o
+                                            publicar, cambia a <strong>Simulación</strong> y usa el botón{' '}
+                                            <strong>Publicar</strong> en la pestaña Simulaciones.
+                                        </span>
+                                    </div>
+                                )}
 
                             {/* SUB-TAB CONTENT */}
                             <div className="min-h-[400px]">
@@ -2264,7 +2529,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                                 <td className="px-4 py-3">
                                                                     <select
                                                                         value={team.competitionGroup ?? ''}
-                                                                        onChange={(e) => void handleChangeTeamGroup(team, e.target.value)}
+                                                                        onChange={(e) => {
+                                                                            const v = e.target.value;
+                                                                            if (v) void handleMoveTeamToGroup(team, v);
+                                                                            else void handleChangeTeamGroup(team, '');
+                                                                        }}
                                                                         className="border rounded-lg px-2 py-1.5 text-xs font-semibold bg-white min-w-[100px]"
                                                                     >
                                                                         <option value="">Sin grupo</option>
@@ -2283,8 +2552,86 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                     </div>
                                 )}
 
-                                {/* 2. SIMULACIONES — borradores IA / Excel */}
-                                {compSubTab === 'simulations' && (
+                                {/* 2. SIMULACIONES — Oficial: solo resumen; Simulación: gestión completa */}
+                                {compSubTab === 'simulations' && compArenaMode === 'official' && (
+                                    <div className="space-y-6">
+                                        <div className="flex flex-wrap items-start justify-between gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50/80">
+                                            <div>
+                                                <p className="font-bold text-slate-800 mb-1">Visibilidad pública</p>
+                                                <p className="text-xs text-slate-600 max-w-xl">
+                                                    Controla si Calendario, Resultados y Clasificación aparecen en la web pública.
+                                                </p>
+                                                <label className="mt-3 flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={publicMatchesVisible}
+                                                        onChange={(e) => void persistPublicMatchesVisible(e.target.checked)}
+                                                        className="size-5 rounded border-slate-300 text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="text-sm font-bold text-slate-800">
+                                                        Mostrar Calendario, Resultados y Clasificación en la web
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div
+                                            className={`rounded-xl border p-4 text-sm ${
+                                                officialCalendarStatus.variant === 'official'
+                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                                                    : officialCalendarStatus.variant === 'draft'
+                                                      ? 'border-amber-200 bg-amber-50 text-amber-950'
+                                                      : officialCalendarStatus.variant === 'mixed'
+                                                        ? 'border-violet-200 bg-violet-50 text-violet-950'
+                                                        : 'border-slate-200 bg-slate-50 text-slate-700'
+                                            }`}
+                                        >
+                                            <p className="text-xs font-black uppercase tracking-wide opacity-80 mb-1">Calendario oficial (BD)</p>
+                                            <p className="font-black text-base">{officialCalendarStatus.headline}</p>
+                                            <p className="mt-1 leading-relaxed">{officialCalendarStatus.sub}</p>
+                                            <p className="mt-3 text-xs">
+                                                <strong>{matches.length}</strong> partidos en base de datos ·{' '}
+                                                <strong>{allSimDraftMatches.length}</strong> en borradores (no publicados)
+                                            </p>
+                                        </div>
+                                        <div className="rounded-xl border border-purple-200 bg-purple-50 p-5 flex flex-wrap items-center justify-between gap-4">
+                                            <div>
+                                                <p className="font-bold text-purple-900">Generar, editar y publicar borradores</p>
+                                                <p className="text-sm text-purple-800 mt-1">
+                                                    Esa gestión está en <strong>Simulación → Simulaciones</strong>. El calendario oficial solo cambia al pulsar{' '}
+                                                    <strong>Publicar</strong>.
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setCompArenaMode('simulation')}
+                                                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-lg flex items-center gap-2"
+                                            >
+                                                <span className="material-symbols-outlined text-lg">science</span>
+                                                Abrir modo Simulación
+                                            </button>
+                                        </div>
+                                        {!simulationsLoaded ? (
+                                            <p className="text-slate-400 text-sm">Cargando borradores…</p>
+                                        ) : (
+                                            <div className="rounded-lg border border-slate-200 divide-y">
+                                                <p className="px-4 py-2 text-xs font-black uppercase text-slate-500 bg-slate-50">
+                                                    Borradores guardados (solo lectura)
+                                                </p>
+                                                {simDrafts.map((d) => (
+                                                    <div key={d.id} className="px-4 py-3 flex justify-between text-sm">
+                                                        <span className="font-semibold text-slate-800">
+                                                            {d.scheduleDay ? `${d.scheduleDay} · ` : ''}
+                                                            {d.name}
+                                                        </span>
+                                                        <span className="text-slate-500">{d.matches.length} partidos</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {compSubTab === 'simulations' && compArenaMode === 'simulation' && (
                                     <div className="space-y-8">
                                         {!simulationsLoaded ? (
                                             <div className="text-center text-slate-400 py-12">Cargando simulaciones…</div>
@@ -2777,25 +3124,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 {/* Calendario general (tabla por día / por categoría) */}
                                 {compSubTab === 'calendar' && (
                                     <div className="space-y-6">
-                                        <CompetitionPreviewToggle
-                                            mode={compPreviewMode}
-                                            onChange={setCompPreviewMode}
-                                            simMatchCount={allSimDraftMatches.length}
-                                            extra={
-                                                compPreviewMode === 'simulation' ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => void handlePublishActiveDraft()}
-                                                        disabled={!activeDraft || activeDraft.matches.length === 0}
-                                                        className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">publish</span>
-                                                        Publicar borrador activo
-                                                    </button>
-                                                ) : undefined
-                                            }
-                                        />
-                                        {compPreviewMode === 'official' && (
+                                        {compArenaMode === 'official' && (
                                             <>
                                                 <div
                                                     className={`rounded-xl border p-4 text-sm ${
@@ -2845,22 +3174,32 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             </>
                                         )}
                                         <CompetitionCalendarViews
-                                            matches={compPreviewMatches}
+                                            matches={compDisplayMatches}
                                             teams={teams}
+                                            onDownloadCategoryActas={(division, catMatches) =>
+                                                void handleDownloadCategoryActas(division, catMatches)
+                                            }
+                                            actasExporting={actaExporting}
                                             title={
-                                                compPreviewMode === 'simulation'
-                                                    ? 'Calendario simulado (Viernes · Sábado · Domingo)'
+                                                compArenaMode === 'simulation'
+                                                    ? simulationViewDraftId === 'all'
+                                                        ? 'Calendario simulado — todos los días'
+                                                        : `Calendario simulado — ${
+                                                              simDrafts.find((d) => d.id === simulationViewDraftId)?.scheduleDay ??
+                                                              simDrafts.find((d) => d.id === simulationViewDraftId)?.name ??
+                                                              'borrador'
+                                                          }`
                                                     : 'Calendario oficial (Viernes · Sábado · Domingo)'
                                             }
                                             onUpdateMatch={
-                                                compPreviewMode === 'simulation'
+                                                compArenaMode === 'simulation'
                                                     ? (id, patch) => void handleUpdateDraftMatch(id, patch)
                                                     : undefined
                                             }
                                             emptyMessage={
-                                                compPreviewMode === 'simulation'
-                                                    ? 'Genera borradores en Simulaciones para ver el calendario en tabla.'
-                                                    : 'No hay partidos oficiales. Publica desde Simulaciones.'
+                                                compArenaMode === 'simulation'
+                                                    ? 'Genera borradores en Simulaciones o elige otro día en el selector de arriba.'
+                                                    : 'No hay partidos oficiales. Publica desde Simulación → Simulaciones.'
                                             }
                                         />
                                     </div>
@@ -2869,12 +3208,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 {/* Resultados con horario */}
                                 {compSubTab === 'results' && (
                                     <div className="space-y-4">
-                                        <CompetitionPreviewToggle
-                                            mode={compPreviewMode}
-                                            onChange={setCompPreviewMode}
-                                            simMatchCount={allSimDraftMatches.length}
-                                        />
-                                        {compPreviewMode === 'official' && (
+                                        {compArenaMode === 'official' && (
                                             <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg flex items-start gap-3 text-sm text-blue-700">
                                                 <span className="material-symbols-outlined text-blue-500">info</span>
                                                 <p>
@@ -2882,25 +3216,108 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 </p>
                                             </div>
                                         )}
+                                        {compArenaMode === 'simulation' && (
+                                            <p className="text-xs text-purple-800 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+                                                Marcadores y actas se guardan en el <strong>borrador</strong> elegido arriba. La web oficial solo
+                                                cambia al publicar.
+                                            </p>
+                                        )}
+
+                                        <div className="flex flex-col gap-2">
+                                            <span className="text-[10px] font-black uppercase text-slate-400">Categoría</span>
+                                            <div className="flex overflow-x-auto gap-2 pb-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setResultsDivisionFilter('all')}
+                                                    className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shrink-0 ${
+                                                        resultsDivisionFilter === 'all'
+                                                            ? compArenaMode === 'simulation'
+                                                                ? 'bg-purple-600 text-white shadow'
+                                                                : 'bg-teal-700 text-white shadow'
+                                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                    }`}
+                                                >
+                                                    Todas ({compDisplayMatches.length})
+                                                </button>
+                                                {DIVISIONS_LIST.map((cat) => {
+                                                    const n = resultsMatchCountByDivision.get(cat) ?? 0;
+                                                    return (
+                                                        <button
+                                                            key={cat}
+                                                            type="button"
+                                                            onClick={() => setResultsDivisionFilter(cat)}
+                                                            className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shrink-0 ${
+                                                                resultsDivisionFilter === cat
+                                                                    ? compArenaMode === 'simulation'
+                                                                        ? 'bg-purple-600 text-white shadow'
+                                                                        : 'bg-teal-700 text-white shadow'
+                                                                    : n === 0
+                                                                      ? 'bg-slate-50 text-slate-400'
+                                                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                            }`}
+                                                        >
+                                                            {cat} ({n})
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={handleOpenBulkActas}
+                                                disabled={resultsFilteredMatches.length === 0}
+                                                className={`px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50 ${
+                                                    compArenaMode === 'simulation'
+                                                        ? 'bg-purple-700 hover:bg-purple-800 text-white'
+                                                        : 'bg-teal-700 hover:bg-teal-800 text-white'
+                                                }`}
+                                            >
+                                                <span className="material-symbols-outlined text-lg">print</span>
+                                                Imprimir todas (PDF)
+                                                <span className="text-xs font-semibold opacity-90">
+                                                    ({resultsFilteredMatches.length})
+                                                </span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleDownloadAllActasDocx()}
+                                                disabled={resultsFilteredMatches.length === 0 || actaExporting}
+                                                className="px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50 bg-slate-800 hover:bg-slate-900 text-white"
+                                            >
+                                                <span className="material-symbols-outlined text-lg">download</span>
+                                                Descargar todas (DOCX ZIP)
+                                            </button>
+                                            <a
+                                                href="/templates/acta-playa_kolosaurios.docx"
+                                                download
+                                                className="text-xs text-teal-700 font-semibold underline"
+                                            >
+                                                Plantilla vacía Kolosaurios
+                                            </a>
+                                        </div>
                                         <CompetitionResultsTable
-                                            matches={compPreviewMatches}
-                                            previewMode={compPreviewMode}
-                                            onUpdateScore={
-                                                compPreviewMode === 'official' ? updateMatchScore : undefined
+                                            matches={resultsFilteredMatches}
+                                            previewMode={compArenaMode}
+                                            onUpdateSetScores={
+                                                compArenaMode === 'official'
+                                                    ? updateMatchSetScores
+                                                    : updateDraftMatchSetScores
                                             }
-                                            onOpenReport={compPreviewMode === 'official' ? openReportModal : undefined}
+                                            onOpenReport={openReportModal}
                                             onNavigateActa={
-                                                compPreviewMode === 'official'
+                                                compArenaMode === 'official'
                                                     ? (id) => navigate(`/admin/match-report/${id}`)
                                                     : undefined
                                             }
-                                            onSocialPost={
-                                                compPreviewMode === 'official' ? handleGenerateSocialPost : undefined
-                                            }
+                                            onSocialPost={compArenaMode === 'official' ? handleGenerateSocialPost : undefined}
                                             emptyMessage={
-                                                compPreviewMode === 'simulation'
-                                                    ? 'No hay partidos en los borradores. Genera el calendario en Simulaciones.'
-                                                    : 'No hay partidos oficiales con horario.'
+                                                resultsDivisionFilter !== 'all'
+                                                    ? `No hay partidos de ${resultsDivisionFilter} en esta vista.`
+                                                    : compArenaMode === 'simulation'
+                                                      ? 'No hay partidos en el borrador seleccionado. Genera el calendario en Simulaciones.'
+                                                      : 'No hay partidos oficiales con horario.'
                                             }
                                         />
                                     </div>
@@ -2909,64 +3326,83 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 {/* Clasificación */}
                                 {compSubTab === 'standings' && (
                                     <div className="space-y-4">
-                                        <CompetitionPreviewToggle
-                                            mode={compPreviewMode}
-                                            onChange={setCompPreviewMode}
-                                            simMatchCount={allSimDraftMatches.length}
-                                        />
-                                        {compPreviewMatches.length === 0 && (
-                                            <p className="text-sm text-slate-500 text-center py-6 border border-dashed rounded-lg">
-                                                {compPreviewMode === 'simulation'
-                                                    ? 'Sin partidos en borradores: la clasificación se calculará cuando haya resultados en los partidos simulados.'
-                                                    : 'Sin partidos oficiales todavía.'}
-                                            </p>
-                                        )}
-                                        <div className="flex flex-col gap-3">
-                                            <div className="flex overflow-x-auto gap-2 pb-1">
-                                                {DIVISIONS_LIST.map((cat) => (
-                                                    <button
-                                                        key={cat}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setStandingsDivision(cat);
-                                                            setStandingsGroupFilter('all');
-                                                        }}
-                                                        className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shrink-0 ${
-                                                            standingsDivision === cat
-                                                                ? 'bg-primary text-background-dark shadow'
-                                                                : 'bg-slate-100 text-slate-600'
-                                                        }`}
-                                                    >
-                                                        {cat}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span className="text-[10px] font-black uppercase text-slate-400">Grupo</span>
+                                        <div className="flex overflow-x-auto gap-2 pb-1">
+                                            {DIVISIONS_LIST.map((cat) => (
                                                 <button
+                                                    key={cat}
                                                     type="button"
-                                                    onClick={() => setStandingsGroupFilter('all')}
-                                                    className={`px-3 py-1 rounded-full text-[10px] font-bold ${
-                                                        standingsGroupFilter === 'all' ? 'bg-secondary text-background-dark' : 'bg-slate-100 text-slate-600'
+                                                    onClick={() => {
+                                                        setStandingsDivision(cat);
+                                                        const keys = competitionGroupsForDivision(teams, cat, false);
+                                                        const dist = getGroupDistributionForDivision(teams, cat, false)
+                                                            .map((g) => g.key)
+                                                            .filter((k) => k && k !== '—');
+                                                        const first = keys[0] ?? dist[0] ?? 'A';
+                                                        setStandingsGroupFilter(first);
+                                                    }}
+                                                    className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shrink-0 ${
+                                                        standingsDivision === cat
+                                                            ? 'bg-primary text-background-dark shadow'
+                                                            : 'bg-slate-100 text-slate-600'
                                                     }`}
                                                 >
-                                                    Todos
+                                                    {cat}
                                                 </button>
-                                                {standingsGroupsAvailable.map((g) => (
+                                            ))}
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-[10px] font-black uppercase text-slate-400">Grupo</span>
+                                            {standingsGroupKeys.length === 0 ? (
+                                                <span className="text-xs text-slate-500">Sin grupos en esta categoría</span>
+                                            ) : (
+                                                standingsGroupKeys.map((g) => (
                                                     <button
                                                         key={g}
                                                         type="button"
                                                         onClick={() => setStandingsGroupFilter(g)}
-                                                        className={`px-3 py-1 rounded-full text-[10px] font-bold ${
-                                                            standingsGroupFilter === g ? 'bg-secondary text-background-dark' : 'bg-slate-100 text-slate-600'
+                                                        className={`px-4 py-2 rounded-full text-xs font-bold min-w-[2.5rem] ${
+                                                            standingsGroupFilter === g
+                                                                ? 'bg-secondary text-background-dark shadow'
+                                                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                                         }`}
                                                     >
                                                         {g}
                                                     </button>
-                                                ))}
-                                            </div>
+                                                ))
+                                            )}
                                         </div>
+
+                                        <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-[10px] font-black uppercase text-indigo-800">
+                                                    Gestión de grupos (solo admin)
+                                                </span>
+                                                <span className="text-[10px] text-indigo-600">
+                                                    La web pública solo muestra clasificación en lectura.
+                                                </span>
+                                            </div>
+                                            <CompetitionGroupManager
+                                                division={standingsDivision}
+                                                teams={teams}
+                                                groupLetterOptions={groupLetterOptions}
+                                                onMoveTeam={(t, g) => void handleMoveTeamToGroup(t, g)}
+                                                onlyPaid={false}
+                                            />
+                                        </div>
+
+                                        {compDisplayMatches.length === 0 && (
+                                            <p className="text-sm text-slate-500 text-center py-4 border border-dashed rounded-lg">
+                                                {compArenaMode === 'simulation'
+                                                    ? 'Sin partidos en el borrador: la clasificación se verá al registrar resultados.'
+                                                    : 'Sin partidos oficiales todavía.'}
+                                            </p>
+                                        )}
+
                                     <div className="overflow-hidden rounded-lg border border-slate-200">
+                                        <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 text-xs font-bold text-slate-600">
+                                            Clasificación — Grupo {standingsGroupFilter}
+                                        </div>
                                         <table className="w-full text-sm text-left">
                                             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
                                                 <tr>
@@ -2981,18 +3417,32 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
-                                                {standings.map((team, index) => (
-                                                    <tr key={team.name} className={`hover:bg-slate-50/50 ${index < 4 ? 'bg-green-50/30' : ''}`}>
-                                                        <td className="px-6 py-4 font-mono text-slate-400">{index + 1}</td>
-                                                        <td className="px-6 py-4 font-bold text-slate-800">{team.name}</td>
-                                                        <td className="px-4 py-4 text-center">{team.played}</td>
-                                                        <td className="px-4 py-4 text-center font-medium text-green-600">{team.won}</td>
-                                                        <td className="px-4 py-4 text-center text-slate-500">{team.gf}</td>
-                                                        <td className="px-4 py-4 text-center text-slate-500">{team.ga}</td>
-                                                        <td className="px-4 py-4 text-center font-mono text-slate-500">{team.gf - team.ga}</td>
-                                                        <td className="px-6 py-4 text-right font-black text-lg text-slate-900">{team.points}</td>
+                                                {standings.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={8} className="px-6 py-8 text-center text-sm text-slate-400">
+                                                            No hay equipos en el Grupo {standingsGroupFilter}.
+                                                        </td>
                                                     </tr>
-                                                ))}
+                                                ) : (
+                                                standings.map((team, index) => (
+                                                        <tr
+                                                            key={team.name}
+                                                            className={`hover:bg-slate-50/50 ${index < 4 ? 'bg-green-50/30' : ''}`}
+                                                        >
+                                                            <td className="px-6 py-4 font-mono text-slate-400">{index + 1}</td>
+                                                            <td className="px-6 py-4 font-bold text-slate-800">{team.name}</td>
+                                                            <td className="px-4 py-4 text-center">{team.played}</td>
+                                                            <td className="px-4 py-4 text-center font-medium text-green-600">{team.won}</td>
+                                                            <td className="px-4 py-4 text-center text-slate-500">{team.gf}</td>
+                                                            <td className="px-4 py-4 text-center text-slate-500">{team.ga}</td>
+                                                            <td className="px-4 py-4 text-center font-mono text-slate-500">
+                                                                {team.gf - team.ga}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right font-black text-lg text-slate-900">
+                                                                {team.points}
+                                                            </td>
+                                                        </tr>
+                                                )))}
                                             </tbody>
                                         </table>
                                     </div>
@@ -3248,6 +3698,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
                         <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
                             {reportMode === 'DIGITAL' ? (
+                                <>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     {[selectedMatchForReport.teamA, selectedMatchForReport.teamB].map((teamName, idx) => {
                                         const team = teams.find(t => t.name === teamName);
@@ -3257,18 +3708,24 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             <div key={team.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <h4 className="font-bold text-lg border-b border-slate-100 pb-2 mb-4 text-center">{team.name}</h4>
                                                 <div className="space-y-3">
-                                                    {playersEligibleForMatch(team.players).length === 0 && (
+                                                    {playersListedOnActa(team.players).length === 0 && (
                                                         <p className="text-sm text-slate-400 text-center italic">
-                                                            Ningún jugador con DNI y seguro aprobados.
+                                                            Sin jugadores en plantilla. Añade la plantilla en Equipos.
                                                         </p>
                                                     )}
-                                                    {playersEligibleForMatch(team.players).map(player => {
+                                                    {playersListedOnActa(team.players).map((player) => {
                                                         const stat = selectedMatchForReport.report?.playerStats?.find(s => s.playerId === player.id) || { goals: 0 };
+                                                        const docsOk = isPlayerEligibleForMatch(player);
                                                         return (
                                                             <div key={player.id} className="flex justify-between items-center text-sm">
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="bg-slate-100 text-slate-500 text-xs font-mono px-1.5 py-0.5 rounded">#{player.number}</span>
-                                                                    <span className="font-medium text-slate-700">{player.name}</span>
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <span className="bg-slate-100 text-slate-500 text-xs font-mono px-1.5 py-0.5 rounded shrink-0">#{player.number}</span>
+                                                                    <span className="font-medium text-slate-700 truncate">{player.name} {player.surnames}</span>
+                                                                    {!docsOk && (
+                                                                        <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1 rounded shrink-0" title="DNI o seguro pendiente">
+                                                                            docs
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                                 <div className="flex items-center gap-3">
                                                                     <button onClick={() => updatePlayerStat(player.id, 'goals', -1)} className="text-slate-400 hover:text-red-500"><span className="material-symbols-outlined text-lg">remove_circle</span></button>
@@ -3283,6 +3740,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                         );
                                     })}
                                 </div>
+                                <div className="mt-6 border-t border-slate-200 pt-4">
+                                    <p className="text-xs font-bold uppercase text-slate-500 mb-2">Vista previa acta Kolosaurios (auto-rellena)</p>
+                                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 max-h-[280px] overflow-y-auto">
+                                        <div className="origin-top-left scale-[0.55] w-[181%]">
+                                            <MatchReportSheet match={selectedMatchForReport} teams={teams} />
+                                        </div>
+                                    </div>
+                                </div>
+                                </>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[300px] border-2 border-dashed border-slate-300 rounded-xl bg-white">
                                     {selectedMatchForReport.report?.imageUri ? (
@@ -3301,9 +3767,35 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                             )}
                         </div>
 
-                        <div className="p-4 border-t border-slate-200 bg-white flex justify-end gap-3">
-                            <button onClick={() => setSelectedMatchForReport(null)} className="px-6 py-2 rounded-lg font-bold text-slate-500 hover:bg-slate-100">Cancelar</button>
-                            <button onClick={saveReport} className="px-6 py-2 rounded-lg font-bold bg-primary text-background-dark hover:opacity-90 shadow-lg">Guardar Acta</button>
+                        <div className="p-4 border-t border-slate-200 bg-white flex flex-wrap justify-between gap-3 items-center">
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        try {
+                                            printActaHtml(selectedMatchForReport, teams);
+                                        } catch (e: unknown) {
+                                            toast.error(e instanceof Error ? e.message : 'No se pudo imprimir.');
+                                        }
+                                    }}
+                                    className="px-4 py-2 rounded-lg text-sm font-bold border border-teal-200 text-teal-900 bg-teal-50 hover:bg-teal-100 flex items-center gap-1"
+                                >
+                                    <span className="material-symbols-outlined text-base">print</span>
+                                    PDF / Imprimir
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void downloadActaDocx(selectedMatchForReport, teams).then(() => toast.success('Acta DOCX descargada'))}
+                                    className="px-4 py-2 rounded-lg text-sm font-bold border border-slate-200 text-slate-800 bg-slate-50 hover:bg-slate-100 flex items-center gap-1"
+                                >
+                                    <span className="material-symbols-outlined text-base">download</span>
+                                    Descargar DOCX
+                                </button>
+                            </div>
+                            <div className="flex gap-3 ml-auto">
+                                <button onClick={() => setSelectedMatchForReport(null)} className="px-6 py-2 rounded-lg font-bold text-slate-500 hover:bg-slate-100">Cancelar</button>
+                                <button onClick={() => void saveReport()} className="px-6 py-2 rounded-lg font-bold bg-primary text-background-dark hover:opacity-90 shadow-lg">Guardar Acta</button>
+                            </div>
                         </div>
                     </div>
                 </div>

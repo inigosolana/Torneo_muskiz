@@ -38,6 +38,9 @@ interface CompetitionCalendarViewsProps {
     /** Etiqueta del contexto (borrador, oficial, etc.) */
     title?: string;
     onUpdateMatch?: (matchId: string, patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>) => void;
+    /** Descarga ZIP de actas DOCX de todos los partidos de una categoría. */
+    onDownloadCategoryActas?: (division: Team['division'], matches: Match[]) => void;
+    actasExporting?: boolean;
     emptyMessage?: string;
 }
 
@@ -80,6 +83,8 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
     teams,
     title,
     onUpdateMatch,
+    onDownloadCategoryActas,
+    actasExporting,
     emptyMessage = 'No hay partidos para mostrar.',
 }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('day');
@@ -180,9 +185,23 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                             )}
                                             <h5 className="font-black text-sm text-slate-800">{division}</h5>
                                         </div>
-                                        <span className="text-[11px] font-bold text-slate-500">
-                                            {catMatches.length} partidos
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            {onDownloadCategoryActas && (
+                                                <button
+                                                    type="button"
+                                                    disabled={actasExporting || catMatches.length === 0}
+                                                    onClick={() => onDownloadCategoryActas(division, catMatches)}
+                                                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 flex items-center gap-1"
+                                                    title="ZIP con un DOCX por partido de esta categoría"
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">download</span>
+                                                    Actas ({catMatches.length})
+                                                </button>
+                                            )}
+                                            <span className="text-[11px] font-bold text-slate-500">
+                                                {catMatches.length} partidos
+                                            </span>
+                                        </div>
                                     </div>
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-sm text-left">

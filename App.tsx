@@ -15,6 +15,7 @@ import { Information } from './views/Information';
 import { PlayerSelfRegistration } from './views/PlayerSelfRegistration';
 import { ManagerLogin } from './views/ManagerLogin';
 import { MatchReport } from './views/MatchReport';
+import { MatchReportsBulk } from './views/MatchReportsBulk';
 import { teamService, matchService, mapSupabaseMatchRow } from './services/teamService';
 import { supabase } from './services/supabaseClient';
 import { OpsErrorBoundary } from './components/OpsErrorBoundary';
@@ -269,6 +270,21 @@ const App: React.FC = () => {
                   unauthenticatedElement={adminUnauthorized}
                 >
                   <MatchReport />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/match-reports-bulk"
+              element={
+                <ProtectedRoute
+                  allowedRole="staff"
+                  user={user}
+                  userRole={userRole}
+                  roleLoading={roleLoading}
+                  onUnauthorizedRole={handleLogout}
+                  unauthenticatedElement={adminUnauthorized}
+                >
+                  <MatchReportsBulk />
                 </ProtectedRoute>
               }
             />
