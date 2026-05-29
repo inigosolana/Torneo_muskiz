@@ -1,35 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import type { Match } from '../types';
 import {
     buildFullDayTimeSlots,
     groupMatchesForDayGrid,
-    getDivisionCodeFromRound,
 } from '../services/muskizScheduleSimulator';
 import type { MuskizScheduleDayLabel } from '../services/muskizScheduleSimulator';
-
-// ─── Color por categoría ───────────────────────────────────────────────────
-const DIV_COLORS: Record<string, { cell: string; badge: string; drag: string }> = {
-    CF: { cell: 'bg-pink-50',    badge: 'bg-pink-200 text-pink-900',    drag: 'border-pink-400' },
-    CM: { cell: 'bg-blue-50',    badge: 'bg-blue-200 text-blue-900',    drag: 'border-blue-400' },
-    JF: { cell: 'bg-purple-50',  badge: 'bg-purple-200 text-purple-900', drag: 'border-purple-400' },
-    JM: { cell: 'bg-indigo-50',  badge: 'bg-indigo-200 text-indigo-900', drag: 'border-indigo-400' },
-    SF: { cell: 'bg-rose-50',    badge: 'bg-rose-200 text-rose-900',    drag: 'border-rose-400' },
-    SM: { cell: 'bg-cyan-50',    badge: 'bg-cyan-200 text-cyan-900',    drag: 'border-cyan-400' },
-    IF: { cell: 'bg-emerald-50', badge: 'bg-emerald-200 text-emerald-900', drag: 'border-emerald-400' },
-    IM: { cell: 'bg-teal-50',    badge: 'bg-teal-200 text-teal-900',    drag: 'border-teal-400' },
-};
-const FALLBACK_COLORS = { cell: 'bg-slate-50', badge: 'bg-slate-200 text-slate-700', drag: 'border-slate-400' };
-
-function divColors(round?: string) {
-    const code = getDivisionCodeFromRound(round);
-    return (code && DIV_COLORS[code]) ?? FALLBACK_COLORS;
-}
-
-// ─── Leyenda ───────────────────────────────────────────────────────────────
-const DIV_LABELS: Record<string, string> = {
-    CF: 'Cad. F', CM: 'Cad. M', JF: 'Juv. F', JM: 'Juv. M',
-    SF: 'Senior F', SM: 'Senior M', IF: 'Inf. F', IM: 'Inf. M',
-};
+import {
+    collectGridLegendEntries,
+    getMatchGridColors,
+} from '../utils/matchGridColors';
 
 const DAY_LABELS: MuskizScheduleDayLabel[] = ['Viernes', 'Sábado', 'Domingo'];
 
@@ -131,13 +110,19 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
     const { courts, times, grid } = groupMatchesForDayGrid(matches, viewDay, { fillEmptySlots });
     const slotTimesForEdit = fillEmptySlots ? buildFullDayTimeSlots(viewDay) : [];
 
-    // Detect which division codes are present for the legend
-    const presentCodes = [...new Set(
-        matches
-            .filter(m => (m.scheduleDay ?? '').startsWith(viewDay.slice(0, 3)) || m.scheduleDay === viewDay)
-            .map(m => getDivisionCodeFromRound(m.round))
-            .filter(Boolean)
-    )] as string[];
+    // Leyenda: categoría + tono de grupo / fase
+    const legendEntries = useMemo(
+        () =>
+            collectGridLegendEntries(
+                matches
+                    .filter(
+                        (m) =>
+                            (m.scheduleDay ?? '').startsWith(viewDay.slice(0, 3)) || m.scheduleDay === viewDay
+                    )
+                    .map((m) => m.round)
+            ),
+        [matches, viewDay]
+    );
 
     // All possible times + courts for the edit modal dropdowns
     const allTimes = fillEmptySlots && slotTimesForEdit.length
@@ -171,17 +156,14 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                 </div>
             )}
 
-            {/* Leyenda de categorías */}
-            {presentCodes.length > 0 && (
+            {/* Leyenda de categorías y grupos */}
+            {legendEntries.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-slate-100 bg-white">
-                    {presentCodes.map(code => {
-                        const c = DIV_COLORS[code] ?? FALLBACK_COLORS;
-                        return (
-                            <span key={code} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.badge}`}>
-                                {code} · {DIV_LABELS[code] ?? code}
-                            </span>
-                        );
-                    })}
+                    {legendEntries.map((entry) => (
+                        <span key={entry.key} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${entry.colors.badge}`}>
+                            {entry.label}
+                        </span>
+                    ))}
                 </div>
             )}
 
@@ -207,7 +189,7 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                     {courts.map((c) => {
                                         const m = grid[t]?.[c] ?? null;
                                         const isDropTarget = dropTarget?.time === t && dropTarget?.court === c;
-                                        const colors = divColors(m?.round);
+                                        const colors = getMatchGridColors(m?.round);
                                         return (
                                             <td
                                                 key={c}

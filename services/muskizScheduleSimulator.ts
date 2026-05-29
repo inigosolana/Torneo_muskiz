@@ -3,7 +3,7 @@
  *
  * Reglas por defecto:
  * - Viernes: solo cadetes (♀♂), 17:00–21:00, 6 campos.
- * - Sábado: juvenil + senior (♀♂), 9:00–21:00, comida 13:00–14:30, 6 campos.
+ * - Sábado: juvenil + senior (♀♂), 9:00–21:00, comida 14:00–15:30/15:50/16:00, 6 campos.
  * - Domingo: infantiles (♀♂), 9:00–15:00, 4 campos.
  *
  * Formato por número de equipos en la categoría:
@@ -15,6 +15,7 @@
  * El simulador intenta que cada equipo juegue ≥4 partidos reales; si no cabe, baja a ≥3.
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
  * Las fases de grupos/cuartos se programan antes que semis/finales.
+ * Las finales se reservan en las últimas franjas del día (cierre del calendario).
  * Se mezclan categorías en la tabla (interleaved) para mayor variedad.
  * Evita en lo posible que un equipo juegue dos partidos seguidos (franjas consecutivas).
  */
@@ -30,9 +31,11 @@ export const MIN_REAL_MATCHES_PER_TEAM = 3;
 /** Objetivo preferido de partidos reales por equipo (si cabe). */
 export const TARGET_REAL_MATCHES_PER_TEAM = 4;
 
-const LUNCH_DURATION_MINS_OPTIONS = [90, 120] as const;
-const LUNCH_START_MIN = 13 * 60;
-const LUNCH_START_MAX = 15 * 60 + 30;
+/** Duraciones de comida (min) desde las 14:00: 1h30, 1h50 (ej. 15:50), 2h. */
+const LUNCH_DURATION_MINS_OPTIONS = [90, 110, 120] as const;
+/** Inicio comida sábado: tras la mañana (último hueco habitual ~13:05). */
+const SATURDAY_LUNCH_START = '14:00';
+const SATURDAY_LUNCH_DEFAULT_END = '15:50';
 
 export interface MuskizBuildResult {
     matches: Match[];
@@ -48,7 +51,7 @@ export interface MuskizSimulatorOptions {
     /** Minutos por bloque partido+cambio (Excel referencia ~35). */
     slotDurationMins?: number;
     lunchStart?: string;
-    /** Fin de comida. Por defecto 14:30 (90 min). Máximo recomendado: 15:00 (2 h). */
+    /** Fin de comida. Por defecto 15:50 (1h50 desde 14:00). */
     lunchEnd?: string;
 }
 
@@ -446,7 +449,7 @@ const DEFAULT_COURTS_4 = ['Campo 1', 'Campo 2', 'Campo 3', 'Campo 4'];
 export function defaultConfigs(): Record<MuskizScheduleDayLabel, DayConfig> {
     return {
         Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:00', playEndExclusive: '21:00', courts: DEFAULT_COURTS_6 },
-        Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:00', playEndExclusive: '21:00', courts: DEFAULT_COURTS_6, lunch: { start: '13:00', end: '14:30' } },
+        Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:00', playEndExclusive: '21:00', courts: DEFAULT_COURTS_6, lunch: { start: '14:00', end: '15:50' } },
         Domingo: { label: 'Domingo', dayShort: 'Dom', playStart: '09:00', playEndExclusive: '15:00', courts: DEFAULT_COURTS_4 },
     };
 }
@@ -457,8 +460,8 @@ export function getDayScheduleConfig(
 ): DayConfig {
     const configs = defaultConfigs();
     if (day === 'Sábado') {
-        const start = options?.lunchStart ?? configs.Sábado.lunch?.start ?? '13:00';
-        const end = options?.lunchEnd ?? configs.Sábado.lunch?.end ?? '14:30';
+        const start = options?.lunchStart ?? configs.Sábado.lunch?.start ?? SATURDAY_LUNCH_START;
+        const end = options?.lunchEnd ?? configs.Sábado.lunch?.end ?? SATURDAY_LUNCH_DEFAULT_END;
         configs.Sábado = { ...configs.Sábado, lunch: { start, end } };
     }
     return configs[day];
@@ -473,30 +476,37 @@ export function buildFullDayTimeSlots(
     return generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch).map(minutesToTime);
 }
 
-/** Elige inicio de comida (13:00–15:30) y duración (90 o 120 min) que maximice partidos colocados. */
+/** Elige duración de comida (90, 110 o 120 min desde 14:00) que maximice partidos colocados. */
 function pickOptimalSaturdayLunch(
     day: MuskizScheduleDayLabel,
     specs: RawMatchSpec[],
     configs: Record<MuskizScheduleDayLabel, DayConfig>,
     slotMins: number
 ): { start: string; end: string } {
-    const fallback = { start: '13:00', end: '14:30' };
+    const fallback = { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END };
     if (day !== 'Sábado' || !configs.Sábado.lunch) return fallback;
 
-    let best: { start: string; end: string; placed: number } = { ...fallback, placed: -1 };
+    const startMin = timeToMinutes(SATURDAY_LUNCH_START);
+    let best: { start: string; end: string; placed: number; endMin: number } = {
+        ...fallback,
+        placed: -1,
+        endMin: timeToMinutes(fallback.end),
+    };
+
     for (const duration of LUNCH_DURATION_MINS_OPTIONS) {
-        for (let startMin = LUNCH_START_MIN; startMin <= LUNCH_START_MAX; startMin += 15) {
-            const endMin = startMin + duration;
-            if (endMin > timeToMinutes('21:00')) continue;
-            const lunch = { start: minutesToTime(startMin), end: minutesToTime(endMin) };
-            const trialConfigs = {
-                ...configs,
-                Sábado: { ...configs.Sábado, lunch },
-            };
-            const { placed } = scheduleGreedy(day, specs, trialConfigs, slotMins);
-            if (placed.length > best.placed) {
-                best = { start: lunch.start, end: lunch.end, placed: placed.length };
-            }
+        const endMin = startMin + duration;
+        if (endMin + slotMins > timeToMinutes('21:00')) continue;
+        const lunch = { start: minutesToTime(startMin), end: minutesToTime(endMin) };
+        const trialConfigs = {
+            ...configs,
+            Sábado: { ...configs.Sábado, lunch },
+        };
+        const { placed } = scheduleGreedy(day, specs, trialConfigs, slotMins);
+        if (
+            placed.length > best.placed ||
+            (placed.length === best.placed && endMin < best.endMin)
+        ) {
+            best = { start: lunch.start, end: lunch.end, placed: placed.length, endMin };
         }
     }
     return { start: best.start, end: best.end };
@@ -518,37 +528,48 @@ function isPlaceholderTeamName(name: string): boolean {
     );
 }
 
-/**
- * Asigna horas y pistas evitando solapamiento de pista/equipo y, en lo posible,
- * dos partidos seguidos del mismo equipo (sin al menos una franja de descanso).
- */
-function scheduleGreedy(
-    day: MuskizScheduleDayLabel,
-    specs: RawMatchSpec[],
-    configs: Record<MuskizScheduleDayLabel, DayConfig>,
+/** Franjas reservadas al final del día para colocar todas las finales. */
+function reservedFinalSlotStarts(slotStartsMin: number[], finalCount: number, courtCount: number): number[] {
+    if (finalCount <= 0 || slotStartsMin.length === 0) return [];
+    const waves = Math.max(1, Math.ceil(finalCount / courtCount));
+    return slotStartsMin.slice(-Math.min(waves, slotStartsMin.length));
+}
+
+type SlotTimePolicy = 'earliest' | 'latest';
+
+interface ScheduleGreedyState {
+    slotStartsMin: number[];
+    courts: string[];
+    slotMins: number;
+    assigned: { tStart: number; tEnd: number; courtIdx: number; teams: [string, string] }[];
+    placed: ScheduledCell[];
+    unplaced: RawMatchSpec[];
+}
+
+function createScheduleGreedyState(
+    slotStartsMin: number[],
+    courts: string[],
     slotMins: number
-): { placed: ScheduledCell[]; unplaced: RawMatchSpec[] } {
-    const cfg = configs[day];
-    const slotStartsMin = generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch);
-    const courts = cfg.courts;
+): ScheduleGreedyState {
+    return { slotStartsMin, courts, slotMins, assigned: [], placed: [], unplaced: [] };
+}
 
-    type Ass = { tStart: number; tEnd: number; courtIdx: number; teams: [string, string] };
-    const assigned: Ass[] = [];
+function scheduleSpecBatch(
+    state: ScheduleGreedyState,
+    specs: RawMatchSpec[],
+    options: {
+        slotTimePolicy: SlotTimePolicy;
+        allowedSlotStarts?: number[];
+        forbiddenSlotStarts?: number[];
+    }
+): void {
+    const { slotStartsMin, courts, slotMins, assigned } = state;
+    const allowedSet =
+        options.allowedSlotStarts != null ? new Set(options.allowedSlotStarts) : null;
+    const forbiddenSet =
+        options.forbiddenSlotStarts != null ? new Set(options.forbiddenSlotStarts) : null;
+
     const courtUsage = () => courts.map((_, ci) => assigned.filter((x) => x.courtIdx === ci).length);
-
-    const placed: ScheduledCell[] = [];
-    const unplaced: RawMatchSpec[] = [];
-
-    const teamsBusy = (teams: [string, string], tStart: number, tEnd: number): boolean =>
-        assigned.some(
-            (x) =>
-                x.tStart < tEnd &&
-                x.tEnd > tStart &&
-                (x.teams.includes(teams[0]) || x.teams.includes(teams[1]))
-        );
-
-    const courtBusy = (courtIdx: number, tStart: number, tEnd: number): boolean =>
-        assigned.some((x) => x.courtIdx === courtIdx && x.tStart < tEnd && x.tEnd > tStart);
 
     const teamLastEnd = (team: string): number => {
         let last = -Infinity;
@@ -561,11 +582,21 @@ function scheduleGreedy(
     const teamMatchCount = (team: string): number =>
         assigned.filter((x) => x.teams.includes(team)).length;
 
-    /** Minutos desde el último partido del equipo hasta el inicio de este hueco. */
     const restGapBefore = (team: string, ts: number): number => {
         const last = teamLastEnd(team);
         return Number.isFinite(last) && last !== -Infinity ? ts - last : Infinity;
     };
+
+    const teamsBusy = (teams: [string, string], tStart: number, tEnd: number): boolean =>
+        assigned.some(
+            (x) =>
+                x.tStart < tEnd &&
+                x.tEnd > tStart &&
+                (x.teams.includes(teams[0]) || x.teams.includes(teams[1]))
+        );
+
+    const courtBusy = (courtIdx: number, tStart: number, tEnd: number): boolean =>
+        assigned.some((x) => x.courtIdx === courtIdx && x.tStart < tEnd && x.tEnd > tStart);
 
     const hasBackToBack = (teams: [string, string], ts: number): boolean => {
         for (const t of teams) {
@@ -580,7 +611,8 @@ function scheduleGreedy(
         ts: number,
         ci: number,
         usage: number[],
-        allowBackToBack: boolean
+        allowBackToBack: boolean,
+        slotTimePolicy: SlotTimePolicy
     ): number | null => {
         const te = ts + slotMins;
         if (courtBusy(ci, ts, te) || teamsBusy(teams, ts, te)) return null;
@@ -593,8 +625,13 @@ function scheduleGreedy(
 
         const PENALTY_BACK_TO_BACK = 50_000_000;
         const PENALTY_ONE_SLOT_REST = 8_000_000;
+        const lastSlot = slotStartsMin[slotStartsMin.length - 1] ?? ts;
 
-        let score = ts * 100 + usage[ci]! * 10;
+        let score =
+            slotTimePolicy === 'earliest'
+                ? ts * 100 + usage[ci]! * 10
+                : (lastSlot - ts) * 100 + usage[ci]! * 10;
+
         if (minGap < slotMins) score += PENALTY_BACK_TO_BACK;
         else if (minGap < 2 * slotMins) score += PENALTY_ONE_SLOT_REST;
         else score -= Math.min(minGap, 6 * slotMins);
@@ -604,16 +641,23 @@ function scheduleGreedy(
 
     const findBestSlot = (
         teams: [string, string],
-        allowBackToBack: boolean
+        allowBackToBack: boolean,
+        slotTimePolicy: SlotTimePolicy
     ): { ts: number; ci: number } | null => {
         let best: { ts: number; ci: number } | null = null;
         let bestScore = Infinity;
 
-        for (const ts of slotStartsMin) {
+        const slotOrder =
+            slotTimePolicy === 'earliest' ? slotStartsMin : [...slotStartsMin].reverse();
+
+        for (const ts of slotOrder) {
+            if (allowedSet && !allowedSet.has(ts)) continue;
+            if (forbiddenSet?.has(ts)) continue;
+
             const usage = courtUsage();
             const courtOrder = courts.map((_, ci) => ci).sort((a, b) => usage[a]! - usage[b]!);
             for (const ci of courtOrder) {
-                const score = scoreSlot(teams, ts, ci, usage, allowBackToBack);
+                const score = scoreSlot(teams, ts, ci, usage, allowBackToBack, slotTimePolicy);
                 if (score !== null && score < bestScore) {
                     bestScore = score;
                     best = { ts, ci };
@@ -633,19 +677,65 @@ function scheduleGreedy(
 
     for (const spec of sortedSpecs) {
         const teamsPair: [string, string] = [spec.teamA, spec.teamB];
-        let best = findBestSlot(teamsPair, false);
-        if (!best) best = findBestSlot(teamsPair, true);
+        let best = findBestSlot(teamsPair, false, options.slotTimePolicy);
+        if (!best) best = findBestSlot(teamsPair, true, options.slotTimePolicy);
 
         if (best) {
             const te = best.ts + slotMins;
             assigned.push({ tStart: best.ts, tEnd: te, courtIdx: best.ci, teams: teamsPair });
-            placed.push({ timeMin: best.ts, courtIdx: best.ci, courtName: courts[best.ci]!, spec });
+            state.placed.push({
+                timeMin: best.ts,
+                courtIdx: best.ci,
+                courtName: courts[best.ci]!,
+                spec,
+            });
         } else {
-            unplaced.push(spec);
+            state.unplaced.push(spec);
         }
     }
+}
 
-    return { placed, unplaced };
+/**
+ * Asigna horas y pistas evitando solapamiento de pista/equipo y, en lo posible,
+ * dos partidos seguidos del mismo equipo (sin al menos una franja de descanso).
+ * Las finales se reservan en las últimas franjas del día.
+ */
+function scheduleGreedy(
+    day: MuskizScheduleDayLabel,
+    specs: RawMatchSpec[],
+    configs: Record<MuskizScheduleDayLabel, DayConfig>,
+    slotMins: number
+): { placed: ScheduledCell[]; unplaced: RawMatchSpec[] } {
+    const cfg = configs[day];
+    const slotStartsMin = generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch);
+    const courts = cfg.courts;
+
+    const finalSpecs = specs.filter((s) => s.phase === 'FINAL');
+    const nonFinalSpecs = specs.filter((s) => s.phase !== 'FINAL');
+    const reservedFinalSlots = reservedFinalSlotStarts(slotStartsMin, finalSpecs.length, courts.length);
+
+    const state = createScheduleGreedyState(slotStartsMin, courts, slotMins);
+
+    scheduleSpecBatch(state, nonFinalSpecs, {
+        slotTimePolicy: 'earliest',
+        forbiddenSlotStarts: reservedFinalSlots,
+    });
+
+    scheduleSpecBatch(state, finalSpecs, {
+        slotTimePolicy: 'latest',
+        allowedSlotStarts: reservedFinalSlots.length > 0 ? reservedFinalSlots : slotStartsMin,
+    });
+
+    // Si alguna final no cabe en las franjas reservadas, reintenta en todo el día (tarde).
+    const unplacedFinals = state.unplaced.filter((s) => s.phase === 'FINAL');
+    if (unplacedFinals.length > 0) {
+        state.unplaced = state.unplaced.filter((s) => s.phase !== 'FINAL');
+        scheduleSpecBatch(state, unplacedFinals, {
+            slotTimePolicy: 'latest',
+        });
+    }
+
+    return { placed: state.placed, unplaced: state.unplaced };
 }
 
 /** Cuenta equipos reales con dos partidos en franjas consecutivas (sin descanso). */

@@ -7,28 +7,11 @@ import {
     resolveMatchDivision,
     type MuskizScheduleDayLabel,
 } from '../services/muskizScheduleSimulator';
-
-const DIV_COLORS: Record<string, string> = {
-    CF: 'border-pink-300 bg-pink-50',
-    CM: 'border-blue-300 bg-blue-50',
-    JF: 'border-purple-300 bg-purple-50',
-    JM: 'border-indigo-300 bg-indigo-50',
-    SF: 'border-rose-300 bg-rose-50',
-    SM: 'border-cyan-300 bg-cyan-50',
-    IF: 'border-emerald-300 bg-emerald-50',
-    IM: 'border-teal-300 bg-teal-50',
-};
-
-const DIV_BADGE: Record<string, string> = {
-    CF: 'bg-pink-200 text-pink-900',
-    CM: 'bg-blue-200 text-blue-900',
-    JF: 'bg-purple-200 text-purple-900',
-    JM: 'bg-indigo-200 text-indigo-900',
-    SF: 'bg-rose-200 text-rose-900',
-    SM: 'bg-cyan-200 text-cyan-900',
-    IF: 'bg-emerald-200 text-emerald-900',
-    IM: 'bg-teal-200 text-teal-900',
-};
+import {
+    collectGridLegendEntries,
+    getDivisionBaseColors,
+    getMatchGridColors,
+} from '../utils/matchGridColors';
 
 type ViewMode = 'day' | 'category';
 
@@ -174,18 +157,39 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                         <p className="text-sm text-slate-400 text-center py-6">No se pudo agrupar por categoría.</p>
                     ) : (
                         byCategory.map(({ division, code, matches: catMatches }) => {
-                            const color = (code && DIV_COLORS[code]) ?? 'border-slate-200 bg-slate-50';
-                            const badge = (code && DIV_BADGE[code]) ?? 'bg-slate-200 text-slate-700';
+                            const base = getDivisionBaseColors(code);
+                            const groupLegend = collectGridLegendEntries(
+                                catMatches.map((m) => m.round),
+                                code
+                            );
                             return (
-                                <section key={division} className={`rounded-xl border-2 overflow-hidden ${color}`}>
+                                <section key={division} className={`rounded-xl border-2 overflow-hidden ${base.cell} ${base.drag}`}>
                                     <div className="flex items-center justify-between px-4 py-2.5 border-b border-inherit bg-white/60">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             {code && (
-                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${badge}`}>
+                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${base.badge}`}>
                                                     {code}
                                                 </span>
                                             )}
                                             <h5 className="font-black text-sm text-slate-800">{division}</h5>
+                                            {groupLegend.length > 0 && (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {groupLegend.map((entry) => (
+                                                        <span
+                                                            key={entry.key}
+                                                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${entry.colors.badge}`}
+                                                        >
+                                                            {entry.tone.startsWith('group-')
+                                                                ? entry.tone.replace('group-', 'Gr. ')
+                                                                : entry.tone === 'semi'
+                                                                  ? 'Semis'
+                                                                  : entry.tone === 'final'
+                                                                    ? 'Final'
+                                                                    : entry.tone}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {onDownloadCategoryActas && (
@@ -218,8 +222,10 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-white/80">
-                                                {catMatches.map((m) => (
-                                                    <tr key={m.id} className="hover:bg-white/50">
+                                                {catMatches.map((m) => {
+                                                    const rowColors = getMatchGridColors(m.round);
+                                                    return (
+                                                    <tr key={m.id} className={`hover:brightness-[0.98] ${rowColors.cell}`}>
                                                         <td className="px-4 py-2 text-xs font-bold text-slate-600">
                                                             {inferMatchScheduleDay(m) ?? '—'}
                                                         </td>
@@ -235,7 +241,8 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                                             {(m.round ?? '').split('·').slice(2).join('·').trim() || m.round}
                                                         </td>
                                                     </tr>
-                                                ))}
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
