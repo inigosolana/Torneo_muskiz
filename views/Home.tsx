@@ -171,11 +171,11 @@ export const Home: React.FC = () => {
           <div className="flex flex-wrap justify-center items-center gap-12 opacity-70 grayscale hover:grayscale-0 transition-all duration-500">
             {topSponsors.map((sponsor) => {
               const content = (
-                <div className="flex items-center gap-2 text-xl font-black text-slate-800 dark:text-white">
+                <div className="flex items-center gap-3 text-xl font-black text-slate-800 dark:text-white">
                   {!sponsor.logoUrl.includes('/') && !sponsor.logoUrl.includes('.') ? (
                     <span className="material-symbols-outlined text-4xl text-slate-600">{sponsor.logoUrl}</span>
                   ) : (
-                    <img src={sponsor.logoUrl} alt={sponsor.name} className="h-12 max-w-[140px] object-contain" />
+                    <img src={sponsor.logoUrl} alt={sponsor.name} className="h-12 w-auto max-w-[160px] object-contain" />
                   )}
                   <span className="hidden sm:inline">{sponsor.name}</span>
                 </div>

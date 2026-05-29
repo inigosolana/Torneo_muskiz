@@ -1,4 +1,5 @@
 import { SiteContent } from '../types';
+import { SPONSOR_LOGO_BY_NAME } from './sponsorLogos';
 
 export const siteContent: SiteContent = {
   heroTitle: "II Torneo Muskizko Udala",
@@ -48,42 +49,42 @@ export const siteContent: SiteContent = {
     {
       id: 's1',
       name: 'Ayuntamiento de Muskiz',
-      logoUrl: '/patrocinadores/muskizko_udala.png',
+      logoUrl: SPONSOR_LOGO_BY_NAME['Ayuntamiento de Muskiz'],
       tier: 'Platinum',
       websiteUrl: 'https://www.muskiz.eus/',
     },
     {
       id: 's2',
       name: 'Petronor',
-      logoUrl: '/patrocinadores/petronor.jpg',
+      logoUrl: SPONSOR_LOGO_BY_NAME.Petronor,
       tier: 'Platinum',
       websiteUrl: 'https://www.petronor.eus/',
     },
     {
       id: 's-delcoi',
       name: 'DELCOI S.A.',
-      logoUrl: '/patrocinadores/delcoi.png',
+      logoUrl: SPONSOR_LOGO_BY_NAME['DELCOI S.A.'],
       tier: 'Gold',
       websiteUrl: 'https://www.delcoi.biz/',
     },
     {
       id: 's-itxas-mendi',
       name: 'Itxas Mendi (Montemar) Bar',
-      logoUrl: '/patrocinadores/itxas-mendi-montemar.png',
+      logoUrl: SPONSOR_LOGO_BY_NAME['Itxas Mendi (Montemar) Bar'],
       tier: 'Gold',
       websiteUrl: 'https://www.disfrutabizkaia.com/establecimiento/itxas-mendi-montemar-bar/',
     },
     {
       id: 's-xbotgo',
       name: 'XbotGo',
-      logoUrl: '/patrocinadores/xbotgo.png',
+      logoUrl: SPONSOR_LOGO_BY_NAME.XbotGo,
       tier: 'Gold',
       websiteUrl: 'https://www.xbotgo.com/',
     },
     {
       id: 's-baratza',
       name: 'Baratza',
-      logoUrl: '/patrocinadores/baratza.png',
+      logoUrl: SPONSOR_LOGO_BY_NAME.Baratza,
       tier: 'Gold',
     },
   ],

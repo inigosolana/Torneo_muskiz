@@ -20,19 +20,29 @@ export const Sponsors: React.FC = () => {
   const silverSponsors = useMemo(() => sponsors.filter((s) => s.tier === 'Silver'), [sponsors]);
   const collaborators = useMemo(() => sponsors.filter((s) => s.tier === 'Collaborator'), [sponsors]);
 
-  const renderLogo = (logoUrl: string, sizeClass: string) => {
+  const renderLogo = (logoUrl: string) => {
     if (!logoUrl) {
-      return <span className={`material-symbols-outlined ${sizeClass} text-slate-300 mb-4`}>image</span>;
+      return (
+        <div className="h-24 w-full flex items-center justify-center mb-4">
+          <span className="material-symbols-outlined text-6xl text-slate-300">image</span>
+        </div>
+      );
     }
     if (!logoUrl.includes('/') && !logoUrl.includes('.')) {
-      return <span className={`material-symbols-outlined ${sizeClass} text-current mb-4`}>{logoUrl}</span>;
+      return (
+        <div className="h-24 w-full flex items-center justify-center mb-4">
+          <span className="material-symbols-outlined text-6xl text-current">{logoUrl}</span>
+        </div>
+      );
     }
     return (
-      <img
-        src={logoUrl}
-        alt=""
-        className="max-h-24 max-w-full object-contain mb-4 filter grayscale group-hover:grayscale-0 transition-all bg-white rounded-lg p-2"
-      />
+      <div className="h-24 w-full flex items-center justify-center mb-4">
+        <img
+          src={logoUrl}
+          alt=""
+          className="max-h-24 max-w-full object-contain"
+        />
+      </div>
     );
   };
 
@@ -97,7 +107,7 @@ export const Sponsors: React.FC = () => {
                   sponsor={sponsor}
                   className="bg-white dark:bg-surface-dark p-12 rounded-2xl border border-primary/20 shadow-[0_0_30px_rgba(13,242,242,0.1)] flex flex-col items-center text-center hover:scale-105 transition-transform duration-300"
                 >
-                  {renderLogo(sponsor.logoUrl, 'text-8xl')}
+                  {renderLogo(sponsor.logoUrl)}
                   <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{sponsor.name}</h3>
                   <p className="text-slate-500 text-sm">Patrocinador Principal</p>
                 </SponsorCard>
@@ -118,7 +128,7 @@ export const Sponsors: React.FC = () => {
                   sponsor={sponsor}
                   className="bg-white dark:bg-surface-dark p-8 rounded-xl border border-amber-200/60 dark:border-amber-500/20 flex flex-col items-center justify-center grayscale hover:grayscale-0 transition-all min-h-[180px]"
                 >
-                  {renderLogo(sponsor.logoUrl, 'text-6xl')}
+                  {renderLogo(sponsor.logoUrl)}
                   <h4 className="font-bold text-lg text-slate-800 dark:text-white text-center">{sponsor.name}</h4>
                   {sponsor.websiteUrl && (
                     <span className="text-[10px] text-primary font-bold mt-2 uppercase tracking-wide">
@@ -143,7 +153,7 @@ export const Sponsors: React.FC = () => {
                   sponsor={sponsor}
                   className="bg-slate-50 dark:bg-white/5 p-4 rounded-lg flex flex-col items-center justify-center opacity-70 hover:opacity-100 transition-opacity min-h-[100px]"
                 >
-                  {renderLogo(sponsor.logoUrl, 'text-3xl')}
+                  {renderLogo(sponsor.logoUrl)}
                   <span className="text-xs font-bold mt-2 text-center">{sponsor.name}</span>
                 </SponsorCard>
               ))}

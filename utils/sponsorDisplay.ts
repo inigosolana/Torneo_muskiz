@@ -1,3 +1,5 @@
+import { resolveSponsorLogo } from '../constants/sponsorLogos';
+
 /** Normaliza filas de Supabase (snake_case) para la UI de patrocinadores. */
 export interface SponsorRow {
     id: string;
@@ -10,13 +12,13 @@ export interface SponsorRow {
 }
 
 export function normalizeSponsor(s: SponsorRow) {
-    const logo = s.logo_url ?? s.logoUrl ?? '';
+    const logoFromDb = s.logo_url ?? s.logoUrl ?? '';
     const website = (s.website_url ?? s.websiteUrl ?? '').trim();
     return {
         id: s.id,
         name: s.name,
         tier: s.tier,
-        logoUrl: logo,
+        logoUrl: resolveSponsorLogo(s.name, logoFromDb),
         websiteUrl: website || undefined,
     };
 }
