@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { siteContent } from '../constants/siteContent';
 import { useTournamentData } from '../context/TournamentDataContext';
+import { supabase } from '../services/supabaseClient';
+import { normalizeSponsor } from '../utils/sponsorDisplay';
 
 export const Home: React.FC = () => {
   const { teams } = useTournamentData();
@@ -16,7 +18,24 @@ export const Home: React.FC = () => {
     }, 1500);
   };
 
-  const topSponsors = siteContent.sponsors.filter(s => s.tier === 'Platinum' || s.tier === 'Gold').slice(0, 5);
+  const [homeSponsors, setHomeSponsors] = useState(() =>
+    siteContent.sponsors.filter((s) => s.tier === 'Platinum' || s.tier === 'Gold'),
+  );
+
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase.from('sponsors').select('*');
+      if (!data?.length) return;
+      const tierOrder: Record<string, number> = { Platinum: 0, Gold: 1 };
+      const sorted = data
+        .map(normalizeSponsor)
+        .filter((s) => s.tier === 'Platinum' || s.tier === 'Gold')
+        .sort((a, b) => (tierOrder[a.tier] ?? 9) - (tierOrder[b.tier] ?? 9));
+      if (sorted.length > 0) setHomeSponsors(sorted);
+    })();
+  }, []);
+
+  const topSponsors = useMemo(() => homeSponsors, [homeSponsors]);
 
   return (
     <div className="animate-in fade-in duration-500">
