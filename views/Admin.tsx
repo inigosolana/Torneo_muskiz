@@ -24,9 +24,11 @@ import { competitionGroupsForDivision, computeStandings } from '../utils/compute
 import {
     buildMuskizDayDraftMatches,
     buildMuskizWeekendDraftsByDay,
+    countMatchesPerTeamForDivision,
     divisionBelongsToScheduleDay,
     getMuskizDayGenDefaults,
     MIN_REAL_MATCHES_PER_TEAM,
+    MIN_TEAMS_PER_GROUP,
     resolveMatchDivision,
 } from '../services/muskizScheduleSimulator';
 import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
@@ -110,7 +112,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     // Generator State
     const [generatingBracket, setGeneratingBracket] = useState(false);
     const [generatingMuskiz, setGeneratingMuskiz] = useState(false);
-    const [muskizLunchEnd, setMuskizLunchEnd] = useState<'14:30' | '15:00'>('14:30');
     const [genConfig, setGenConfig] = useState({
         startTime: '09:00',
         endTime: '21:00',
@@ -959,7 +960,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         setGeneratingMuskiz(true);
         try {
-            const { matches: newMatches, error: muskizError, warning: muskizWarning } = buildMuskizDayDraftMatches(teams, day, { lunchEnd: muskizLunchEnd });
+            const { matches: newMatches, error: muskizError, warning: muskizWarning, lunchUsed } =
+                buildMuskizDayDraftMatches(teams, day);
             if (muskizError) {
                 toast.error(muskizError);
                 return;
@@ -977,8 +979,10 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             if (muskizWarning) {
                 toast.warning(`${day}: borrador generado con avisos — ${muskizWarning}`, { duration: 12000 });
             }
+            const lunchNote =
+                lunchUsed && day === 'Sábado' ? ` Comida ${lunchUsed.start}–${lunchUsed.end}.` : '';
             toast.success(
-                `${day}: ${normalized.length} partidos${muskizWarning ? ' (revisa los marcados PENDIENTE)' : ` (mín. ${MIN_REAL_MATCHES_PER_TEAM} reales por equipo)`}.`
+                `${day}: ${normalized.length} partidos${lunchNote}${muskizWarning ? ' (revisa PENDIENTE)' : ''}.`
             );
         } finally {
             setGeneratingMuskiz(false);
@@ -992,7 +996,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         setGeneratingMuskiz(true);
         try {
-            const { byDay, error: muskizError, warning: muskizWarning } = buildMuskizWeekendDraftsByDay(teams, { lunchEnd: muskizLunchEnd });
+            const { byDay, error: muskizError, warning: muskizWarning } = buildMuskizWeekendDraftsByDay(teams);
             if (muskizError) {
                 toast.error(muskizError);
                 return;
@@ -1163,21 +1167,51 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         matchId: string,
         patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>
     ) => {
-        const next = simDrafts.map((d) => ({
-            ...d,
-            matches: d.matches.map((m) =>
-                m.id === matchId
-                    ? {
-                          ...m,
-                          ...patch,
-                          round:
-                              patch.time && patch.time !== m.time
-                                  ? (m.round?.replace(/\d{2}:\d{2}/, patch.time) ?? m.round)
-                                  : m.round,
-                      }
-                    : m
-            ),
-        }));
+        const active = simDrafts.find((d) => d.id === activeDraftId);
+        const moving = active?.matches.find((m) => m.id === matchId);
+        if (!moving || !activeDraftId) return;
+
+        const newTime = patch.time ?? moving.time;
+        const newCourt = patch.court ?? moving.court;
+        const slotChange = patch.time !== undefined || patch.court !== undefined;
+        const occupant =
+            slotChange && newTime !== 'PENDIENTE'
+                ? active.matches.find(
+                      (m) => m.id !== matchId && m.time === newTime && m.court === newCourt
+                  )
+                : undefined;
+
+        const withTimeInRound = (m: Match, time: string): string | undefined => {
+            if (!m.round) return m.round;
+            return time !== m.time ? m.round.replace(/\d{2}:\d{2}/, time) : m.round;
+        };
+
+        const next = simDrafts.map((d) => {
+            if (d.id !== activeDraftId) return d;
+            return {
+                ...d,
+                matches: d.matches.map((m) => {
+                    if (m.id === matchId) {
+                        return {
+                            ...m,
+                            ...patch,
+                            time: newTime,
+                            court: newCourt,
+                            round: patch.time ? withTimeInRound(m, newTime) : m.round,
+                        };
+                    }
+                    if (occupant && m.id === occupant.id) {
+                        return {
+                            ...m,
+                            time: moving.time,
+                            court: moving.court,
+                            round: withTimeInRound(m, moving.time),
+                        };
+                    }
+                    return m;
+                }),
+            };
+        });
         setSimDrafts(next);
         await persistSimDraftsAsync(next, activeDraftId);
     };
@@ -2549,6 +2583,43 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 </tbody>
                                             </table>
                                         </div>
+                                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                            <h4 className="font-bold text-slate-800 text-sm mb-1">Partidos por equipo</h4>
+                                            <p className="text-xs text-slate-500 mb-3">
+                                                Previsto con el formato actual (grupos + eliminatorias). Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo.
+                                            </p>
+                                            {(() => {
+                                                const paidInDiv = teams.filter(
+                                                    (t) => t.division === structureDivision && t.paymentStatus === 'PAID'
+                                                );
+                                                if (paidInDiv.length < 2) {
+                                                    return (
+                                                        <p className="text-sm text-slate-400">
+                                                            Hacen falta al menos 2 equipos pagados en esta categoría.
+                                                        </p>
+                                                    );
+                                                }
+                                                const rows = countMatchesPerTeamForDivision(paidInDiv);
+                                                return (
+                                                    <table className="w-full text-sm">
+                                                        <thead>
+                                                            <tr className="text-left text-[10px] font-black uppercase text-slate-400 border-b border-slate-100">
+                                                                <th className="py-2 pr-4">Equipo</th>
+                                                                <th className="py-2 text-right">Partidos</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-50">
+                                                            {rows.map((r) => (
+                                                                <tr key={r.name}>
+                                                                    <td className="py-2 font-medium text-slate-800">{r.name}</td>
+                                                                    <td className="py-2 text-right font-black text-primary">{r.matches}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                );
+                                            })()}
+                                        </div>
                                     </div>
                                 )}
 
@@ -3020,25 +3091,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </h4>
                                                         <p className="text-xs text-teal-800 mt-2 leading-relaxed max-w-3xl">
                                                             <strong>Viernes:</strong> cadetes 17:00–21:00, 6 campos.{' '}
-                                                            <strong>Sábado:</strong> juvenil/senior 9:00–21:00, comida 13:00–{muskizLunchEnd}, 6 campos.{' '}
+                                                            <strong>Sábado:</strong> juvenil/senior 9:00–21:00, comida automática (inicio 13:00–15:30, 1h30 o 2h), 6 campos.{' '}
                                                             <strong>Domingo:</strong> infantiles 9:00–15:00, 4 campos.{' '}
                                                             Huecos <strong>35 min</strong>. Objetivo <strong>4 partidos reales</strong> por equipo (mínimo {MIN_REAL_MATCHES_PER_TEAM}).{' '}
                                                             ≤5 equipos → liguilla + semis + final · 6–10 → 2 grupos + semis + final · ≥11 → 4 grupos + cuartos + semis + final.{' '}
-                                                            Categorías mezcladas en el horario. Partidos sin hueco aparecen como <strong>PENDIENTE</strong>.
+                                                            Categorías mezcladas en el horario. Intenta que ningún equipo juegue <strong>dos partidos seguidos</strong>. Partidos sin hueco: <strong>PENDIENTE</strong>.
                                                         </p>
-                                                        <div className="mt-3 flex items-center gap-3 flex-wrap">
-                                                            <span className="text-[11px] font-bold text-teal-900">Descanso comida (sáb.):</span>
-                                                            {(['14:30', '15:00'] as const).map((opt) => (
-                                                                <button
-                                                                    key={opt}
-                                                                    type="button"
-                                                                    onClick={() => setMuskizLunchEnd(opt)}
-                                                                    className={`px-3 py-1 rounded-lg text-[11px] font-bold border transition-colors ${muskizLunchEnd === opt ? 'bg-teal-700 text-white border-teal-700' : 'bg-white text-teal-800 border-teal-300 hover:border-teal-500'}`}
-                                                                >
-                                                                    13:00 – {opt} ({opt === '14:30' ? '90 min' : '2 h'})
-                                                                </button>
-                                                            ))}
-                                                        </div>
+                                                        <p className="mt-2 text-[11px] text-teal-800">
+                                                            La comida del sábado se coloca sola entre 13:00 y 15:30 (1h30 o 2h) donde encaje mejor.
+                                                            Semifinales y finales solo después de terminar todos los partidos de grupos.
+                                                            La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).
+                                                        </p>
                                                     </div>
                                                     <div className="flex flex-wrap gap-2">
                                                         <button

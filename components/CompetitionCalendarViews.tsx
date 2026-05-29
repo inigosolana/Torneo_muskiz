@@ -144,17 +144,19 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                         {dayMatches.length} partido{dayMatches.length !== 1 ? 's' : ''}
                                     </span>
                                 </div>
-                                {dayMatches.length === 0 ? (
-                                    <p className="text-sm text-slate-400 text-center py-6">Sin partidos este día.</p>
-                                ) : (
-                                    <div className="p-3">
-                                        <SimulationScheduleGridTabs
-                                            matches={dayMatches}
-                                            fixedDay={day}
-                                            onUpdateMatch={onUpdateMatch}
-                                        />
-                                    </div>
-                                )}
+                                <div className="p-3">
+                                    <SimulationScheduleGridTabs
+                                        matches={dayMatches}
+                                        fixedDay={day}
+                                        fillEmptySlots
+                                        onUpdateMatch={onUpdateMatch}
+                                    />
+                                    {dayMatches.length === 0 && (
+                                        <p className="text-xs text-slate-400 text-center mt-2">
+                                            Sin partidos aún — cuadrícula vacía hasta las 21:00 para planificar.
+                                        </p>
+                                    )}
+                                </div>
                             </section>
                         );
                     })}

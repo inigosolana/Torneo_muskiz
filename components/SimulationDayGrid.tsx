@@ -1,6 +1,10 @@
 import React, { useState, useRef } from 'react';
 import type { Match } from '../types';
-import { groupMatchesForDayGrid, getDivisionCodeFromRound } from '../services/muskizScheduleSimulator';
+import {
+    buildFullDayTimeSlots,
+    groupMatchesForDayGrid,
+    getDivisionCodeFromRound,
+} from '../services/muskizScheduleSimulator';
 import type { MuskizScheduleDayLabel } from '../services/muskizScheduleSimulator';
 
 // ─── Color por categoría ───────────────────────────────────────────────────
@@ -100,6 +104,8 @@ const EditMatchModal: React.FC<EditModalProps> = ({ match, availableTimes, avail
 interface SimulationDayGridProps {
     matches: Match[];
     fixedDay?: Match['scheduleDay'];
+    /** Cuadrícula completa del día (huecos vacíos hasta el cierre) para mover partidos. */
+    fillEmptySlots?: boolean;
     /** Callback cuando el usuario edita o arrastra un partido */
     onUpdateMatch?: (matchId: string, patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>) => void;
 }
@@ -108,6 +114,7 @@ interface SimulationDayGridProps {
 export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
     matches,
     fixedDay,
+    fillEmptySlots = true,
     onUpdateMatch,
 }) => {
     const [day, setDay] = useState<MuskizScheduleDayLabel>(fixedDay ?? 'Sábado');
@@ -121,7 +128,8 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
         if (fixedDay) setDay(fixedDay);
     }, [fixedDay]);
 
-    const { courts, times, grid } = groupMatchesForDayGrid(matches, viewDay);
+    const { courts, times, grid } = groupMatchesForDayGrid(matches, viewDay, { fillEmptySlots });
+    const slotTimesForEdit = fillEmptySlots ? buildFullDayTimeSlots(viewDay) : [];
 
     // Detect which division codes are present for the legend
     const presentCodes = [...new Set(
@@ -132,7 +140,9 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
     )] as string[];
 
     // All possible times + courts for the edit modal dropdowns
-    const allTimes = [...new Set(matches.map(m => m.time))].sort();
+    const allTimes = fillEmptySlots && slotTimesForEdit.length
+        ? slotTimesForEdit
+        : [...new Set(matches.map((m) => m.time))].sort();
     const allCourts = [...new Set(matches.map(m => m.court))].sort();
 
     return (
@@ -211,18 +221,24 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                                 onDrop={(e) => {
                                                     e.preventDefault();
                                                     setDropTarget(null);
-                                                    if (!onUpdateMatch || !dragMatchId.current) return;
-                                                    onUpdateMatch(dragMatchId.current, { time: t, court: c });
+                                                    const draggedId = dragMatchId.current;
+                                                    if (!onUpdateMatch || !draggedId) return;
+                                                    onUpdateMatch(draggedId, { time: t, court: c });
                                                     dragMatchId.current = null;
                                                 }}
                                             >
                                                 {m ? (
                                                     <div
                                                         draggable={!!onUpdateMatch}
-                                                        onDragStart={() => { dragMatchId.current = m.id; }}
-                                                        onDragEnd={() => { dragMatchId.current = null; setDropTarget(null); }}
+                                                        onDragStart={() => {
+                                                            dragMatchId.current = m.id;
+                                                        }}
+                                                        onDragEnd={() => {
+                                                            dragMatchId.current = null;
+                                                            setDropTarget(null);
+                                                        }}
                                                         onClick={() => onUpdateMatch && setEditingMatch(m)}
-                                                        className={`rounded leading-tight p-1 h-full cursor-${onUpdateMatch ? 'grab active:cursor-grabbing' : 'default'} ${colors.cell} border ${colors.drag} select-none`}
+                                                        className={`rounded leading-tight p-1 h-full min-h-[40px] cursor-${onUpdateMatch ? 'grab active:cursor-grabbing' : 'default'} ${colors.cell} border ${colors.drag} select-none`}
                                                     >
                                                         <div className="text-[9px] font-semibold text-slate-800 line-clamp-2">
                                                             {m.teamA} <span className="text-slate-400">vs</span> {m.teamB}
@@ -236,7 +252,14 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                                             </div>
                                                         )}
                                                     </div>
-                                                ) : null}
+                                                ) : (
+                                                    onUpdateMatch && (
+                                                        <div
+                                                            className="min-h-[40px] h-full rounded border border-dashed border-slate-200/80 bg-slate-50/50"
+                                                            title="Hueco libre — arrastra un partido aquí"
+                                                        />
+                                                    )
+                                                )}
                                             </td>
                                         );
                                     })}

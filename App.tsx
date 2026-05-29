@@ -16,6 +16,8 @@ import { PlayerSelfRegistration } from './views/PlayerSelfRegistration';
 import { ManagerLogin } from './views/ManagerLogin';
 import { MatchReport } from './views/MatchReport';
 import { MatchReportsBulk } from './views/MatchReportsBulk';
+import { RefereeLogin } from './views/RefereeLogin';
+import { RefereeAssignments } from './views/RefereeAssignments';
 import { teamService, matchService, mapSupabaseMatchRow } from './services/teamService';
 import { supabase } from './services/supabaseClient';
 import { OpsErrorBoundary } from './components/OpsErrorBoundary';
@@ -322,6 +324,23 @@ const App: React.FC = () => {
                       onUpdateMatches={updateMatches}
                       onUpdateLimits={handleUpdateLimits}
                     />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route path="/arbitros-login" element={<RefereeLogin />} />
+              <Route
+                path="/arbitros"
+                element={
+                  <ProtectedRoute
+                    allowedRoles={['referee_coordinator']}
+                    user={user}
+                    userRole={userRole}
+                    roleLoading={roleLoading}
+                    onUnauthorizedRole={handleLogout}
+                    unauthenticatedElement={<RefereeLogin />}
+                  >
+                    <RefereeAssignments />
                   </ProtectedRoute>
                 }
               />

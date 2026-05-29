@@ -115,7 +115,11 @@ export interface Match {
   scheduleDay?: 'Viernes' | 'Sábado' | 'Domingo';
   /** Si es false, el partido no se muestra en la vista pública (Competición) hasta publicarlo. Columna `is_public` en Supabase. */
   isPublic: boolean;
+  /** Árbitro(s) asignados — columna `referees` en Supabase. */
+  referees?: string;
 }
+
+export type UserProfileRole = 'staff' | 'manager' | 'referee_coordinator';
 
 /** Borrador de calendario (simulación). No se muestra al público hasta publicar. */
 export interface CalendarDraft {

@@ -248,6 +248,7 @@ export function mapSupabaseMatchRow(m: Record<string, unknown>): Match {
         report: r.report ?? undefined,
         scheduleDay: (r.schedule_day ?? r.scheduleDay) as Match['scheduleDay'] | undefined,
         isPublic: typeof r.is_public === 'boolean' ? r.is_public : true,
+        referees: r.referees ? String(r.referees) : undefined,
     };
 }
 
@@ -302,9 +303,22 @@ export const matchService = {
                 round: m.round,
                 report: m.report,
                 is_public: m.isPublic,
+                referees: m.referees ?? null,
             })));
 
         if (error) console.error('Error saving matches:', error);
+    },
+
+    async updateMatchReferees(matchId: string, referees: string): Promise<void> {
+        const { error } = await supabase
+            .from('matches')
+            .update({ referees: referees.trim() || null })
+            .eq('id', matchId);
+
+        if (error) {
+            console.error('Error updating referees:', error);
+            throw new Error(error.message);
+        }
     },
 
     /** Marca todos los partidos como visibles en la web (`is_public = true`). */

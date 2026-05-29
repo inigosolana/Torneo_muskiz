@@ -16,15 +16,23 @@
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
  * Las fases de grupos/cuartos se programan antes que semis/finales.
  * Se mezclan categorías en la tabla (interleaved) para mayor variedad.
+ * Evita en lo posible que un equipo juegue dos partidos seguidos (franjas consecutivas).
  */
 import type { Match, Team } from '../types';
 
 export type MuskizScheduleDayLabel = 'Viernes' | 'Sábado' | 'Domingo';
 
+/** Mínimo de equipos por grupo de competición. */
+export const MIN_TEAMS_PER_GROUP = 3;
+
 /** Mínimo de partidos "reales" (ambos rivales son equipos inscritos) por equipo. */
 export const MIN_REAL_MATCHES_PER_TEAM = 3;
 /** Objetivo preferido de partidos reales por equipo (si cabe). */
 export const TARGET_REAL_MATCHES_PER_TEAM = 4;
+
+const LUNCH_DURATION_MINS_OPTIONS = [90, 120] as const;
+const LUNCH_START_MIN = 13 * 60;
+const LUNCH_START_MAX = 15 * 60 + 30;
 
 export interface MuskizBuildResult {
     matches: Match[];
@@ -32,6 +40,8 @@ export interface MuskizBuildResult {
     error?: string;
     /** Aviso: borrador generado pero revisar huecos o mínimos. */
     warning?: string;
+    /** Comida aplicada en sábado (si se optimizó automáticamente). */
+    lunchUsed?: { start: string; end: string };
 }
 
 export interface MuskizSimulatorOptions {
@@ -120,12 +130,57 @@ function roundRobinPairs(names: string[]): { a: string; b: string }[] {
 }
 
 // ─── Cálculo de grupos ─────────────────────────────────────────────────────
+function autoGroupCount(n: number): number {
+    if (n < MIN_TEAMS_PER_GROUP) return n >= 2 ? 1 : 0;
+    if (n <= 5) return 1;
+    if (n <= 8) return 2;
+    if (n <= 11) return 3;
+    return 4;
+}
+
+function splitNamesIntoGroups(sorted: string[], groupCount: number): { key: string; names: string[] }[] {
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const n = sorted.length;
+    if (groupCount <= 0 || n === 0) return [];
+    const base = Math.floor(n / groupCount);
+    const extras = n % groupCount;
+    const groups: { key: string; names: string[] }[] = [];
+    let idx = 0;
+    for (let i = 0; i < groupCount; i++) {
+        const size = base + (i < extras ? 1 : 0);
+        if (size > 0) {
+            groups.push({ key: letters[i] ?? String(i + 1), names: sorted.slice(idx, idx + size) });
+            idx += size;
+        }
+    }
+    return groups;
+}
+
+/** Fusiona grupos con menos de MIN_TEAMS_PER_GROUP en otros hasta cumplir el mínimo. */
+function mergeUndersizedGroups(groups: { key: string; names: string[] }[]): { key: string; names: string[] }[] {
+    const out = groups.map((g) => ({ ...g, names: [...g.names] }));
+    for (let guard = 0; guard < 20; guard++) {
+        const small = out.find((g) => g.names.length > 0 && g.names.length < MIN_TEAMS_PER_GROUP);
+        if (!small) break;
+        const target = out
+            .filter((g) => g !== small && g.names.length > 0)
+            .sort((a, b) => a.names.length - b.names.length)[0];
+        if (!target) break;
+        target.names.push(...small.names);
+        small.names = [];
+    }
+    return out
+        .filter((g) => g.names.length > 0)
+        .map((g, i) => ({
+            key: String.fromCharCode(65 + i),
+            names: g.names.sort((a, b) => a.localeCompare(b, 'es')),
+        }));
+}
+
 /**
- * Si todos los equipos tienen competitionGroup → los respeta.
- * Si no: asigna automáticamente según número de equipos:
- *  ≤5 → 1 grupo;  6–10 → 2 grupos;  ≥11 → 4 grupos.
+ * Si todos los equipos tienen competitionGroup → los respeta (fusionando si hace falta para ≥3).
+ * Si no: asigna automáticamente sin grupos de menos de 3 equipos.
  */
-/** Grupos de competición para una lista de equipos (respeta competitionGroup si todos lo tienen). */
 export function computeGroups(teamList: Team[]): { key: string; names: string[] }[] | null {
     if (teamList.length === 0) return [];
     const n = teamList.length;
@@ -138,39 +193,32 @@ export function computeGroups(teamList: Team[]): { key: string; names: string[] 
             if (!map.has(k)) map.set(k, []);
             map.get(k)!.push(t.name);
         }
-        return [...map.entries()]
+        const raw = [...map.entries()]
             .sort(([a], [b]) => a.localeCompare(b, 'es'))
             .map(([key, names]) => ({ key, names: names.sort((x, y) => x.localeCompare(y, 'es')) }));
+        return mergeUndersizedGroups(raw);
     }
 
     const sorted = [...teamList]
         .sort((x, y) => x.name.localeCompare(y.name, 'es'))
         .map((t) => t.name);
 
-    if (n <= 5) {
-        return [{ key: 'A', names: sorted }];
-    }
-    if (n <= 10) {
-        const n1 = Math.ceil(n / 2);
-        return [
-            { key: 'A', names: sorted.slice(0, n1) },
-            { key: 'B', names: sorted.slice(n1) },
-        ];
-    }
-    // ≥11: 4 grupos lo más igualados posible
-    const letters = ['A', 'B', 'C', 'D'];
-    const groups: { key: string; names: string[] }[] = [];
-    const baseSize = Math.floor(n / 4);
-    const extras = n % 4;
-    let idx = 0;
-    for (let i = 0; i < 4; i++) {
-        const size = baseSize + (i < extras ? 1 : 0);
-        if (idx < n) {
-            groups.push({ key: letters[i]!, names: sorted.slice(idx, idx + size) });
-            idx += size;
-        }
-    }
-    return groups.filter((g) => g.names.length >= 2);
+    let groupCount = autoGroupCount(n);
+    while (groupCount > 1 && Math.floor(n / groupCount) < MIN_TEAMS_PER_GROUP) groupCount--;
+    if (groupCount <= 0) return [];
+    return splitNamesIntoGroups(sorted, groupCount);
+}
+
+/** Partidos previstos por equipo en la categoría (fase grupos + extras hasta objetivo). */
+export function countMatchesPerTeamForDivision(teamList: Team[]): { name: string; matches: number }[] {
+    if (teamList.length === 0) return [];
+    const base = specsForPaidDivision(teamList);
+    const specs = ensureMinRealMatchesPerTeam(teamList, base, TARGET_REAL_MATCHES_PER_TEAM);
+    const realNames = new Set(teamList.map((t) => t.name));
+    const counts = countRealRealMatches(specs, realNames);
+    return teamList
+        .map((t) => ({ name: t.name, matches: counts.get(t.name) ?? 0 }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 }
 
 function divisionForTeams(teams: Team[]): Team['division'] {
@@ -395,12 +443,63 @@ interface DayConfig {
 const DEFAULT_COURTS_6 = ['Campo 1', 'Campo 2', 'Campo 3', 'Campo 4', 'Campo 5', 'Campo 6'];
 const DEFAULT_COURTS_4 = ['Campo 1', 'Campo 2', 'Campo 3', 'Campo 4'];
 
-function defaultConfigs(): Record<MuskizScheduleDayLabel, DayConfig> {
+export function defaultConfigs(): Record<MuskizScheduleDayLabel, DayConfig> {
     return {
         Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:00', playEndExclusive: '21:00', courts: DEFAULT_COURTS_6 },
         Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:00', playEndExclusive: '21:00', courts: DEFAULT_COURTS_6, lunch: { start: '13:00', end: '14:30' } },
         Domingo: { label: 'Domingo', dayShort: 'Dom', playStart: '09:00', playEndExclusive: '15:00', courts: DEFAULT_COURTS_4 },
     };
+}
+
+export function getDayScheduleConfig(
+    day: MuskizScheduleDayLabel,
+    options?: MuskizSimulatorOptions
+): DayConfig {
+    const configs = defaultConfigs();
+    if (day === 'Sábado') {
+        const start = options?.lunchStart ?? configs.Sábado.lunch?.start ?? '13:00';
+        const end = options?.lunchEnd ?? configs.Sábado.lunch?.end ?? '14:30';
+        configs.Sábado = { ...configs.Sábado, lunch: { start, end } };
+    }
+    return configs[day];
+}
+
+export function buildFullDayTimeSlots(
+    day: MuskizScheduleDayLabel,
+    slotMins = 35,
+    options?: MuskizSimulatorOptions
+): string[] {
+    const cfg = getDayScheduleConfig(day, options);
+    return generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch).map(minutesToTime);
+}
+
+/** Elige inicio de comida (13:00–15:30) y duración (90 o 120 min) que maximice partidos colocados. */
+function pickOptimalSaturdayLunch(
+    day: MuskizScheduleDayLabel,
+    specs: RawMatchSpec[],
+    configs: Record<MuskizScheduleDayLabel, DayConfig>,
+    slotMins: number
+): { start: string; end: string } {
+    const fallback = { start: '13:00', end: '14:30' };
+    if (day !== 'Sábado' || !configs.Sábado.lunch) return fallback;
+
+    let best: { start: string; end: string; placed: number } = { ...fallback, placed: -1 };
+    for (const duration of LUNCH_DURATION_MINS_OPTIONS) {
+        for (let startMin = LUNCH_START_MIN; startMin <= LUNCH_START_MAX; startMin += 15) {
+            const endMin = startMin + duration;
+            if (endMin > timeToMinutes('21:00')) continue;
+            const lunch = { start: minutesToTime(startMin), end: minutesToTime(endMin) };
+            const trialConfigs = {
+                ...configs,
+                Sábado: { ...configs.Sábado, lunch },
+            };
+            const { placed } = scheduleGreedy(day, specs, trialConfigs, slotMins);
+            if (placed.length > best.placed) {
+                best = { start: lunch.start, end: lunch.end, placed: placed.length };
+            }
+        }
+    }
+    return { start: best.start, end: best.end };
 }
 
 // ─── Planificador greedy ───────────────────────────────────────────────────
@@ -411,11 +510,17 @@ interface ScheduledCell {
     spec: RawMatchSpec;
 }
 
+/** Equipos ficticios de cruces (no aplican descanso entre partidos). */
+function isPlaceholderTeamName(name: string): boolean {
+    return (
+        /grupo|gr\.\s*[a-d]\b|clasificado|gan\.|ganador|ctos?\b/i.test(name) ||
+        /^\d+º/i.test(name)
+    );
+}
+
 /**
- * Asigna horas y pistas evitando:
- *  - solapamiento de pista
- *  - dos partidos consecutivos del mismo equipo
- * Las specs ya vienen interleaved (GRUPOS de todas las categorías, luego CUARTOS, etc.)
+ * Asigna horas y pistas evitando solapamiento de pista/equipo y, en lo posible,
+ * dos partidos seguidos del mismo equipo (sin al menos una franja de descanso).
  */
 function scheduleGreedy(
     day: MuskizScheduleDayLabel,
@@ -429,6 +534,7 @@ function scheduleGreedy(
 
     type Ass = { tStart: number; tEnd: number; courtIdx: number; teams: [string, string] };
     const assigned: Ass[] = [];
+    const courtUsage = () => courts.map((_, ci) => assigned.filter((x) => x.courtIdx === ci).length);
 
     const placed: ScheduledCell[] = [];
     const unplaced: RawMatchSpec[] = [];
@@ -444,26 +550,122 @@ function scheduleGreedy(
     const courtBusy = (courtIdx: number, tStart: number, tEnd: number): boolean =>
         assigned.some((x) => x.courtIdx === courtIdx && x.tStart < tEnd && x.tEnd > tStart);
 
-    for (const spec of specs) {
-        const teamsPair: [string, string] = [spec.teamA, spec.teamB];
-        let ok = false;
+    const teamLastEnd = (team: string): number => {
+        let last = -Infinity;
+        for (const x of assigned) {
+            if (x.teams.includes(team)) last = Math.max(last, x.tEnd);
+        }
+        return last;
+    };
 
-        outer: for (const ts of slotStartsMin) {
-            const te = ts + slotMins;
-            for (let ci = 0; ci < courts.length; ci++) {
-                if (courtBusy(ci, ts, te)) continue;
-                if (teamsBusy(teamsPair, ts, te)) continue;
-                assigned.push({ tStart: ts, tEnd: te, courtIdx: ci, teams: teamsPair });
-                placed.push({ timeMin: ts, courtIdx: ci, courtName: courts[ci]!, spec });
-                ok = true;
-                break outer;
+    const teamMatchCount = (team: string): number =>
+        assigned.filter((x) => x.teams.includes(team)).length;
+
+    /** Minutos desde el último partido del equipo hasta el inicio de este hueco. */
+    const restGapBefore = (team: string, ts: number): number => {
+        const last = teamLastEnd(team);
+        return Number.isFinite(last) && last !== -Infinity ? ts - last : Infinity;
+    };
+
+    const hasBackToBack = (teams: [string, string], ts: number): boolean => {
+        for (const t of teams) {
+            if (isPlaceholderTeamName(t)) continue;
+            if (restGapBefore(t, ts) < slotMins) return true;
+        }
+        return false;
+    };
+
+    const scoreSlot = (
+        teams: [string, string],
+        ts: number,
+        ci: number,
+        usage: number[],
+        allowBackToBack: boolean
+    ): number | null => {
+        const te = ts + slotMins;
+        if (courtBusy(ci, ts, te) || teamsBusy(teams, ts, te)) return null;
+
+        const gapA = restGapBefore(teams[0], ts);
+        const gapB = restGapBefore(teams[1], ts);
+        const minGap = Math.min(gapA, gapB);
+
+        if (!allowBackToBack && hasBackToBack(teams, ts)) return null;
+
+        const PENALTY_BACK_TO_BACK = 50_000_000;
+        const PENALTY_ONE_SLOT_REST = 8_000_000;
+
+        let score = ts * 100 + usage[ci]! * 10;
+        if (minGap < slotMins) score += PENALTY_BACK_TO_BACK;
+        else if (minGap < 2 * slotMins) score += PENALTY_ONE_SLOT_REST;
+        else score -= Math.min(minGap, 6 * slotMins);
+
+        return score;
+    };
+
+    const findBestSlot = (
+        teams: [string, string],
+        allowBackToBack: boolean
+    ): { ts: number; ci: number } | null => {
+        let best: { ts: number; ci: number } | null = null;
+        let bestScore = Infinity;
+
+        for (const ts of slotStartsMin) {
+            const usage = courtUsage();
+            const courtOrder = courts.map((_, ci) => ci).sort((a, b) => usage[a]! - usage[b]!);
+            for (const ci of courtOrder) {
+                const score = scoreSlot(teams, ts, ci, usage, allowBackToBack);
+                if (score !== null && score < bestScore) {
+                    bestScore = score;
+                    best = { ts, ci };
+                }
             }
         }
+        return best;
+    };
 
-        if (!ok) unplaced.push(spec);
+    const sortedSpecs = [...specs].sort((a, b) => {
+        if (a.phaseOrder !== b.phaseOrder) return a.phaseOrder - b.phaseOrder;
+        const loadA = teamMatchCount(a.teamA) + teamMatchCount(a.teamB);
+        const loadB = teamMatchCount(b.teamA) + teamMatchCount(b.teamB);
+        if (loadB !== loadA) return loadB - loadA;
+        return a.roundLabel.localeCompare(b.roundLabel, 'es');
+    });
+
+    for (const spec of sortedSpecs) {
+        const teamsPair: [string, string] = [spec.teamA, spec.teamB];
+        let best = findBestSlot(teamsPair, false);
+        if (!best) best = findBestSlot(teamsPair, true);
+
+        if (best) {
+            const te = best.ts + slotMins;
+            assigned.push({ tStart: best.ts, tEnd: te, courtIdx: best.ci, teams: teamsPair });
+            placed.push({ timeMin: best.ts, courtIdx: best.ci, courtName: courts[best.ci]!, spec });
+        } else {
+            unplaced.push(spec);
+        }
     }
 
     return { placed, unplaced };
+}
+
+/** Cuenta equipos reales con dos partidos en franjas consecutivas (sin descanso). */
+function countBackToBackTeamSlots(placed: ScheduledCell[], slotMins: number): number {
+    const byTeam = new Map<string, number[]>();
+    for (const cell of placed) {
+        for (const t of [cell.spec.teamA, cell.spec.teamB]) {
+            if (isPlaceholderTeamName(t)) continue;
+            if (!byTeam.has(t)) byTeam.set(t, []);
+            byTeam.get(t)!.push(cell.timeMin);
+        }
+    }
+    let violations = 0;
+    for (const starts of byTeam.values()) {
+        starts.sort((a, b) => a - b);
+        for (let i = 1; i < starts.length; i++) {
+            if (starts[i]! - starts[i - 1]! < slotMins) violations++;
+        }
+    }
+    return violations;
 }
 
 // ─── Constructor principal por día ─────────────────────────────────────────
@@ -473,8 +675,6 @@ export function buildMuskizDayDraftMatches(
     options?: MuskizSimulatorOptions
 ): MuskizBuildResult {
     const slotMins = options?.slotDurationMins ?? 35;
-    const lunchStart = options?.lunchStart ?? '13:00';
-    const lunchEnd = options?.lunchEnd ?? '14:30';
 
     const paid = allTeams.filter((t) => t.paymentStatus === 'PAID');
     const byDivision = new Map<Team['division'], Team[]>();
@@ -484,7 +684,6 @@ export function buildMuskizDayDraftMatches(
     }
 
     const configs = defaultConfigs();
-    configs.Sábado = { ...configs.Sábado, lunch: { start: lunchStart, end: lunchEnd } };
 
     const orderDiv: Team['division'][] = [
         'Cadete Femenino', 'Cadete Masculino',
@@ -502,6 +701,15 @@ export function buildMuskizDayDraftMatches(
         if (dayBucketForDivision(div) !== targetDay) continue;
         const list = byDivision.get(div);
         if (!list?.length || list.length < 2) continue;
+
+        const groups = computeGroups(list);
+        for (const g of groups ?? []) {
+            if (g.names.length < MIN_TEAMS_PER_GROUP) {
+                warnings.push(
+                    `«${div}» grupo ${g.key}: ${g.names.length} equipos (mínimo ${MIN_TEAMS_PER_GROUP}).`
+                );
+            }
+        }
 
         const baseSpecs = specsForPaidDivision(list);
         const realNames = new Set(list.map((t) => t.name));
@@ -530,7 +738,22 @@ export function buildMuskizDayDraftMatches(
 
     // ── Segunda pasada: mezclar categorías e intentar programar ────────────
     const interleaved = interleaveSpecsByDivision(allDivSpecs);
+
+    if (targetDay === 'Sábado') {
+        const lunch = pickOptimalSaturdayLunch(targetDay, interleaved, configs, slotMins);
+        configs.Sábado = { ...configs.Sábado, lunch };
+    } else if (options?.lunchStart && options?.lunchEnd) {
+        configs.Sábado = { ...configs.Sábado, lunch: { start: options.lunchStart, end: options.lunchEnd } };
+    }
+
     const { placed, unplaced } = scheduleGreedy(targetDay, interleaved, configs, slotMins);
+
+    const backToBack = countBackToBackTeamSlots(placed, slotMins);
+    if (backToBack > 0) {
+        warnings.push(
+            `${backToBack} caso(s) de equipo con dos partidos seguidos (sin franja de descanso); revisa si puedes moverlos en la cuadrícula.`
+        );
+    }
 
     if (unplaced.length > 0) {
         const sample = unplaced
@@ -581,6 +804,10 @@ export function buildMuskizDayDraftMatches(
     return {
         matches: [...placedMatches, ...overflowMatches],
         warning: warnings.length > 0 ? warnings.join(' ') : undefined,
+        lunchUsed:
+            targetDay === 'Sábado' && configs.Sábado.lunch
+                ? { start: configs.Sábado.lunch.start, end: configs.Sábado.lunch.end }
+                : undefined,
     };
 }
 
@@ -642,30 +869,57 @@ export function resolveMatchDivision(match: Match, teams: Team[]): Team['divisio
     return tb?.division ?? null;
 }
 
+export interface DayGridOptions {
+    /** Rellena todas las franjas 09:00–21:00 (o fin del día) con celdas vacías para arrastrar partidos. */
+    fillEmptySlots?: boolean;
+    slotDurationMins?: number;
+    simulatorOptions?: MuskizSimulatorOptions;
+}
+
 export function groupMatchesForDayGrid(
     matches: Match[],
-    day: MuskizScheduleDayLabel
+    day: MuskizScheduleDayLabel,
+    gridOptions?: DayGridOptions
 ): {
     courts: string[];
     times: string[];
     grid: Record<string, Record<string, Match | null>>;
 } {
     const dayMatches = matches.filter((m) => matchBelongsToDay(m, day));
-    const courts = [...new Set(dayMatches.map((x) => x.court))].sort((a, b) => {
-        const na = parseInt(/\d+/.exec(a)?.[0] ?? '0', 10);
-        const nb = parseInt(/\d+/.exec(b)?.[0] ?? '0', 10);
-        return na - nb || a.localeCompare(b, 'es');
-    });
-    const timesSet = [...new Set(dayMatches.map((x) => x.time))].sort((a, b) => {
-        if (a === 'PENDIENTE') return 1;
-        if (b === 'PENDIENTE') return -1;
-        return timeToMinutes(a) - timeToMinutes(b);
-    });
-    const grid: Record<string, Record<string, Match | null>> = {};
-    for (const t of timesSet) grid[t] = Object.fromEntries(courts.map((c) => [c, null]));
-    for (const m of dayMatches) {
-        if (!grid[m.time]) grid[m.time] = Object.fromEntries(courts.map((c) => [c, null]));
-        grid[m.time][m.court] = m;
+    const cfg = getDayScheduleConfig(day, gridOptions?.simulatorOptions);
+    const slotMins = gridOptions?.slotDurationMins ?? 35;
+
+    let courts = gridOptions?.fillEmptySlots
+        ? [...cfg.courts]
+        : [...new Set(dayMatches.map((x) => x.court).filter((c) => c && c !== 'Sin asignar'))].sort((a, b) => {
+              const na = parseInt(/\d+/.exec(a)?.[0] ?? '0', 10);
+              const nb = parseInt(/\d+/.exec(b)?.[0] ?? '0', 10);
+              return na - nb || a.localeCompare(b, 'es');
+          });
+    if (!courts.length) courts = [...cfg.courts];
+
+    let times: string[];
+    if (gridOptions?.fillEmptySlots) {
+        times = buildFullDayTimeSlots(day, slotMins, gridOptions.simulatorOptions);
+        if (dayMatches.some((m) => m.time === 'PENDIENTE')) times.push('PENDIENTE');
+    } else {
+        times = [...new Set(dayMatches.map((x) => x.time))].sort((a, b) => {
+            if (a === 'PENDIENTE') return 1;
+            if (b === 'PENDIENTE') return -1;
+            return timeToMinutes(a) - timeToMinutes(b);
+        });
     }
-    return { courts, times: timesSet, grid };
+
+    const grid: Record<string, Record<string, Match | null>> = {};
+    for (const t of times) grid[t] = Object.fromEntries(courts.map((c) => [c, null]));
+    for (const m of dayMatches) {
+        if (m.time === 'PENDIENTE' && !grid['PENDIENTE']) {
+            grid['PENDIENTE'] = Object.fromEntries(courts.map((c) => [c, null]));
+            if (!times.includes('PENDIENTE')) times.push('PENDIENTE');
+        }
+        if (!grid[m.time]) grid[m.time] = Object.fromEntries(courts.map((c) => [c, null]));
+        if (!courts.includes(m.court) && m.court !== 'Sin asignar') courts.push(m.court);
+        grid[m.time]![m.court] = m;
+    }
+    return { courts, times, grid };
 }

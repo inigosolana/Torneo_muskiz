@@ -159,6 +159,7 @@ export function finalizeMatchesForDatabase(
         round: m.round,
         report: m.report,
         isPublic,
+        referees: m.referees,
     }));
 }
 
