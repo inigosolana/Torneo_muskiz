@@ -2732,13 +2732,14 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             <strong>Sábado:</strong> juvenil/senior 9:00–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida 14:00–15:30/15:50/16:00, 6 campos.{' '}
                                                             <strong>Domingo:</strong> infantiles 9:00–15:00, 4 campos.{' '}
                                                             Huecos <strong>35 min</strong>. Objetivo <strong>4 partidos reales</strong> por equipo (mínimo {MIN_REAL_MATCHES_PER_TEAM}).{' '}
-                                                            ≤5 equipos → liguilla + semis + final · 6–10 → 2 grupos + semis + final · ≥11 → 4 grupos + cuartos + semis + final.{' '}
+                                                            ≤5 equipos → liguilla + semis + final · 6–10 → 2 grupos + semis + final · 11 → 3 grupos + semis + final · ≥12 → 4 grupos + cuartos + semis + final.{' '}
+                                                            Siempre mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo en todas las categorías.{' '}
                                                             Categorías mezcladas en el horario. Intenta que ningún equipo juegue <strong>dos partidos seguidos</strong>. Partidos sin hueco: <strong>PENDIENTE</strong>.
                                                         </p>
                                                         <p className="mt-2 text-[11px] text-teal-800">
                                                             La comida del sábado empieza a las 14:00 (tras los huecos de 35 min de la mañana) y dura 1h30, 1h50 (15:50) o 2h; la tarde arranca justo al terminar.
                                                             Semifinales y finales solo después de terminar todos los partidos de grupos.
-                                                            Orden estricto: fase de grupos → cuartos (≥11 equipos) → semis → finales al cierre del día.
+                                                            Orden estricto: fase de grupos → cuartos (≥12 equipos) → semis → finales al cierre del día.
                                                             La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).
                                                             Ajusta partidos a mano en la lista de abajo o en Calendario (tabla / cuadrícula).
                                                         </p>

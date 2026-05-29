@@ -10,7 +10,8 @@
  * - ≤3 equipos : liguilla → final 1º vs 2º
  * - 4–5 equipos: liguilla → semis (1ºA vs 3ºA, 2ºA vs 4ºA) → final
  * - 6–10 equipos: 2 grupos → semis (1ºA vs 2ºB, 1ºB vs 2ºA) → final
- * - ≥11 equipos: 4 grupos → cuartos → semis → final
+ * - 11 equipos   : 3 grupos (mín. 3 por grupo) → semis → final
+ * - ≥12 equipos  : 4 grupos (mín. 3 por grupo) → cuartos → semis → final
  *
  * El simulador intenta que cada equipo juegue ≥4 partidos reales; si no cabe, baja a ≥3.
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
@@ -138,8 +139,8 @@ function autoGroupCount(n: number): number {
     if (n < MIN_TEAMS_PER_GROUP) return n >= 2 ? 1 : 0;
     if (n <= 5) return 1;
     if (n <= 8) return 2;
-    if (n <= 10) return 3;
-    return 4; // ≥11 equipos → 4 grupos → cuartos + semis + final
+    if (n <= 11) return 3; // 11 → 3 grupos (p. ej. 4+4+3), nunca 4
+    return 4; // ≥12 → 4 grupos (p. ej. 3+3+3+3), siempre ≥3 por grupo
 }
 
 function splitNamesIntoGroups(sorted: string[], groupCount: number): { key: string; names: string[] }[] {
@@ -208,12 +209,9 @@ export function computeGroups(teamList: Team[]): { key: string; names: string[] 
         .map((t) => t.name);
 
     let groupCount = autoGroupCount(n);
-    if (n < 11) {
-        while (groupCount > 1 && Math.floor(n / groupCount) < MIN_TEAMS_PER_GROUP) groupCount--;
-    }
+    while (groupCount > 1 && Math.floor(n / groupCount) < MIN_TEAMS_PER_GROUP) groupCount--;
     if (groupCount <= 0) return [];
-    const split = splitNamesIntoGroups(sorted, groupCount);
-    return n >= 11 ? split : mergeUndersizedGroups(split);
+    return mergeUndersizedGroups(splitNamesIntoGroups(sorted, groupCount));
 }
 
 /** Partidos previstos por equipo en la categoría (fase grupos + extras hasta objetivo). */
@@ -237,7 +235,8 @@ function divisionForTeams(teams: Team[]): Team['division'] {
  * ≤3 equipos  → liguilla + final
  * 4–5 equipos → liguilla + semis (1º vs 3º, 2º vs 4º) + final
  * 6–10 equipos → 2 grupos + semis + final
- * ≥11 equipos → 4 grupos + cuartos + semis + final
+ * 11 equipos   → 3 grupos + semis + final (mín. 3 por grupo)
+ * ≥12 equipos  → 4 grupos + cuartos + semis + final (mín. 3 por grupo)
  */
 function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     const div = divisionForTeams(teams);
@@ -261,8 +260,8 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     }
 
     // ── Fases eliminatorias ─────────────────────────────────────────────────
-    if (n >= 11 && numGroups >= 4) {
-        // ≥11 equipos: cuartos → semis → final (orden estricto en el planificador)
+    if (numGroups >= 4) {
+        // ≥12 equipos (4 grupos, mín. 3 por grupo): cuartos → semis → final
         const [ga, gb, gc, gd] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B', gkeys[2] ?? 'C', gkeys[3] ?? 'D'];
         out.push(
             { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 1` },
@@ -275,6 +274,14 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
             { teamA: `Gan.Ctos ${code} 3`, teamB: `Gan.Ctos ${code} 4`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 2` },
         );
         out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 3, roundLabel: `Final · ${code}` });
+    } else if (numGroups === 3) {
+        // 11 equipos (3 grupos): mejores 4 a semis → final
+        const [ga, gb, gc] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B', gkeys[2] ?? 'C'];
+        out.push(
+            { teamA: `1º Grupo ${ga}`, teamB: `2º mejor 3G`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 1` },
+            { teamA: `1º Grupo ${gb}`, teamB: `1º Grupo ${gc}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 2` },
+        );
+        out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 2, roundLabel: `Final · ${code}` });
     } else if (numGroups >= 2) {
         // 6–10 equipos: semis + final
         const [ga, gb] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B'];
