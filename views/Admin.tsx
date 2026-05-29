@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Team, Match, CategoryLimits, MatchReport, PlayerStat, Player, CalendarDraft, type BeachSetScores } from '../types';
 import { applySetScoresToMatch } from '../utils/beachSetScoring';
-import { generateBracketAI, generateSocialMediaPost } from '../services/geminiService';
+import { generateSocialMediaPost } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { resizeAndCompressImage } from '../utils/imageProcessor';
 import { toast } from 'sonner';
@@ -26,7 +26,6 @@ import {
     buildMuskizWeekendDraftsByDay,
     countMatchesPerTeamForDivision,
     divisionBelongsToScheduleDay,
-    getMuskizDayGenDefaults,
     MIN_REAL_MATCHES_PER_TEAM,
     MIN_TEAMS_PER_GROUP,
     resolveMatchDivision,
@@ -62,26 +61,6 @@ import {
     type AdminPreviewMode,
 } from '../utils/adminUiPersistence';
 
-/** Plantilla de jugadores para equipos ficticios (stress test / IA). */
-function buildFakePlayersForTeam(teamId: string): Player[] {
-    const squadSize = 10 + Math.floor(Math.random() * 3);
-    const players: Player[] = [];
-    for (let i = 1; i <= squadSize; i++) {
-        players.push({
-            id: `fake-pl-${teamId}-${i}`,
-            teamId,
-            name: `Jugador ${i}`,
-            surnames: `Apellido Ficticio ${i}`,
-            number: i,
-            verified: true,
-            role: 'PLAYER',
-            dniStatus: 'APPROVED',
-            insuranceStatus: 'APPROVED',
-        });
-    }
-    return players;
-}
-
 interface AdminProps {
     onUpdateTeam: (team: Team) => void;
     onUpdateMatches: (matches: Match[]) => void;
@@ -110,32 +89,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     }, []);
 
     // Generator State
-    const [generatingBracket, setGeneratingBracket] = useState(false);
     const [generatingMuskiz, setGeneratingMuskiz] = useState(false);
-    const [genConfig, setGenConfig] = useState({
-        startTime: '09:00',
-        endTime: '21:00',
-        intervalMins: 30,
-        courtsInput: 'Pista Central, Pista 2, Pista 3',
-        lunchBreak: true,
-        customPrompt: 'Fase de grupos por categoría y solo la gran final (sin cuartos ni semifinales). Reparte horarios y pistas sin solapes.'
-    });
 
     const [simDrafts, setSimDrafts] = useState<CalendarDraft[]>([]);
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
     const [simulationsLoaded, setSimulationsLoaded] = useState(false);
     const [simulationsSaving, setSimulationsSaving] = useState(false);
-    const [simulationMode, setSimulationMode] = useState<'REAL' | 'FAKE'>('REAL');
-    const [fakeTeamCounts, setFakeCounts] = useState<Record<Team['division'], number>>({
-        'Infantil Femenino': 0,
-        'Infantil Masculino': 0,
-        'Cadete Femenino': 0,
-        'Cadete Masculino': 0,
-        'Juvenil Femenino': 0,
-        'Juvenil Masculino': 0,
-        'Senior Femenino': 0,
-        'Senior Masculino': 0,
-    });
 
     const [publishDraftAsPublic, setPublishDraftAsPublic] = useState(false);
 
@@ -661,35 +620,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         'Senior Masculino',
     ];
 
-    const simulationDivisions = useMemo(() => {
-        if (!activeDraft?.scheduleDay) return DIVISIONS_LIST;
-        return DIVISIONS_LIST.filter((d) => divisionBelongsToScheduleDay(d, activeDraft.scheduleDay!));
-    }, [activeDraft?.scheduleDay]);
-
-    const paidTeamsForSimulation = useMemo(() => {
-        const paid = teams.filter((t) => t.paymentStatus === 'PAID');
-        if (!activeDraft?.scheduleDay) return paid;
-        return paid.filter((t) => divisionBelongsToScheduleDay(t.division, activeDraft.scheduleDay!));
-    }, [teams, activeDraft?.scheduleDay]);
-
-    useEffect(() => {
-        if (!activeDraft?.scheduleDay) return;
-        const defs = getMuskizDayGenDefaults(activeDraft.scheduleDay);
-        setGenConfig((prev) => ({ ...prev, ...defs }));
-        const dayDivs = DIVISIONS_LIST.filter((d) => divisionBelongsToScheduleDay(d, activeDraft.scheduleDay!));
-        setFakeCounts((prev) => {
-            const next = { ...prev };
-            for (const d of DIVISIONS_LIST) {
-                if (!dayDivs.includes(d)) next[d] = 0;
-            }
-            const dayTotal = dayDivs.reduce((sum, d) => sum + (prev[d] || 0), 0);
-            if (dayTotal === 0) {
-                for (const d of dayDivs) next[d] = 12;
-            }
-            return next;
-        });
-    }, [activeDraftId, activeDraft?.scheduleDay]);
-
     const weekendDrafts = useMemo(
         () => WEEKEND_SCHEDULE_DAYS.map((day) => simDrafts.find((d) => d.scheduleDay === day)).filter(Boolean) as CalendarDraft[],
         [simDrafts]
@@ -872,82 +802,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     };
 
     // --- Generator Logic ---
-    const handleGenerateBracket = async () => {
-        if (!activeDraftId) {
-            toast.error('Selecciona o crea una simulación primero.');
-            return;
-        }
-        let teamsToSimulate: Team[] = [];
-
-        if (simulationMode === 'REAL') {
-            teamsToSimulate = teams.filter((t) => t.paymentStatus === 'PAID');
-        } else {
-            simulationDivisions.forEach((division) => {
-                const count = fakeTeamCounts[division] || 0;
-                for (let i = 1; i <= count; i++) {
-                    const tid = `fake-${division}-${i}`;
-                    teamsToSimulate.push({
-                        id: tid,
-                        name: `Ficticio ${division} ${i}`,
-                        city: 'Prueba',
-                        division,
-                        paymentStatus: 'PAID',
-                        status: 'approved',
-                        fee: 0,
-                        managerEmail: '',
-                        managerName: '',
-                        players: buildFakePlayersForTeam(tid),
-                    });
-                }
-            });
-            if (teamsToSimulate.length === 0) {
-                toast.error('Indica al menos un equipo ficticio en alguna categoría.');
-                return;
-            }
-        }
-
-        const draftDay = activeDraft?.scheduleDay;
-        if (draftDay) {
-            teamsToSimulate = teamsToSimulate.filter((t) => divisionBelongsToScheduleDay(t.division, draftDay));
-            if (teamsToSimulate.length < 2) {
-                toast.error(`No hay suficientes equipos para ${draftDay} (categorías de ese día).`);
-                return;
-            }
-        }
-
-        setGeneratingBracket(true);
-        const courts = genConfig.courtsInput.split(',').map((s) => s.trim());
-
-        const { matches: newMatches, error: bracketError } = await generateBracketAI(teamsToSimulate, {
-            startTime: genConfig.startTime,
-            endTime: genConfig.endTime,
-            intervalMins: genConfig.intervalMins,
-            courts,
-            lunchBreak: genConfig.lunchBreak,
-            customPrompt: genConfig.customPrompt,
-        });
-
-        if (bracketError) {
-            toast.error(bracketError);
-        } else if (newMatches.length > 0) {
-            const normalized = ensureStableDraftMatchIds(newMatches).map((m) => ({
-                ...m,
-                scheduleDay: draftDay ?? m.scheduleDay,
-            }));
-            const nextDrafts = simDrafts.map((d) =>
-                d.id === activeDraftId ? { ...d, matches: normalized } : d
-            );
-            setSimDrafts(nextDrafts);
-            await persistSimDraftsAsync(nextDrafts, activeDraftId);
-            toast.success(
-                `Simulación actualizada: ${newMatches.length} partidos generados en el borrador activo (no público hasta publicar).`
-            );
-        } else if (!bracketError) {
-            toast.error('No se generaron partidos. Prueba el simulador determinístico o simplifica el prompt.');
-        }
-        setGeneratingBracket(false);
-    };
-
     const handleGenerateMuskizActiveDay = async () => {
         if (!activeDraftId || !activeDraft) {
             toast.error('Selecciona o crea una simulación primero.');
@@ -2516,78 +2370,29 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 {/* 1. ESTRUCTURA — categorías y grupos */}
                                 {compSubTab === 'structure' && (
                                     <div className="space-y-6">
-                                        <div className="bg-amber-50 border border-amber-100 p-4 rounded-lg text-sm text-amber-900">
-                                            <p className="font-bold mb-1">Asignación de grupos</p>
-                                            <p>
-                                                Cada equipo ya tiene una <strong>categoría</strong> (división). Aquí defines el <strong>grupo</strong> dentro de esa
-                                                categoría (A, B, C…). Requiere la columna <code className="bg-white/80 px-1 rounded">competition_group</code> en
-                                                Supabase — ejecuta el SQL en <code className="bg-white/80 px-1 rounded">supabase/sql/add_competition_group_to_teams.sql</code>.
-                                            </p>
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-3">
-                                            <label className="text-xs font-bold uppercase text-slate-500">Categoría</label>
-                                            <select
-                                                value={structureDivision}
-                                                onChange={(e) => setStructureDivision(e.target.value as Team['division'])}
-                                                className="border rounded-lg px-3 py-2 text-sm font-medium min-w-[200px]"
-                                            >
-                                                {DIVISIONS_LIST.map((d) => (
-                                                    <option key={d} value={d}>
-                                                        {d}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div className="overflow-x-auto rounded-lg border border-slate-200">
-                                            <table className="w-full text-sm text-left">
-                                                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
-                                                    <tr>
-                                                        <th className="px-4 py-3">Equipo</th>
-                                                        <th className="px-4 py-3">Ciudad</th>
-                                                        <th className="px-4 py-3">Estado</th>
-                                                        <th className="px-4 py-3">Grupo</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {teams
-                                                        .filter((t) => t.division === structureDivision)
-                                                        .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-                                                        .map((team) => (
-                                                            <tr key={team.id} className="hover:bg-slate-50/80">
-                                                                <td className="px-4 py-3 font-bold text-slate-800">{team.name}</td>
-                                                                <td className="px-4 py-3 text-slate-600">{team.city}</td>
-                                                                <td className="px-4 py-3">
-                                                                    <span className="text-[10px] font-bold uppercase text-slate-500">{team.status}</span>{' '}
-                                                                    <span className="text-[10px] text-slate-400">· {team.paymentStatus}</span>
-                                                                </td>
-                                                                <td className="px-4 py-3">
-                                                                    <select
-                                                                        value={team.competitionGroup ?? ''}
-                                                                        onChange={(e) => {
-                                                                            const v = e.target.value;
-                                                                            if (v) void handleMoveTeamToGroup(team, v);
-                                                                            else void handleChangeTeamGroup(team, '');
-                                                                        }}
-                                                                        className="border rounded-lg px-2 py-1.5 text-xs font-semibold bg-white min-w-[100px]"
-                                                                    >
-                                                                        <option value="">Sin grupo</option>
-                                                                        {groupLetterOptions.filter((g) => g).map((g) => (
-                                                                            <option key={g} value={g}>
-                                                                                Grupo {g}
-                                                                            </option>
-                                                                        ))}
-                                                                    </select>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
                                         <div className="rounded-xl border border-slate-200 bg-white p-4">
-                                            <h4 className="font-bold text-slate-800 text-sm mb-1">Partidos por equipo</h4>
-                                            <p className="text-xs text-slate-500 mb-3">
-                                                Previsto con el formato actual (grupos + eliminatorias). Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo.
-                                            </p>
+                                            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                                <div>
+                                                    <h4 className="font-bold text-slate-800 text-sm mb-1">Partidos por equipo</h4>
+                                                    <p className="text-xs text-slate-500">
+                                                        Previsto con el formato actual (grupos + eliminatorias). Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo.
+                                                    </p>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-xs font-bold uppercase text-slate-500">Categoría</label>
+                                                    <select
+                                                        value={structureDivision}
+                                                        onChange={(e) => setStructureDivision(e.target.value as Team['division'])}
+                                                        className="border rounded-lg px-3 py-2 text-sm font-medium min-w-[200px]"
+                                                    >
+                                                        {DIVISIONS_LIST.map((d) => (
+                                                            <option key={d} value={d}>
+                                                                {d}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
                                             {(() => {
                                                 const paidInDiv = teams.filter(
                                                     (t) => t.division === structureDivision && t.paymentStatus === 'PAID'
@@ -2914,177 +2719,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     </div>
                                                 </div>
 
-                                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
-                                                    <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
-                                                        <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                                                            <span className="material-symbols-outlined text-purple-600">psychology</span>
-                                                            Generación IA
-                                                            {activeDraft?.scheduleDay ? ` (${activeDraft.scheduleDay})` : ' (borrador activo)'}
-                                                        </h4>
-                                                        <div className="flex gap-2 flex-wrap">
-                                                            <input type="file" id="excel-upload" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleExcelImport} />
-                                                            <label
-                                                                htmlFor="excel-upload"
-                                                                className={`cursor-pointer bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${!activeDraftId ? 'opacity-50 pointer-events-none' : ''}`}
-                                                            >
-                                                                <span className="material-symbols-outlined text-sm">upload_file</span>
-                                                                Importar Excel al borrador
-                                                            </label>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="mb-4 rounded-lg border border-slate-200 bg-white/80 p-4">
-                                                        <p className="text-[10px] font-black uppercase text-slate-500 mb-2">
-                                                            Origen de equipos para la IA
-                                                        </p>
-                                                        <div className="flex flex-wrap gap-2 mb-3">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSimulationMode('REAL')}
-                                                                className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
-                                                                    simulationMode === 'REAL'
-                                                                        ? 'bg-primary text-background-dark shadow-sm'
-                                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                                                }`}
-                                                            >
-                                                                Equipos reales (pagados)
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSimulationMode('FAKE')}
-                                                                className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
-                                                                    simulationMode === 'FAKE'
-                                                                        ? 'bg-amber-600 text-white shadow-sm'
-                                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                                                }`}
-                                                            >
-                                                                Equipos ficticios (pruebas)
-                                                            </button>
-                                                        </div>
-                                                        {simulationMode === 'REAL' ? (
-                                                            <p className="text-sm text-slate-700 leading-relaxed">
-                                                                {activeDraft?.scheduleDay ? (
-                                                                    <>
-                                                                        Se simulará con{' '}
-                                                                        <strong>{paidTeamsForSimulation.length}</strong> equipos reales pagados de{' '}
-                                                                        <strong>{activeDraft.scheduleDay}</strong>
-                                                                        {simulationDivisions.length > 0 && (
-                                                                            <>
-                                                                                {' '}
-                                                                                (
-                                                                                {simulationDivisions
-                                                                                    .map((d) => d.replace(' Femenino', ' F').replace(' Masculino', ' M'))
-                                                                                    .join(', ')}
-                                                                                )
-                                                                            </>
-                                                                        )}
-                                                                        .
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        Se simulará usando los{' '}
-                                                                        <strong>{paidTeamsForSimulation.length}</strong> equipos reales que han pagado.
-                                                                    </>
-                                                                )}
-                                                            </p>
-                                                        ) : (
-                                                            <div className="rounded-lg border border-amber-100 bg-amber-50/90 p-4">
-                                                                <p className="text-xs text-amber-950 mb-3 leading-relaxed">
-                                                                    {activeDraft?.scheduleDay ? (
-                                                                        <>
-                                                                            Equipos ficticios solo para categorías de{' '}
-                                                                            <strong>{activeDraft.scheduleDay}</strong> (sugerencia: 12 por categoría). No se
-                                                                            guardan en la base de datos.
-                                                                        </>
-                                                                    ) : (
-                                                                        <>
-                                                                            Ajusta cuántos equipos de prueba hay por categoría. No se guardan en la base de
-                                                                            datos; sólo alimentan esta generación de borrador.
-                                                                        </>
-                                                                    )}
-                                                                </p>
-                                                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                                                    {simulationDivisions.map((division) => (
-                                                                        <label
-                                                                            key={division}
-                                                                            className="flex flex-col gap-1 rounded-md border border-amber-200/80 bg-white/70 px-2 py-2"
-                                                                        >
-                                                                            <span className="text-[10px] font-bold uppercase text-amber-900/80 leading-tight">
-                                                                                {division}
-                                                                            </span>
-                                                                            <input
-                                                                                type="number"
-                                                                                min={0}
-                                                                                step={1}
-                                                                                value={fakeTeamCounts[division]}
-                                                                                onChange={(e) => {
-                                                                                    const raw = parseInt(e.target.value, 10);
-                                                                                    const next = Number.isFinite(raw) && raw >= 0 ? raw : 0;
-                                                                                    setFakeCounts((prev) => ({ ...prev, [division]: next }));
-                                                                                }}
-                                                                                className="w-full border border-amber-100 rounded-md px-2 py-1.5 text-sm font-semibold text-slate-800"
-                                                                            />
-                                                                        </label>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                                                <div className="bg-teal-50 border border-teal-200 rounded-xl p-6">
+                                                    <div className="mb-3 flex flex-wrap justify-between items-start gap-3">
                                                         <div>
-                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Horario</label>
-                                                            <div className="flex items-center gap-2">
-                                                                <input type="time" value={genConfig.startTime} onChange={(e) => setGenConfig({ ...genConfig, startTime: e.target.value })} className="border rounded px-2 py-1 text-sm w-full" />
-                                                                <span>a</span>
-                                                                <input type="time" value={genConfig.endTime} onChange={(e) => setGenConfig({ ...genConfig, endTime: e.target.value })} className="border rounded px-2 py-1 text-sm w-full" />
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Intervalo (mins)</label>
-                                                            <input type="number" value={genConfig.intervalMins} onChange={(e) => setGenConfig({ ...genConfig, intervalMins: parseInt(e.target.value, 10) })} className="border rounded px-2 py-1 text-sm w-full" step="5" />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Parada comida</label>
-                                                            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer mt-6 md:mt-0">
-                                                                <input type="checkbox" checked={genConfig.lunchBreak} onChange={(e) => setGenConfig({ ...genConfig, lunchBreak: e.target.checked })} className="rounded text-primary focus:ring-primary" />
-                                                                13:00 – 14:00
-                                                            </label>
-                                                        </div>
-                                                    </div>
-                                                    <div className="mb-4">
-                                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Pistas (separar por comas)</label>
-                                                        <input type="text" value={genConfig.courtsInput} onChange={(e) => setGenConfig({ ...genConfig, courtsInput: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
-                                                    </div>
-                                                    <div className="mb-4">
-                                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Prompt IA</label>
-                                                        <textarea
-                                                            value={genConfig.customPrompt}
-                                                            onChange={(e) => setGenConfig({ ...genConfig, customPrompt: e.target.value })}
-                                                            className="w-full border rounded px-3 py-2 text-sm h-20 resize-none"
-                                                            placeholder="Describe fases, grupos, horarios prioritarios..."
-                                                        />
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => void handleGenerateBracket()}
-                                                        disabled={generatingBracket || !activeDraftId}
-                                                        className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                                                    >
-                                                        {generatingBracket ? (
-                                                            <span className="material-symbols-outlined animate-spin">progress_activity</span>
-                                                        ) : (
-                                                            <span className="material-symbols-outlined">auto_awesome</span>
-                                                        )}
-                                                        {generatingBracket ? 'Generando…' : 'Generar en este borrador'}
-                                                    </button>
-                                                    <p className="mt-2 text-[11px] text-slate-500 leading-relaxed">
-                                                        Requiere GEMINI_API_KEY válida en Supabase. Si falla, usa el simulador determinístico de abajo.
-                                                    </p>
-                                                </div>
-
-                                                <div className="bg-teal-50 border border-teal-200 rounded-xl p-6 mt-6">
-                                                    <div className="mb-3">
                                                         <h4 className="font-bold text-teal-900 flex items-center gap-2">
                                                             <span className="material-symbols-outlined text-teal-700">event_available</span>
                                                             Simulador fin de semana Muskiz (determinístico)
@@ -3101,7 +2738,19 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             La comida del sábado se coloca sola entre 13:00 y 15:30 (1h30 o 2h) donde encaje mejor.
                                                             Semifinales y finales solo después de terminar todos los partidos de grupos.
                                                             La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).
+                                                            Ajusta partidos a mano en la lista de abajo o en Calendario (tabla / cuadrícula).
                                                         </p>
+                                                        </div>
+                                                        <div className="flex flex-col gap-2 shrink-0">
+                                                            <input type="file" id="excel-upload" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleExcelImport} />
+                                                            <label
+                                                                htmlFor="excel-upload"
+                                                                className={`cursor-pointer bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${!activeDraftId ? 'opacity-50 pointer-events-none' : ''}`}
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">upload_file</span>
+                                                                Importar Excel
+                                                            </label>
+                                                        </div>
                                                     </div>
                                                     <div className="flex flex-wrap gap-2">
                                                         <button
