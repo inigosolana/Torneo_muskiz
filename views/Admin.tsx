@@ -2900,7 +2900,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                         </div>
                                         )}
                                         {(resultsPreviewMode === 'official' ? matches : allSimDraftMatches).map(match => (
-                                            <div key={match.id} className="flex flex-col md:flex-row justify-between items-center p-4 border border-slate-200 rounded-lg hover:shadow-sm transition-shadow bg-white">
+                                            <div key={match.id} className={`flex flex-col md:flex-row justify-between items-center p-4 border rounded-lg hover:shadow-sm transition-shadow ${resultsPreviewMode === 'simulation' ? 'bg-purple-50/40 border-purple-100' : 'bg-white border-slate-200'}`}>
                                                 <div className="flex flex-col w-full md:w-auto mb-4 md:mb-0">
                                                     <span className="text-xs text-slate-400 font-mono">{match.round} - {match.time}</span>
                                                     <span className="text-[10px] text-slate-400">{match.court}</span>
@@ -2911,17 +2911,19 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     <div className="flex items-center gap-2">
                                                         <input
                                                             type="number"
-                                                            className="w-14 text-center text-lg font-bold bg-slate-50 border border-slate-300 rounded-lg p-1"
+                                                            readOnly={resultsPreviewMode === 'simulation'}
+                                                            className={`w-14 text-center text-lg font-bold border rounded-lg p-1 ${resultsPreviewMode === 'simulation' ? 'bg-purple-50 border-purple-200 text-purple-400 cursor-not-allowed' : 'bg-slate-50 border-slate-300'}`}
                                                             value={match.scoreA ?? ''}
-                                                            onChange={(e) => updateMatchScore(match.id, e.target.value, match.scoreB?.toString() || '')}
+                                                            onChange={(e) => resultsPreviewMode === 'official' && updateMatchScore(match.id, e.target.value, match.scoreB?.toString() || '')}
                                                             placeholder="-"
                                                         />
                                                         <span>:</span>
                                                         <input
                                                             type="number"
-                                                            className="w-14 text-center text-lg font-bold bg-slate-50 border border-slate-300 rounded-lg p-1"
+                                                            readOnly={resultsPreviewMode === 'simulation'}
+                                                            className={`w-14 text-center text-lg font-bold border rounded-lg p-1 ${resultsPreviewMode === 'simulation' ? 'bg-purple-50 border-purple-200 text-purple-400 cursor-not-allowed' : 'bg-slate-50 border-slate-300'}`}
                                                             value={match.scoreB ?? ''}
-                                                            onChange={(e) => updateMatchScore(match.id, match.scoreA?.toString() || '', e.target.value)}
+                                                            onChange={(e) => resultsPreviewMode === 'official' && updateMatchScore(match.id, match.scoreA?.toString() || '', e.target.value)}
                                                             placeholder="-"
                                                         />
                                                     </div>
@@ -2929,7 +2931,10 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 </div>
 
                                                 <div className="w-full md:w-auto flex flex-wrap justify-end gap-2 mt-4 md:mt-0">
-                                                    {resultsPreviewMode === 'official' && match.id && (
+                                                    {resultsPreviewMode === 'simulation' && (
+                                                        <span className="text-[9px] text-purple-500 font-black px-1.5 py-0.5 bg-purple-50 rounded border border-purple-100 self-center">SIMULACIÓN</span>
+                                                    )}
+                                                    {match.id && (
                                                         <button
                                                             type="button"
                                                             onClick={() => navigate(`/admin/match-report/${match.id}`)}
@@ -2939,7 +2944,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             Generar Acta
                                                         </button>
                                                     )}
-                                                    {resultsPreviewMode === 'official' && match.status === 'FINISHED' && (
+                                                    {match.status === 'FINISHED' && (
                                                         <button
                                                             onClick={() => handleGenerateSocialPost(match)}
                                                             className="px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors"
@@ -2948,7 +2953,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             Post IG
                                                         </button>
                                                     )}
-                                                    {resultsPreviewMode === 'official' && (
                                                     <button
                                                         onClick={() => openReportModal(match)}
                                                         className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 border transition-colors ${match.report ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-primary hover:text-primary'}`}
@@ -2956,10 +2960,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         <span className="material-symbols-outlined text-sm">description</span>
                                                         {match.report ? 'Ver Acta' : 'Crear Acta'}
                                                     </button>
-                                                    )}
-                                                    {resultsPreviewMode === 'simulation' && (
-                                                        <span className="text-[10px] text-purple-500 font-bold px-2 py-1 bg-purple-50 rounded border border-purple-100">BORRADOR</span>
-                                                    )}
                                                 </div>
                                             </div>
                                         ))}
