@@ -33,7 +33,16 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     }
   }, [user, userRole, roleLoading, allowedRole, onUnauthorizedRole]);
 
-  if (roleLoading) {
+  /** Solo bloquear en la carga inicial del rol; no al refrescar token (evita desmontar Admin). */
+  if (roleLoading && user && userRole === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+      </div>
+    );
+  }
+
+  if (roleLoading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>

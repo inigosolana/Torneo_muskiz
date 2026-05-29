@@ -39,6 +39,13 @@ import {
     playerRoleLabel,
     playersEligibleForMatch,
 } from '../utils/squadLimits';
+import {
+    loadAdminUiState,
+    saveAdminUiState,
+    type AdminCompSubTab,
+    type AdminMainTab,
+    type AdminPreviewMode,
+} from '../utils/adminUiPersistence';
 
 /** Plantilla de jugadores para equipos ficticios (stress test / IA). */
 function buildFakePlayersForTeam(teamId: string): Player[] {
@@ -72,16 +79,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [adminEmail, setAdminEmail] = useState('');
     const [passwordInput, setPasswordInput] = useState('');
-    const [authLoading, setAuthLoading] = useState(true);
+    const [sessionReady, setSessionReady] = useState(false);
 
-    // Restore session on mount
+    // Restore session on mount (no volver a pantalla de carga al refrescar token)
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
             setIsAuthenticated(!!session?.user);
-            setAuthLoading(false);
+            setSessionReady(true);
         });
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             setIsAuthenticated(!!session?.user);
+            if (event !== 'TOKEN_REFRESHED') setSessionReady(true);
         });
         return () => subscription.unsubscribe();
     }, []);
@@ -117,11 +125,20 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     const [publishDraftAsPublic, setPublishDraftAsPublic] = useState(false);
 
-    const [structureDivision, setStructureDivision] = useState<Team['division']>('Senior Masculino');
-    const [standingsDivision, setStandingsDivision] = useState<Team['division']>('Senior Masculino');
+    const savedAdminUi = useMemo(() => loadAdminUiState(), []);
+
+    const [structureDivision, setStructureDivision] = useState<Team['division']>(
+        (savedAdminUi.structureDivision as Team['division']) || 'Senior Masculino'
+    );
+    const [standingsDivision, setStandingsDivision] = useState<Team['division']>(
+        (savedAdminUi.standingsDivision as Team['division']) || 'Senior Masculino'
+    );
     const [standingsGroupFilter, setStandingsGroupFilter] = useState<string>('all');
     /** Simulación vs oficial en Calendario, Resultados y Clasificación */
-    const [compPreviewMode, setCompPreviewMode] = useState<'official' | 'simulation'>('official');
+    const [compPreviewMode, setCompPreviewMode] = useState<AdminPreviewMode>(
+        savedAdminUi.compPreviewMode ?? 'official'
+    );
+    const [loginSubmitting, setLoginSubmitting] = useState(false);
 
     // Acta Management State
     const [selectedMatchForReport, setSelectedMatchForReport] = useState<Match | null>(null);
@@ -331,8 +348,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
-    // Main Navigation Tabs
-    const [activeTab, setActiveTab] = useState<'verification' | 'teamRoster' | 'competition' | 'teams' | 'sponsors' | 'categories'>('verification');
+    // Main Navigation Tabs (persistidos en sessionStorage al cambiar de pestaña/minimizar)
+    const [activeTab, setActiveTab] = useState<AdminMainTab>(savedAdminUi.activeTab ?? 'verification');
     const [rosterSelectedTeamId, setRosterSelectedTeamId] = useState<string | null>(null);
     const [rosterSearch, setRosterSearch] = useState('');
     const [editingPlayerContext, setEditingPlayerContext] = useState<{ team: Team; player: Player } | null>(null);
@@ -344,9 +361,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     }, [activeTab]);
 
     // Competition Sub-tabs
-    const [compSubTab, setCompSubTab] = useState<
-        'structure' | 'simulations' | 'calendar' | 'results' | 'standings'
-    >('structure');
+    const [compSubTab, setCompSubTab] = useState<AdminCompSubTab>(savedAdminUi.compSubTab ?? 'structure');
+
+    useEffect(() => {
+        saveAdminUiState({
+            activeTab,
+            compSubTab,
+            compPreviewMode,
+            structureDivision,
+            standingsDivision,
+        });
+    }, [activeTab, compSubTab, compPreviewMode, structureDivision, standingsDivision]);
 
     // --- Team Filters ---
     const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -443,7 +468,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     }, [matches]);
 
     useEffect(() => {
-        if (activeTab !== 'competition' || !isAuthenticated || authLoading) return;
+        if (activeTab !== 'competition' || !isAuthenticated || !sessionReady) return;
         let cancelled = false;
         setSimulationsLoaded(false);
         void (async () => {
@@ -478,7 +503,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         return () => {
             cancelled = true;
         };
-    }, [activeTab, isAuthenticated, authLoading]);
+    }, [activeTab, isAuthenticated, sessionReady]);
 
     const persistSimDraftsAsync = async (next: CalendarDraft[], nextActiveId: string | null) => {
         setSimulationsSaving(true);
@@ -599,7 +624,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     // --- Auth Logic ---
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setAuthLoading(true);
+        setLoginSubmitting(true);
         const { data: authData, error } = await supabase.auth.signInWithPassword({ email: adminEmail, password: passwordInput });
         
         if (error) {
@@ -621,7 +646,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                 toast.success('Bienvenido al panel de administración.');
             }
         }
-        setAuthLoading(false);
+        setLoginSubmitting(false);
     };
 
     const handleUpdateCategory = async (id: string, updates: any) => {
@@ -1232,7 +1257,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const pendingPaymentTeams = teams.filter(t => t.paymentStatus === 'PENDING').length;
     const totalRevenue = teams.filter(t => t.paymentStatus === 'PAID').reduce((sum, t) => sum + t.fee, 0);
 
-    if (authLoading) {
+    if (!sessionReady) {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
@@ -1278,10 +1303,10 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                         </div>
                         <button
                             type="submit"
-                            disabled={authLoading}
+                            disabled={loginSubmitting}
                             className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-3.5 rounded-xl hover:opacity-90 transition-opacity shadow-lg flex items-center justify-center gap-2"
                         >
-                            {authLoading
+                            {loginSubmitting
                                 ? <span className="material-symbols-outlined animate-spin">progress_activity</span>
                                 : 'Entrar al Panel'
                             }

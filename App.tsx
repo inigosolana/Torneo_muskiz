@@ -52,8 +52,8 @@ const App: React.FC = () => {
 
   // Restore session & Role
   useEffect(() => {
-    const fetchRole = async (userId: string) => {
-      setRoleLoading(true);
+    const fetchRole = async (userId: string, showLoading: boolean) => {
+      if (showLoading) setRoleLoading(true);
       const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
       setUserRole(data?.role || null);
       setRoleLoading(false);
@@ -61,17 +61,19 @@ const App: React.FC = () => {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchRole(session.user.id);
+      if (session?.user) void fetchRole(session.user.id, true);
       else setRoleLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchRole(session.user.id);
-      else {
+      if (!session?.user) {
         setUserRole(null);
         setRoleLoading(false);
+        return;
       }
+      if (event === 'TOKEN_REFRESHED') return;
+      void fetchRole(session.user.id, false);
     });
 
     return () => subscription.unsubscribe();
