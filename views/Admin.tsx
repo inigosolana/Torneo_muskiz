@@ -87,6 +87,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     // Generator State
     const [generatingBracket, setGeneratingBracket] = useState(false);
     const [generatingMuskiz, setGeneratingMuskiz] = useState(false);
+    const [muskizLunchEnd, setMuskizLunchEnd] = useState<'14:30' | '15:00'>('14:30');
     const [genConfig, setGenConfig] = useState({
         startTime: '09:00',
         endTime: '21:00',
@@ -838,7 +839,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         setGeneratingMuskiz(true);
         try {
-            const { matches: newMatches, error: muskizError, warning: muskizWarning } = buildMuskizDayDraftMatches(teams, day);
+            const { matches: newMatches, error: muskizError, warning: muskizWarning } = buildMuskizDayDraftMatches(teams, day, { lunchEnd: muskizLunchEnd });
             if (muskizError) {
                 toast.error(muskizError);
                 return;
@@ -871,7 +872,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         setGeneratingMuskiz(true);
         try {
-            const { byDay, error: muskizError, warning: muskizWarning } = buildMuskizWeekendDraftsByDay(teams);
+            const { byDay, error: muskizError, warning: muskizWarning } = buildMuskizWeekendDraftsByDay(teams, { lunchEnd: muskizLunchEnd });
             if (muskizError) {
                 toast.error(muskizError);
                 return;
@@ -1036,6 +1037,33 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         setActiveDraftId(fresh.activeDraftId);
         await persistSimDraftsAsync(fresh.drafts, fresh.activeDraftId);
         toast.success('Simulaciones reseteadas: un borrador nuevo vacío.');
+    };
+
+    const handleUpdateDraftMatch = async (
+        matchId: string,
+        patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>
+    ) => {
+        if (!activeDraftId) return;
+        const next = simDrafts.map((d) =>
+            d.id !== activeDraftId
+                ? d
+                : {
+                      ...d,
+                      matches: d.matches.map((m) =>
+                          m.id === matchId
+                              ? {
+                                    ...m,
+                                    ...patch,
+                                    round: patch.time && patch.time !== m.time
+                                        ? m.round?.replace(/\d{2}:\d{2}/, patch.time) ?? m.round
+                                        : m.round,
+                                }
+                              : m
+                      ),
+                  }
+        );
+        setSimDrafts(next);
+        await persistSimDraftsAsync(next, activeDraftId);
     };
 
     const handleClearActiveDraftMatches = async () => {
@@ -2607,15 +2635,26 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             Simulador fin de semana Muskiz (determinístico)
                                                         </h4>
                                                         <p className="text-xs text-teal-800 mt-2 leading-relaxed max-w-3xl">
-                                                            <strong>Viernes:</strong> cadetes 17:00–21:00, <strong>6 campos</strong>.{' '}
-                                                            <strong>Sábado:</strong> juvenil/senior 9:00–21:00, comida 13:00–14:00, <strong>6 campos</strong>.{' '}
-                                                            <strong>Domingo:</strong> infantiles 9:00–15:00, <strong>4 campos</strong>. Huecos{' '}
-                                                            <strong>35 min</strong>. Como mínimo <strong>{MIN_REAL_MATCHES_PER_TEAM} partidos</strong>{' '}
-                                                            entre equipos reales por equipo; se añaden duelos de grupo extra si hace falta. Si no cabe todo,
-                                                            se genera igual: los partidos sin hueco aparecen como <strong>PENDIENTE</strong> para que puedas
-                                                            revisarlos. Grupos con «competición» en ficha o
-                                                            reparto automático; dos grupos → semis + final.
+                                                            <strong>Viernes:</strong> cadetes 17:00–21:00, 6 campos.{' '}
+                                                            <strong>Sábado:</strong> juvenil/senior 9:00–21:00, comida 13:00–{muskizLunchEnd}, 6 campos.{' '}
+                                                            <strong>Domingo:</strong> infantiles 9:00–15:00, 4 campos.{' '}
+                                                            Huecos <strong>35 min</strong>. Objetivo <strong>4 partidos reales</strong> por equipo (mínimo {MIN_REAL_MATCHES_PER_TEAM}).{' '}
+                                                            ≤5 equipos → liguilla + semis + final · 6–10 → 2 grupos + semis + final · ≥11 → 4 grupos + cuartos + semis + final.{' '}
+                                                            Categorías mezcladas en el horario. Partidos sin hueco aparecen como <strong>PENDIENTE</strong>.
                                                         </p>
+                                                        <div className="mt-3 flex items-center gap-3 flex-wrap">
+                                                            <span className="text-[11px] font-bold text-teal-900">Descanso comida (sáb.):</span>
+                                                            {(['14:30', '15:00'] as const).map((opt) => (
+                                                                <button
+                                                                    key={opt}
+                                                                    type="button"
+                                                                    onClick={() => setMuskizLunchEnd(opt)}
+                                                                    className={`px-3 py-1 rounded-lg text-[11px] font-bold border transition-colors ${muskizLunchEnd === opt ? 'bg-teal-700 text-white border-teal-700' : 'bg-white text-teal-800 border-teal-300 hover:border-teal-500'}`}
+                                                                >
+                                                                    13:00 – {opt} ({opt === '14:30' ? '90 min' : '2 h'})
+                                                                </button>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                     <div className="flex flex-wrap gap-2">
                                                         <button
@@ -2656,6 +2695,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         <SimulationScheduleGridTabs
                                                             matches={activeDraft.matches}
                                                             fixedDay={activeDraft.scheduleDay}
+                                                            onUpdateMatch={(id, patch) => void handleUpdateDraftMatch(id, patch)}
                                                         />
                                                     </div>
                                                 )}
