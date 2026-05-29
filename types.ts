@@ -16,6 +16,7 @@ export interface Sponsor {
   name: string;
   logoUrl: string; // Can be a URL or a material icon name for demo purposes
   tier: 'Platinum' | 'Gold' | 'Silver' | 'Collaborator';
+  websiteUrl?: string;
 }
 
 export interface GalleryItem {

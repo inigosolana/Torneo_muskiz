@@ -150,16 +150,32 @@ export const Home: React.FC = () => {
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
           <h3 className="text-center text-slate-400 uppercase tracking-widest text-xs font-bold mb-8">Patrocinadores Oficiales</h3>
           <div className="flex flex-wrap justify-center items-center gap-12 opacity-70 grayscale hover:grayscale-0 transition-all duration-500">
-            {topSponsors.map(sponsor => (
-              <div key={sponsor.id} className="flex items-center gap-2 text-xl font-black text-slate-800 dark:text-white">
-                {!sponsor.logoUrl.includes('/') && !sponsor.logoUrl.includes('.') ? (
-                  <span className="material-symbols-outlined text-4xl text-slate-600">{sponsor.logoUrl}</span>
-                ) : (
-                  <img src={sponsor.logoUrl} alt={sponsor.name} className="h-10 object-contain" />
-                )}
-                {sponsor.name}
-              </div>
-            ))}
+            {topSponsors.map((sponsor) => {
+              const content = (
+                <div className="flex items-center gap-2 text-xl font-black text-slate-800 dark:text-white">
+                  {!sponsor.logoUrl.includes('/') && !sponsor.logoUrl.includes('.') ? (
+                    <span className="material-symbols-outlined text-4xl text-slate-600">{sponsor.logoUrl}</span>
+                  ) : (
+                    <img src={sponsor.logoUrl} alt={sponsor.name} className="h-12 max-w-[140px] object-contain" />
+                  )}
+                  <span className="hidden sm:inline">{sponsor.name}</span>
+                </div>
+              );
+              return sponsor.websiteUrl ? (
+                <a
+                  key={sponsor.id}
+                  href={sponsor.websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:opacity-100 transition-opacity"
+                  title={sponsor.name}
+                >
+                  {content}
+                </a>
+              ) : (
+                <div key={sponsor.id}>{content}</div>
+              );
+            })}
           </div>
           <div className="text-center mt-8">
             <button onClick={() => navigate('/sponsors')} className="text-primary text-sm font-bold hover:underline">Ver todos los patrocinadores</button>

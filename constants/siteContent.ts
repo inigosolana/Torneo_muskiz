@@ -47,7 +47,14 @@ export const siteContent: SiteContent = {
   sponsors: [
     { id: 's1', name: 'Ayuntamiento de Muskiz', logoUrl: '/patrocinadores/muskizko_udala.png', tier: 'Platinum' },
     { id: 's2', name: 'Petronor', logoUrl: '/patrocinadores/petronor.jpg', tier: 'Platinum' },
-    { id: 's3', name: 'Lurpelan', logoUrl: '/patrocinadores/lurpelan.png', tier: 'Gold' },
+    {
+      id: 's-delcoi',
+      name: 'DELCOI S.A.',
+      logoUrl: '/patrocinadores/delcoi.png',
+      tier: 'Gold',
+      websiteUrl: 'https://www.delcoi.biz/',
+    },
+    { id: 's3b', name: 'Lurpelan', logoUrl: '/patrocinadores/lurpelan.png', tier: 'Gold' },
     { id: 's4', name: 'Artecarne', logoUrl: '/patrocinadores/artecarne.png', tier: 'Gold' },
     { id: 's5', name: 'Garmendia', logoUrl: '/patrocinadores/garmendia.jpg', tier: 'Gold' },
     { id: 's6', name: 'Sponsor 1', logoUrl: '/patrocinadores/sponsor1.jpg', tier: 'Silver' },
