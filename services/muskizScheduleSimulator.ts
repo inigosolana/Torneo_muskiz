@@ -3,7 +3,7 @@
  *
  * Reglas por defecto:
  * - Viernes: solo cadetes (♀♂), 17:00–22:00, 6 campos.
- * - Sábado: juvenil + senior (♀♂), 9:00–21:00, comida 14:00–15:30/15:50/16:00, 6 campos.
+ * - Sábado: juvenil + senior (♀♂), 9:00–22:00 (cuadrícula hasta ~21:00), comida 14:00–15:30/15:50/16:00, 6 campos.
  * - Domingo: infantiles (♀♂), 9:00–15:00, 4 campos.
  *
  * Formato por número de equipos en la categoría:
@@ -138,8 +138,8 @@ function autoGroupCount(n: number): number {
     if (n < MIN_TEAMS_PER_GROUP) return n >= 2 ? 1 : 0;
     if (n <= 5) return 1;
     if (n <= 8) return 2;
-    if (n <= 11) return 3;
-    return 4;
+    if (n <= 10) return 3;
+    return 4; // ≥11 equipos → 4 grupos → cuartos + semis + final
 }
 
 function splitNamesIntoGroups(sorted: string[], groupCount: number): { key: string; names: string[] }[] {
@@ -208,9 +208,12 @@ export function computeGroups(teamList: Team[]): { key: string; names: string[] 
         .map((t) => t.name);
 
     let groupCount = autoGroupCount(n);
-    while (groupCount > 1 && Math.floor(n / groupCount) < MIN_TEAMS_PER_GROUP) groupCount--;
+    if (n < 11) {
+        while (groupCount > 1 && Math.floor(n / groupCount) < MIN_TEAMS_PER_GROUP) groupCount--;
+    }
     if (groupCount <= 0) return [];
-    return splitNamesIntoGroups(sorted, groupCount);
+    const split = splitNamesIntoGroups(sorted, groupCount);
+    return n >= 11 ? split : mergeUndersizedGroups(split);
 }
 
 /** Partidos previstos por equipo en la categoría (fase grupos + extras hasta objetivo). */
@@ -259,7 +262,7 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
 
     // ── Fases eliminatorias ─────────────────────────────────────────────────
     if (n >= 11 && numGroups >= 4) {
-        // ≥11 equipos: cuartos → semis → final
+        // ≥11 equipos: cuartos → semis → final (orden estricto en el planificador)
         const [ga, gb, gc, gd] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B', gkeys[2] ?? 'C', gkeys[3] ?? 'D'];
         out.push(
             { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 1` },
@@ -450,7 +453,7 @@ const DEFAULT_COURTS_4 = ['Campo 1', 'Campo 2', 'Campo 3', 'Campo 4'];
 export function defaultConfigs(): Record<MuskizScheduleDayLabel, DayConfig> {
     return {
         Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:00', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6 },
-        Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:00', playEndExclusive: '21:00', courts: DEFAULT_COURTS_6, lunch: { start: '14:00', end: '15:50' } },
+        Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:00', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6, lunch: { start: '14:00', end: '15:50' } },
         Domingo: { label: 'Domingo', dayShort: 'Dom', playStart: '09:00', playEndExclusive: '15:00', courts: DEFAULT_COURTS_4 },
     };
 }
@@ -496,7 +499,7 @@ function pickOptimalSaturdayLunch(
 
     for (const duration of LUNCH_DURATION_MINS_OPTIONS) {
         const endMin = startMin + duration;
-        if (endMin + slotMins > timeToMinutes('21:00')) continue;
+        if (endMin + slotMins > timeToMinutes('22:00')) continue;
         const lunch = { start: minutesToTime(startMin), end: minutesToTime(endMin) };
         const trialConfigs = {
             ...configs,
@@ -705,6 +708,27 @@ function maxAssignedEndMin(state: ScheduleGreedyState): number {
     return Math.max(...state.assigned.map((a) => a.tEnd));
 }
 
+/** Primera franja válida en o después del fin de la fase anterior. */
+function nextPhaseSlotMin(slotStartsMin: number[], state: ScheduleGreedyState): number | undefined {
+    const maxEnd = maxAssignedEndMin(state);
+    if (!Number.isFinite(maxEnd) || maxEnd === -Infinity) return undefined;
+    return slotStartsMin.find((ts) => ts >= maxEnd);
+}
+
+/** Franjas reservadas antes de las finales para cuartos/semis (no mezclar con grupos). */
+function reservedKnockoutSlotStarts(
+    slotStartsMin: number[],
+    knockoutCount: number,
+    courtCount: number,
+    finalReserved: number[]
+): number[] {
+    if (knockoutCount <= 0) return [];
+    const finalSet = new Set(finalReserved);
+    const available = slotStartsMin.filter((ts) => !finalSet.has(ts));
+    const waves = Math.max(1, Math.ceil(knockoutCount / courtCount));
+    return available.slice(-Math.min(waves, available.length));
+}
+
 function specsByPhase(specs: RawMatchSpec[]) {
     return {
         grupos: specs.filter((s) => s.phase === 'GRUPOS'),
@@ -731,32 +755,34 @@ function scheduleGreedy(
 
     const { grupos, cuartos, semis, finals } = specsByPhase(specs);
     const reservedFinalSlots = reservedFinalSlotStarts(slotStartsMin, finals.length, courts.length);
+    const reservedKnockoutSlots = reservedKnockoutSlotStarts(
+        slotStartsMin,
+        cuartos.length + semis.length,
+        courts.length,
+        reservedFinalSlots
+    );
+    const groupsForbidden = [...new Set([...reservedFinalSlots, ...reservedKnockoutSlots])];
 
     const state = createScheduleGreedyState(slotStartsMin, courts, slotMins);
 
-    const phaseMinStart = () => {
-        const end = maxAssignedEndMin(state);
-        return Number.isFinite(end) && end !== -Infinity ? end : undefined;
-    };
-
     scheduleSpecBatch(state, grupos, {
         slotTimePolicy: 'earliest',
-        forbiddenSlotStarts: reservedFinalSlots,
+        forbiddenSlotStarts: groupsForbidden,
     });
 
     scheduleSpecBatch(state, cuartos, {
         slotTimePolicy: 'earliest',
         forbiddenSlotStarts: reservedFinalSlots,
-        minSlotStartMin: phaseMinStart(),
+        minSlotStartMin: nextPhaseSlotMin(slotStartsMin, state),
     });
 
     scheduleSpecBatch(state, semis, {
         slotTimePolicy: 'earliest',
         forbiddenSlotStarts: reservedFinalSlots,
-        minSlotStartMin: phaseMinStart(),
+        minSlotStartMin: nextPhaseSlotMin(slotStartsMin, state),
     });
 
-    const minAfterKnockout = phaseMinStart();
+    const minAfterKnockout = nextPhaseSlotMin(slotStartsMin, state);
     const finalSlots = reservedFinalSlots.filter(
         (ts) => minAfterKnockout == null || ts >= minAfterKnockout
     );
@@ -772,7 +798,7 @@ function scheduleGreedy(
         state.unplaced = state.unplaced.filter((s) => s.phase !== 'FINAL');
         scheduleSpecBatch(state, unplacedFinals, {
             slotTimePolicy: 'latest',
-            minSlotStartMin: phaseMinStart(),
+            minSlotStartMin: nextPhaseSlotMin(slotStartsMin, state),
         });
     }
 
@@ -1001,7 +1027,7 @@ export function resolveMatchDivision(match: Match, teams: Team[]): Team['divisio
 }
 
 export interface DayGridOptions {
-    /** Rellena todas las franjas 09:00–21:00 (o fin del día) con celdas vacías para arrastrar partidos. */
+    /** Rellena todas las franjas del día (p. ej. sábado 9:00–~21:00) con celdas vacías para arrastrar partidos. */
     fillEmptySlots?: boolean;
     slotDurationMins?: number;
     simulatorOptions?: MuskizSimulatorOptions;
