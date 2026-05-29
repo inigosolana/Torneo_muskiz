@@ -54,6 +54,13 @@ export const siteContent: SiteContent = {
       tier: 'Gold',
       websiteUrl: 'https://www.delcoi.biz/',
     },
+    {
+      id: 's-itxas-mendi',
+      name: 'Itxas Mendi (Montemar) Bar',
+      logoUrl: '/patrocinadores/itxas-mendi-montemar.png',
+      tier: 'Gold',
+      websiteUrl: 'https://www.disfrutabizkaia.com/establecimiento/itxas-mendi-montemar-bar/',
+    },
     { id: 's3b', name: 'Lurpelan', logoUrl: '/patrocinadores/lurpelan.png', tier: 'Gold' },
     { id: 's4', name: 'Artecarne', logoUrl: '/patrocinadores/artecarne.png', tier: 'Gold' },
     { id: 's5', name: 'Garmendia', logoUrl: '/patrocinadores/garmendia.jpg', tier: 'Gold' },
