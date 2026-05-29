@@ -2,7 +2,7 @@
  * Simulador determinístico de calendario fin de semana Muskiz (balonmano playa).
  *
  * Reglas por defecto:
- * - Viernes: solo cadetes (♀♂), 17:00–21:00, 6 campos.
+ * - Viernes: solo cadetes (♀♂), 17:00–22:00, 6 campos.
  * - Sábado: juvenil + senior (♀♂), 9:00–21:00, comida 14:00–15:30/15:50/16:00, 6 campos.
  * - Domingo: infantiles (♀♂), 9:00–15:00, 4 campos.
  *
@@ -16,6 +16,7 @@
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
  * Las fases de grupos/cuartos se programan antes que semis/finales.
  * Las finales se reservan en las últimas franjas del día (cierre del calendario).
+ * Orden estricto: todos los grupos → cuartos → semis → finales (sin mezclar fases).
  * Se mezclan categorías en la tabla (interleaved) para mayor variedad.
  * Evita en lo posible que un equipo juegue dos partidos seguidos (franjas consecutivas).
  */
@@ -448,7 +449,7 @@ const DEFAULT_COURTS_4 = ['Campo 1', 'Campo 2', 'Campo 3', 'Campo 4'];
 
 export function defaultConfigs(): Record<MuskizScheduleDayLabel, DayConfig> {
     return {
-        Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:00', playEndExclusive: '21:00', courts: DEFAULT_COURTS_6 },
+        Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:00', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6 },
         Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:00', playEndExclusive: '21:00', courts: DEFAULT_COURTS_6, lunch: { start: '14:00', end: '15:50' } },
         Domingo: { label: 'Domingo', dayShort: 'Dom', playStart: '09:00', playEndExclusive: '15:00', courts: DEFAULT_COURTS_4 },
     };
@@ -561,6 +562,8 @@ function scheduleSpecBatch(
         slotTimePolicy: SlotTimePolicy;
         allowedSlotStarts?: number[];
         forbiddenSlotStarts?: number[];
+        /** Ningún partido de este lote antes de este minuto (fin de la fase anterior). */
+        minSlotStartMin?: number;
     }
 ): void {
     const { slotStartsMin, courts, slotMins, assigned } = state;
@@ -651,6 +654,7 @@ function scheduleSpecBatch(
             slotTimePolicy === 'earliest' ? slotStartsMin : [...slotStartsMin].reverse();
 
         for (const ts of slotOrder) {
+            if (options.minSlotStartMin != null && ts < options.minSlotStartMin) continue;
             if (allowedSet && !allowedSet.has(ts)) continue;
             if (forbiddenSet?.has(ts)) continue;
 
@@ -695,10 +699,25 @@ function scheduleSpecBatch(
     }
 }
 
+/** Mayor instante de fin (tEnd) ya asignado en el estado. */
+function maxAssignedEndMin(state: ScheduleGreedyState): number {
+    if (!state.assigned.length) return -Infinity;
+    return Math.max(...state.assigned.map((a) => a.tEnd));
+}
+
+function specsByPhase(specs: RawMatchSpec[]) {
+    return {
+        grupos: specs.filter((s) => s.phase === 'GRUPOS'),
+        cuartos: specs.filter((s) => s.phase === 'CUARTOS'),
+        semis: specs.filter((s) => s.phase === 'SEMIS'),
+        finals: specs.filter((s) => s.phase === 'FINAL'),
+    };
+}
+
 /**
  * Asigna horas y pistas evitando solapamiento de pista/equipo y, en lo posible,
  * dos partidos seguidos del mismo equipo (sin al menos una franja de descanso).
- * Las finales se reservan en las últimas franjas del día.
+ * Orden estricto: grupos → cuartos → semis → finales (al cierre del día).
  */
 function scheduleGreedy(
     day: MuskizScheduleDayLabel,
@@ -710,28 +729,50 @@ function scheduleGreedy(
     const slotStartsMin = generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch);
     const courts = cfg.courts;
 
-    const finalSpecs = specs.filter((s) => s.phase === 'FINAL');
-    const nonFinalSpecs = specs.filter((s) => s.phase !== 'FINAL');
-    const reservedFinalSlots = reservedFinalSlotStarts(slotStartsMin, finalSpecs.length, courts.length);
+    const { grupos, cuartos, semis, finals } = specsByPhase(specs);
+    const reservedFinalSlots = reservedFinalSlotStarts(slotStartsMin, finals.length, courts.length);
 
     const state = createScheduleGreedyState(slotStartsMin, courts, slotMins);
 
-    scheduleSpecBatch(state, nonFinalSpecs, {
+    const phaseMinStart = () => {
+        const end = maxAssignedEndMin(state);
+        return Number.isFinite(end) && end !== -Infinity ? end : undefined;
+    };
+
+    scheduleSpecBatch(state, grupos, {
         slotTimePolicy: 'earliest',
         forbiddenSlotStarts: reservedFinalSlots,
     });
 
-    scheduleSpecBatch(state, finalSpecs, {
-        slotTimePolicy: 'latest',
-        allowedSlotStarts: reservedFinalSlots.length > 0 ? reservedFinalSlots : slotStartsMin,
+    scheduleSpecBatch(state, cuartos, {
+        slotTimePolicy: 'earliest',
+        forbiddenSlotStarts: reservedFinalSlots,
+        minSlotStartMin: phaseMinStart(),
     });
 
-    // Si alguna final no cabe en las franjas reservadas, reintenta en todo el día (tarde).
+    scheduleSpecBatch(state, semis, {
+        slotTimePolicy: 'earliest',
+        forbiddenSlotStarts: reservedFinalSlots,
+        minSlotStartMin: phaseMinStart(),
+    });
+
+    const minAfterKnockout = phaseMinStart();
+    const finalSlots = reservedFinalSlots.filter(
+        (ts) => minAfterKnockout == null || ts >= minAfterKnockout
+    );
+
+    scheduleSpecBatch(state, finals, {
+        slotTimePolicy: 'latest',
+        allowedSlotStarts: finalSlots.length > 0 ? finalSlots : slotStartsMin,
+        minSlotStartMin: minAfterKnockout,
+    });
+
     const unplacedFinals = state.unplaced.filter((s) => s.phase === 'FINAL');
     if (unplacedFinals.length > 0) {
         state.unplaced = state.unplaced.filter((s) => s.phase !== 'FINAL');
         scheduleSpecBatch(state, unplacedFinals, {
             slotTimePolicy: 'latest',
+            minSlotStartMin: phaseMinStart(),
         });
     }
 

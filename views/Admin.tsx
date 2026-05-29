@@ -2737,7 +2737,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         <p className="mt-2 text-[11px] text-teal-800">
                                                             La comida del sábado empieza a las 14:00 (tras los huecos de 35 min de la mañana) y dura 1h30, 1h50 (15:50) o 2h; la tarde arranca justo al terminar.
                                                             Semifinales y finales solo después de terminar todos los partidos de grupos.
-                                                            Las finales se reservan en las últimas franjas del día.
+                                                            Orden estricto: fase de grupos → semis (→ cuartos si aplica) → finales al cierre del día.
                                                             La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).
                                                             Ajusta partidos a mano en la lista de abajo o en Calendario (tabla / cuadrícula).
                                                         </p>
