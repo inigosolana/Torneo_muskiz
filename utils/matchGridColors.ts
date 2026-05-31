@@ -42,7 +42,7 @@ const GRID_BY_DIVISION: Record<string, Record<MatchPhaseTone, MatchGridColors>> 
         'group-D': { cell: 'bg-pink-200', badge: 'bg-pink-400 text-pink-950', drag: 'border-pink-600' },
         cuartos: { cell: 'bg-pink-100/90', badge: 'bg-pink-200 text-pink-950', drag: 'border-pink-500 border-dashed' },
         semi: { cell: 'bg-pink-200/60', badge: 'bg-pink-300 text-pink-950', drag: 'border-pink-600 border-dashed' },
-        final: { cell: 'bg-pink-300/50', badge: 'bg-pink-400 text-pink-950', drag: 'border-pink-700 border-2' },
+        final: { cell: 'bg-pink-300', badge: 'bg-pink-400 text-pink-950', drag: 'border-pink-700 border-2' },
         default: { cell: 'bg-pink-50', badge: 'bg-pink-200 text-pink-950', drag: 'border-pink-300' },
     },
     CM: {
@@ -52,7 +52,7 @@ const GRID_BY_DIVISION: Record<string, Record<MatchPhaseTone, MatchGridColors>> 
         'group-D': { cell: 'bg-blue-200', badge: 'bg-blue-400 text-blue-950', drag: 'border-blue-600' },
         cuartos: { cell: 'bg-blue-100/90', badge: 'bg-blue-200 text-blue-950', drag: 'border-blue-500 border-dashed' },
         semi: { cell: 'bg-blue-200/60', badge: 'bg-blue-300 text-blue-950', drag: 'border-blue-600 border-dashed' },
-        final: { cell: 'bg-blue-300/50', badge: 'bg-blue-400 text-blue-950', drag: 'border-blue-700 border-2' },
+        final: { cell: 'bg-blue-300', badge: 'bg-blue-400 text-blue-950', drag: 'border-blue-700 border-2' },
         default: { cell: 'bg-blue-50', badge: 'bg-blue-200 text-blue-950', drag: 'border-blue-300' },
     },
     JF: {
@@ -62,7 +62,7 @@ const GRID_BY_DIVISION: Record<string, Record<MatchPhaseTone, MatchGridColors>> 
         'group-D': { cell: 'bg-pink-200', badge: 'bg-pink-400 text-pink-950', drag: 'border-pink-600' },
         cuartos: { cell: 'bg-pink-100/90', badge: 'bg-pink-200 text-pink-950', drag: 'border-pink-500 border-dashed' },
         semi: { cell: 'bg-pink-200/60', badge: 'bg-pink-300 text-pink-950', drag: 'border-pink-600 border-dashed' },
-        final: { cell: 'bg-pink-300/50', badge: 'bg-pink-400 text-pink-950', drag: 'border-pink-700 border-2' },
+        final: { cell: 'bg-pink-300', badge: 'bg-pink-400 text-pink-950', drag: 'border-pink-700 border-2' },
         default: { cell: 'bg-pink-50', badge: 'bg-pink-200 text-pink-950', drag: 'border-pink-300' },
     },
     JM: {
@@ -72,7 +72,7 @@ const GRID_BY_DIVISION: Record<string, Record<MatchPhaseTone, MatchGridColors>> 
         'group-D': { cell: 'bg-blue-200', badge: 'bg-blue-400 text-blue-950', drag: 'border-blue-600' },
         cuartos: { cell: 'bg-blue-100/90', badge: 'bg-blue-200 text-blue-950', drag: 'border-blue-500 border-dashed' },
         semi: { cell: 'bg-blue-200/60', badge: 'bg-blue-300 text-blue-950', drag: 'border-blue-600 border-dashed' },
-        final: { cell: 'bg-blue-300/50', badge: 'bg-blue-400 text-blue-950', drag: 'border-blue-700 border-2' },
+        final: { cell: 'bg-blue-300', badge: 'bg-blue-400 text-blue-950', drag: 'border-blue-700 border-2' },
         default: { cell: 'bg-blue-50', badge: 'bg-blue-200 text-blue-950', drag: 'border-blue-300' },
     },
     SF: {
@@ -82,7 +82,7 @@ const GRID_BY_DIVISION: Record<string, Record<MatchPhaseTone, MatchGridColors>> 
         'group-D': { cell: 'bg-rose-200', badge: 'bg-rose-400 text-rose-950', drag: 'border-rose-600' },
         cuartos: { cell: 'bg-rose-100/90', badge: 'bg-rose-200 text-rose-950', drag: 'border-rose-500 border-dashed' },
         semi: { cell: 'bg-rose-200/60', badge: 'bg-rose-300 text-rose-950', drag: 'border-rose-600 border-dashed' },
-        final: { cell: 'bg-rose-300/50', badge: 'bg-rose-400 text-rose-950', drag: 'border-rose-700 border-2' },
+        final: { cell: 'bg-rose-300', badge: 'bg-rose-400 text-rose-950', drag: 'border-rose-700 border-2' },
         default: { cell: 'bg-rose-50', badge: 'bg-rose-200 text-rose-950', drag: 'border-rose-300' },
     },
     SM: {
@@ -92,7 +92,7 @@ const GRID_BY_DIVISION: Record<string, Record<MatchPhaseTone, MatchGridColors>> 
         'group-D': { cell: 'bg-cyan-200', badge: 'bg-cyan-400 text-cyan-950', drag: 'border-cyan-600' },
         cuartos: { cell: 'bg-cyan-100/90', badge: 'bg-cyan-200 text-cyan-950', drag: 'border-cyan-500 border-dashed' },
         semi: { cell: 'bg-cyan-200/60', badge: 'bg-cyan-300 text-cyan-950', drag: 'border-cyan-600 border-dashed' },
-        final: { cell: 'bg-cyan-300/50', badge: 'bg-cyan-400 text-cyan-950', drag: 'border-cyan-700 border-2' },
+        final: { cell: 'bg-cyan-300', badge: 'bg-cyan-400 text-cyan-950', drag: 'border-cyan-700 border-2' },
         default: { cell: 'bg-cyan-50', badge: 'bg-cyan-200 text-cyan-950', drag: 'border-cyan-300' },
     },
     IF: {
@@ -102,7 +102,7 @@ const GRID_BY_DIVISION: Record<string, Record<MatchPhaseTone, MatchGridColors>> 
         'group-D': { cell: 'bg-emerald-200', badge: 'bg-emerald-400 text-emerald-950', drag: 'border-emerald-600' },
         cuartos: { cell: 'bg-emerald-100/90', badge: 'bg-emerald-200 text-emerald-950', drag: 'border-emerald-500 border-dashed' },
         semi: { cell: 'bg-emerald-200/60', badge: 'bg-emerald-300 text-emerald-950', drag: 'border-emerald-600 border-dashed' },
-        final: { cell: 'bg-emerald-300/50', badge: 'bg-emerald-400 text-emerald-950', drag: 'border-emerald-700 border-2' },
+        final: { cell: 'bg-emerald-300', badge: 'bg-emerald-400 text-emerald-950', drag: 'border-emerald-700 border-2' },
         default: { cell: 'bg-emerald-50', badge: 'bg-emerald-200 text-emerald-950', drag: 'border-emerald-300' },
     },
     IM: {
@@ -112,10 +112,20 @@ const GRID_BY_DIVISION: Record<string, Record<MatchPhaseTone, MatchGridColors>> 
         'group-D': { cell: 'bg-teal-200', badge: 'bg-teal-400 text-teal-950', drag: 'border-teal-600' },
         cuartos: { cell: 'bg-teal-100/90', badge: 'bg-teal-200 text-teal-950', drag: 'border-teal-500 border-dashed' },
         semi: { cell: 'bg-teal-200/60', badge: 'bg-teal-300 text-teal-950', drag: 'border-teal-600 border-dashed' },
-        final: { cell: 'bg-teal-300/50', badge: 'bg-teal-400 text-teal-950', drag: 'border-teal-700 border-2' },
+        final: { cell: 'bg-teal-300', badge: 'bg-teal-400 text-teal-950', drag: 'border-teal-700 border-2' },
         default: { cell: 'bg-teal-50', badge: 'bg-teal-200 text-teal-950', drag: 'border-teal-300' },
     },
 };
+
+/** Semifinales: mismo aspecto que finales; finales con anillo extra para distinguirlas. */
+for (const palette of Object.values(GRID_BY_DIVISION)) {
+    const baseFinal = palette.final;
+    palette.semi = { ...baseFinal };
+    palette.final = {
+        ...baseFinal,
+        drag: `${baseFinal.drag} ring-2 ring-offset-1 ring-black/15`,
+    };
+}
 
 const TONE_LABELS: Record<MatchPhaseTone, string> = {
     'group-A': 'Gr. A',
@@ -132,7 +142,7 @@ const TONE_LABELS: Record<MatchPhaseTone, string> = {
 export function getMatchPhaseTone(round?: string): MatchPhaseTone {
     if (!round) return 'default';
     if (/\bFinal\b/i.test(round)) return 'final';
-    if (/\bSemi\b/i.test(round)) return 'semi';
+    if (/\bSemis?\b/i.test(round)) return 'semi';
     if (/\bCuartos?\b/i.test(round)) return 'cuartos';
 
     const afterCode = round.match(/\b(?:CF|CM|JF|JM|SF|SM|IF|IM)-([A-Da-d])\b/);

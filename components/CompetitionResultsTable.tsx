@@ -35,6 +35,8 @@ interface CompetitionResultsTableProps {
     onNavigateActa?: (matchId: string) => void;
     onSocialPost?: (match: Match) => void;
     emptyMessage?: string;
+    /** Oculta columna de acciones (p. ej. vista responsable). */
+    hideActions?: boolean;
 }
 
 /** Resultados con horario; marcador visible = sets ganados (2:0, 2:1, 0:2, 1:2). */
@@ -46,11 +48,13 @@ export const CompetitionResultsTable: React.FC<CompetitionResultsTableProps> = (
     onNavigateActa,
     onSocialPost,
     emptyMessage = 'No hay partidos.',
+    hideActions = false,
 }) => {
     const sorted = useMemo(() => sortMatchesBySchedule(matches), [matches]);
     const isSim = previewMode === 'simulation';
-    const canEditScores = Boolean(onUpdateSetScores);
-    const canActa = Boolean(onOpenReport || onNavigateActa);
+    const canEditScores = Boolean(onUpdateSetScores) && !hideActions;
+    const canActa = Boolean(onOpenReport || onNavigateActa) && !hideActions;
+    const showActionsCol = !hideActions && (canEditScores || canActa || onSocialPost);
     const [editingMatch, setEditingMatch] = useState<Match | null>(null);
 
     if (sorted.length === 0) {
@@ -72,7 +76,7 @@ export const CompetitionResultsTable: React.FC<CompetitionResultsTableProps> = (
                             <th className="px-3 py-2.5 text-center">Sets</th>
                             <th className="px-3 py-2.5">Equipo B</th>
                             <th className="px-3 py-2.5">Fase</th>
-                            <th className="px-3 py-2.5 text-right">Acciones</th>
+                            {showActionsCol && <th className="px-3 py-2.5 text-right">Acciones</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -125,6 +129,7 @@ export const CompetitionResultsTable: React.FC<CompetitionResultsTableProps> = (
                                     <td className="px-3 py-2.5 text-[10px] text-slate-500 max-w-[120px] truncate" title={match.round}>
                                         {phaseLabel}
                                     </td>
+                                    {showActionsCol && (
                                     <td className="px-3 py-2.5">
                                         <div className="flex flex-wrap justify-end gap-1">
                                             {isSim && !canActa && (
@@ -168,6 +173,7 @@ export const CompetitionResultsTable: React.FC<CompetitionResultsTableProps> = (
                                             )}
                                         </div>
                                     </td>
+                                    )}
                                 </tr>
                             );
                         })}

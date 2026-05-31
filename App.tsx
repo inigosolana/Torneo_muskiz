@@ -304,6 +304,7 @@ const App: React.FC = () => {
               <Route path="/info" element={<Information />} />
               <Route path="/schedule" element={<Schedule />} />
               <Route path="/registration" element={<Registration onRegister={addTeams} />} />
+              <Route path="/manager-login" element={<Navigate to="/team-manager" replace />} />
               <Route path="/sponsors" element={<Sponsors />} />
               <Route path="/media" element={<Media />} />
               <Route path="/self-registration" element={<PlayerSelfRegistration onUpdateTeam={updateTeam} />} />

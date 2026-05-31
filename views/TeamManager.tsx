@@ -18,6 +18,7 @@ import {
     maxPlayersForDivision,
     playerRoleLabel,
 } from '../utils/squadLimits';
+import { ManagerSchedulePanel } from '../components/ManagerSchedulePanel';
 
 interface TeamManagerProps {
     teams: Team[];
@@ -26,6 +27,7 @@ interface TeamManagerProps {
 
 export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam }) => {
     const navigate = useNavigate();
+    const [mainSection, setMainSection] = useState<'roster' | 'schedule'>('roster');
     const [selectedTeamId, setSelectedTeamId] = useState<string>(teams.length > 0 ? teams[0].id : '');
     const [isUploadingTeamLogo, setIsUploadingTeamLogo] = useState(false);
 
@@ -328,6 +330,37 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                 
                 <Toaster position="top-right" richColors />
 
+                <div className="flex gap-1 bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-white/10 p-1 w-fit shadow-sm">
+                    <button
+                        type="button"
+                        onClick={() => setMainSection('roster')}
+                        className={`px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${
+                            mainSection === 'roster'
+                                ? 'bg-primary text-background-dark shadow'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'
+                        }`}
+                    >
+                        <span className="material-symbols-outlined text-lg">groups</span>
+                        Plantilla
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setMainSection('schedule')}
+                        className={`px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${
+                            mainSection === 'schedule'
+                                ? 'bg-primary text-background-dark shadow'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'
+                        }`}
+                    >
+                        <span className="material-symbols-outlined text-lg">calendar_month</span>
+                        Horarios
+                    </button>
+                </div>
+
+                {mainSection === 'schedule' ? (
+                    <ManagerSchedulePanel managerTeams={teams} />
+                ) : (
+                <>
                 {/* Header & Selector */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="flex items-center gap-4">
@@ -666,6 +699,9 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                     </div>
                 </div>
             )}
+                </>
+                )}
+            </div>
         </div>
     );
 };
