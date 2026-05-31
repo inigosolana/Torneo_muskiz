@@ -1,5 +1,11 @@
 import type { Match, Team } from '../types';
-import { computeGroups, DIVISION_CODE, resolveMatchDivision } from '../services/muskizScheduleSimulator';
+import {
+    autoGroupCount,
+    computeGroups,
+    DIVISION_CODE,
+    MIN_TEAMS_PER_GROUP,
+    resolveMatchDivision,
+} from '../services/muskizScheduleSimulator';
 
 const GROUP_ROUND_RX = /Grupos\s*·\s*([A-Z]{2})-([A-D])\b/i;
 
@@ -81,6 +87,89 @@ function pairKey(a: string, b: string): string {
     return [a, b].sort().join('|||');
 }
 
+export interface GroupDistributionValidation {
+    valid: boolean;
+    needsRegenerate: boolean;
+    issues: string[];
+    expectedGroupCount: number;
+    groupSizes: { key: string; count: number }[];
+}
+
+function rosterForDivision(
+    teams: Team[],
+    division: Team['division'],
+    onlyPaid: boolean
+): Team[] {
+    return teams.filter((t) => {
+        if (t.division !== division) return false;
+        if (onlyPaid && t.paymentStatus !== 'PAID') return false;
+        return true;
+    });
+}
+
+/** Comprueba si el reparto manual encaja con el formato del simulador. */
+export function validateGroupDistribution(
+    teams: Team[],
+    division: Team['division'],
+    onlyPaid = false
+): GroupDistributionValidation {
+    const roster = rosterForDivision(teams, division, onlyPaid);
+    const n = roster.length;
+    const expectedGroupCount = n < 2 ? 0 : autoGroupCount(n);
+    const counts = new Map<string, number>();
+    let unassigned = 0;
+
+    for (const t of roster) {
+        const g = (t.competitionGroup ?? '').trim();
+        if (!g) {
+            unassigned += 1;
+            continue;
+        }
+        counts.set(g, (counts.get(g) ?? 0) + 1);
+    }
+
+    const groupSizes = [...counts.entries()]
+        .sort(([a], [b]) => a.localeCompare(b, 'es'))
+        .map(([key, count]) => ({ key, count }));
+
+    const issues: string[] = [];
+    if (unassigned > 0) {
+        issues.push(`${unassigned} equipo(s) sin grupo`);
+    }
+    if (n >= 2 && counts.size !== expectedGroupCount) {
+        issues.push(
+            `${counts.size} grupo(s) asignados, el formato con ${n} equipos espera ${expectedGroupCount}`
+        );
+    }
+    if (expectedGroupCount > 1) {
+        for (const { key, count } of groupSizes) {
+            if (count < MIN_TEAMS_PER_GROUP) {
+                issues.push(`Grupo ${key}: ${count} equipos (mín. ${MIN_TEAMS_PER_GROUP})`);
+            }
+        }
+        if (groupSizes.length > 0) {
+            const sizes = groupSizes.map((g) => g.count);
+            const max = Math.max(...sizes);
+            const min = Math.min(...sizes);
+            const ideal = Math.ceil(n / expectedGroupCount);
+            if (max > ideal + 1) {
+                issues.push(`Grupo con ${max} equipos (máx. recomendado ~${ideal + 1} para ${n} equipos)`);
+            }
+            if (max - min > 2) {
+                issues.push(`Desequilibrio entre grupos (${min}–${max} equipos)`);
+            }
+        }
+    }
+
+    return {
+        valid: issues.length === 0,
+        needsRegenerate: issues.length > 0,
+        issues,
+        expectedGroupCount,
+        groupSizes,
+    };
+}
+
 /**
  * Tras mover un equipo de grupo: actualiza etiquetas de ronda, elimina cruces inválidos
  * y crea partidos de grupos que falten contra rivales del nuevo grupo.
@@ -97,7 +186,6 @@ export function remapMatchesAfterGroupChange(
     if (!newKey) return matchList;
 
     const code = divisionCode(division);
-    const rosterInDiv = teams.filter((t) => t.division === division);
     const newGroupNames = namesInGroup(teams, division, newKey);
     newGroupNames.add(teamName);
 
@@ -144,6 +232,25 @@ export function remapMatchesAfterGroupChange(
     return [...next, ...toAdd];
 }
 
+/** Intercambia grupos de dos equipos y actualiza partidos de fase de grupos. */
+export function remapMatchesAfterGroupSwap(
+    matchList: Match[],
+    teams: Team[],
+    teamA: Team,
+    teamB: Team
+): Match[] {
+    if (teamA.division !== teamB.division) return matchList;
+    const groupA = (teamA.competitionGroup ?? '').trim();
+    const groupB = (teamB.competitionGroup ?? '').trim();
+    if (!groupA || !groupB || groupA === groupB) return matchList;
+
+    const division = teamA.division;
+    let next = matchList;
+    next = remapMatchesAfterGroupChange(next, teams, teamA.name, groupA, groupB, division);
+    next = remapMatchesAfterGroupChange(next, teams, teamB.name, groupB, groupA, division);
+    return next;
+}
+
 /** Equipos de un grupo (misma lógica que los cuadros de distribución). */
 export function getTeamsInDivisionGroup(
     teams: Team[],
@@ -159,24 +266,47 @@ export function getTeamsInDivisionGroup(
     );
 }
 
-/** Distribución actual de grupos en una categoría (para UI). */
+function explicitGroupDistribution(roster: Team[]): { key: string; teams: Team[] }[] {
+    const assigned = new Map<string, Team[]>();
+    for (const t of roster) {
+        const k = (t.competitionGroup ?? '').trim();
+        if (!k) continue;
+        if (!assigned.has(k)) assigned.set(k, []);
+        assigned.get(k)!.push(t);
+    }
+
+    const expected = autoGroupCount(roster.length);
+    const keys = new Set<string>();
+    for (let i = 0; i < Math.max(expected, 1); i++) {
+        keys.add(String.fromCharCode(65 + i));
+    }
+    assigned.forEach((_, k) => keys.add(k));
+
+    return [...keys]
+        .sort((a, b) => a.localeCompare(b, 'es'))
+        .map((key) => ({
+            key,
+            teams: (assigned.get(key) ?? []).sort((a, b) => a.name.localeCompare(b.name, 'es')),
+        }));
+}
+
+/** Distribución actual de grupos en una categoría (para UI). Respeta competitionGroup del admin. */
 export function getGroupDistributionForDivision(
     teams: Team[],
     division: Team['division'],
     onlyPaid = false
 ): { key: string; teams: Team[] }[] {
-    const roster = teams.filter((t) => {
-        if (t.division !== division) return false;
-        if (onlyPaid && t.paymentStatus !== 'PAID') return false;
-        return true;
-    });
+    const roster = rosterForDivision(teams, division, onlyPaid);
+    if (roster.length === 0) return [];
+
+    const anyAssigned = roster.some((t) => (t.competitionGroup ?? '').trim());
+    if (anyAssigned) {
+        return explicitGroupDistribution(roster);
+    }
+
     const computed = computeGroups(roster);
     if (!computed?.length) {
-        const unassigned = roster.filter((t) => !(t.competitionGroup ?? '').trim());
-        if (unassigned.length) {
-            return [{ key: '—', teams: unassigned }];
-        }
-        return [];
+        return [{ key: '—', teams: roster }];
     }
     return computed.map((g) => ({
         key: g.key,

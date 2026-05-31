@@ -8,6 +8,7 @@ import {
     TEAM_REGISTRATION_CLOSE_AT,
     TEAM_REGISTRATION_LAST_DAY,
 } from '../constants/registrationDeadlines';
+import { RegistrationUrgencyBanner } from '../components/RegistrationUrgencyBanner';
 
 interface TeamEntry {
     id: string;
@@ -440,6 +441,8 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
                         </div>
                     )}
                 </div>
+
+                <RegistrationUrgencyBanner variant="inline" className="mb-6" />
 
                 <div className="space-y-6">
                     {/* Step 1: Manager Credentials */}

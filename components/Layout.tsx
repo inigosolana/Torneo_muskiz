@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { siteContent } from '../constants/siteContent';
+import { RegistrationUrgencyBanner } from './RegistrationUrgencyBanner';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -132,6 +133,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
         )}
       </header>
+
+      <RegistrationUrgencyBanner variant="strip" />
 
       <main className="flex-grow">
         {children}

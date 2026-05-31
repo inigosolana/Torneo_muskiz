@@ -4,6 +4,7 @@ import { siteContent } from '../constants/siteContent';
 import { useTournamentData } from '../context/TournamentDataContext';
 import { supabase } from '../services/supabaseClient';
 import { normalizeSponsor } from '../utils/sponsorDisplay';
+import { RegistrationUrgencyBanner } from '../components/RegistrationUrgencyBanner';
 
 export const Home: React.FC = () => {
   const { teams } = useTournamentData();
@@ -105,9 +106,10 @@ export const Home: React.FC = () => {
                 <h3 className="text-3xl font-black text-white uppercase tracking-tight mb-2">
                   Inscripciones Abiertas
                 </h3>
-                <p className="text-slate-400 mb-8 max-w-sm">
+                <p className="text-slate-400 mb-4 max-w-sm">
                   Asegura la plaza de tu equipo para la segunda edición del torneo antes de que se agoten.
                 </p>
+                <RegistrationUrgencyBanner variant="hero" className="mb-6" />
                 <button
                   onClick={() => navigate('/registration')}
                   className="bg-primary hover:bg-primary-dark text-background-dark px-10 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(13,242,242,0.3)] w-full sm:w-auto"

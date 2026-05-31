@@ -55,6 +55,8 @@ import {
     getGroupDistributionForDivision,
     getTeamsInDivisionGroup,
     remapMatchesAfterGroupChange,
+    remapMatchesAfterGroupSwap,
+    validateGroupDistribution,
 } from '../utils/groupMatchSync';
 import {
     loadAdminUiState,
@@ -1107,13 +1109,50 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
+    const applyGroupMatchUpdates = async (
+        updatedTeams: Team[],
+        updater: (matches: Match[]) => Match[],
+        successDetail: string
+    ) => {
+        if (compArenaMode === 'simulation') {
+            const nextDrafts = simDrafts.map((d) => ({
+                ...d,
+                matches: updater(d.matches),
+            }));
+            setSimDrafts(nextDrafts);
+            await persistSimDraftsAsync(nextDrafts, activeDraftId);
+        } else {
+            onUpdateMatches(updater(matches));
+        }
+        toast.success(successDetail);
+    };
+
+    const offerRegenerateSimulationIfNeeded = async (
+        updatedTeams: Team[],
+        division: Team['division']
+    ) => {
+        const validation = validateGroupDistribution(updatedTeams, division, false);
+        if (!validation.needsRegenerate) return;
+        toast.warning(`Reparto alterado: ${validation.issues.join(' · ')}`, { duration: 9000 });
+        if (
+            window.confirm(
+                'La distribución de grupos ya no coincide con el formato de la simulación.\n\n' +
+                    validation.issues.join('\n') +
+                    '\n\n¿Regenerar los 3 calendarios del borrador (Viernes, Sábado y Domingo) con el reparto actual?'
+            )
+        ) {
+            await handleGenerateMuskizAllDays();
+        }
+    };
+
     const handleMoveTeamToGroup = async (team: Team, newGroup: string) => {
         const oldGroup = (team.competitionGroup ?? '').trim() || null;
         const nextGroup = newGroup.trim();
-        if (!nextGroup || oldGroup === nextGroup) {
-            if (!nextGroup) await handleChangeTeamGroup(team, '');
+        if (!nextGroup) {
+            await handleChangeTeamGroup(team, '');
             return;
         }
+        if (oldGroup === nextGroup) return;
 
         try {
             await onUpdateTeam({ ...team, competitionGroup: nextGroup });
@@ -1126,40 +1165,51 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             t.id === team.id ? { ...t, competitionGroup: nextGroup } : t
         );
 
-        let matchUpdates = 0;
-        if (compArenaMode === 'simulation') {
-            const nextDrafts = simDrafts.map((d) => {
-                const remapped = remapMatchesAfterGroupChange(
-                    d.matches,
+        await applyGroupMatchUpdates(
+            updatedTeams,
+            (list) =>
+                remapMatchesAfterGroupChange(
+                    list,
                     updatedTeams,
                     team.name,
                     oldGroup,
                     nextGroup,
                     team.division
-                );
-                matchUpdates += remapped.length - d.matches.length;
-                return { ...d, matches: remapped };
-            });
-            setSimDrafts(nextDrafts);
-            await persistSimDraftsAsync(nextDrafts, activeDraftId);
-        } else {
-            const remapped = remapMatchesAfterGroupChange(
-                matches,
-                updatedTeams,
-                team.name,
-                oldGroup,
-                nextGroup,
-                team.division
-            );
-            matchUpdates = remapped.length - matches.length;
-            onUpdateMatches(remapped);
+                ),
+            `${team.name} → Grupo ${nextGroup}. Partidos de grupos actualizados.`
+        );
+
+        await offerRegenerateSimulationIfNeeded(updatedTeams, team.division);
+    };
+
+    const handleSwapTeamsInGroups = async (teamA: Team, teamB: Team) => {
+        const groupA = (teamA.competitionGroup ?? '').trim();
+        const groupB = (teamB.competitionGroup ?? '').trim();
+        if (!groupA || !groupB || groupA === groupB) return;
+
+        try {
+            await Promise.all([
+                onUpdateTeam({ ...teamA, competitionGroup: groupB }),
+                onUpdateTeam({ ...teamB, competitionGroup: groupA }),
+            ]);
+        } catch {
+            toast.error('No se pudo intercambiar los grupos.');
+            return;
         }
 
-        toast.success(
-            `${team.name} → Grupo ${nextGroup}. Partidos de grupos actualizados${
-                matchUpdates !== 0 ? ` (${matchUpdates > 0 ? '+' : ''}${matchUpdates})` : ''
-            }.`
+        const updatedTeams = teams.map((t) => {
+            if (t.id === teamA.id) return { ...t, competitionGroup: groupB };
+            if (t.id === teamB.id) return { ...t, competitionGroup: groupA };
+            return t;
+        });
+
+        await applyGroupMatchUpdates(
+            updatedTeams,
+            (list) => remapMatchesAfterGroupSwap(list, updatedTeams, teamA, teamB),
+            `${teamA.name} ↔ ${teamB.name} (Grupo ${groupA} ↔ ${groupB}). Partidos actualizados.`
         );
+
+        await offerRegenerateSimulationIfNeeded(updatedTeams, teamA.division);
     };
 
     const updateMatchSetScores = (matchId: string, setScores: BeachSetScores) => {
@@ -3140,6 +3190,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 teams={teams}
                                                 groupLetterOptions={groupLetterOptions}
                                                 onMoveTeam={(t, g) => void handleMoveTeamToGroup(t, g)}
+                                                onSwapTeams={(a, b) => void handleSwapTeamsInGroups(a, b)}
+                                                onRequestRegenerateSimulation={() => void handleGenerateMuskizAllDays()}
                                                 onlyPaid={false}
                                             />
                                         </div>

@@ -163,7 +163,7 @@ function roundRobinPairs(names: string[]): { a: string; b: string }[] {
 }
 
 // ─── Cálculo de grupos ─────────────────────────────────────────────────────
-function autoGroupCount(n: number): number {
+export function autoGroupCount(n: number): number {
     if (n < 2) return 0;
     if (n <= 6) return 1; // liguilla → final
     if (n <= 10) return 2; // 2 grupos → semis → final
@@ -228,7 +228,7 @@ export function computeGroups(teamList: Team[]): { key: string; names: string[] 
         const raw = [...map.entries()]
             .sort(([a], [b]) => a.localeCompare(b, 'es'))
             .map(([key, names]) => ({ key, names: names.sort((x, y) => x.localeCompare(y, 'es')) }));
-        return mergeUndersizedGroups(raw);
+        return raw;
     }
 
     const sorted = [...teamList]
