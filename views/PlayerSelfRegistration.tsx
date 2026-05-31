@@ -5,6 +5,11 @@ import { useNavigate } from 'react-router-dom';
 import { useTournamentData } from '../context/TournamentDataContext';
 import { canAddSquadMember, countSquadPlayers, maxPlayersForDivision } from '../utils/squadLimits';
 import { toast } from 'sonner';
+import {
+    isPastDeadline,
+    PLAYER_LICENSE_CLOSE_AT,
+    PLAYER_LICENSE_LAST_DAY,
+} from '../constants/registrationDeadlines';
 
 interface PlayerSelfRegistrationProps {
     onUpdateTeam: (team: Team) => void;
@@ -32,14 +37,14 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
 
-    const isDeadlinePassed = Date.now() > new Date('2026-06-04T00:00:00').getTime();
+    const isDeadlinePassed = isPastDeadline(PLAYER_LICENSE_CLOSE_AT);
 
     if (isDeadlinePassed) {
         return (
             <div className="min-h-[80vh] flex flex-col items-center justify-center p-4">
                 <span className="material-symbols-outlined text-6xl text-red-500 mb-4">event_busy</span>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Plazo Finalizado</h2>
-                <p className="text-slate-500 mb-6 text-center">El plazo para la inscripción de jugadores finalizó el 3 de junio.</p>
+                <p className="text-slate-500 mb-6 text-center">El plazo para subir licencias y documentación finalizó el {PLAYER_LICENSE_LAST_DAY}.</p>
                 <button onClick={() => navigate('/')} className="px-6 py-2 bg-primary text-background-dark font-bold rounded-lg">Volver al Inicio</button>
             </div>
         );

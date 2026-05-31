@@ -3,6 +3,11 @@ import { Team } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { useTournamentData } from '../context/TournamentDataContext';
+import {
+    isPastDeadline,
+    TEAM_REGISTRATION_CLOSE_AT,
+    TEAM_REGISTRATION_LAST_DAY,
+} from '../constants/registrationDeadlines';
 
 interface TeamEntry {
     id: string;
@@ -398,7 +403,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
         );
     }
 
-    const isRegistrationClosed = Date.now() > new Date('2026-06-01T00:00:00').getTime();
+    const isRegistrationClosed = isPastDeadline(TEAM_REGISTRATION_CLOSE_AT);
 
     if (isRegistrationClosed) {
         return (
@@ -406,7 +411,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
                 <div className="w-full max-w-lg text-center bg-white dark:bg-surface-dark p-12 rounded-2xl shadow-2xl border border-red-200 dark:border-red-800">
                     <span className="material-symbols-outlined text-6xl text-red-500 mb-4">event_busy</span>
                     <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Inscripción de Equipos Cerrada</h2>
-                    <p className="text-slate-500 text-sm mb-6">El plazo para inscribir nuevos equipos finalizó el 31 de mayo.</p>
+                    <p className="text-slate-500 text-sm mb-6">El plazo para inscribir nuevos equipos finalizó el {TEAM_REGISTRATION_LAST_DAY}.</p>
                     <button onClick={() => navigate('/')} className="bg-primary text-background-dark px-8 py-3 rounded-xl font-bold">Volver al Inicio</button>
                 </div>
             </div>

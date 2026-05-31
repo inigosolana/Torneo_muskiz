@@ -200,8 +200,8 @@ export const Schedule: React.FC = () => {
                                                             <span className="material-symbols-outlined text-red-500">event_busy</span>
                                                             <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">Límites de Inscripción</h4>
                                                         </div>
-                                                        <p className="text-xs text-slate-600 dark:text-slate-400"><span className="font-bold text-slate-900 dark:text-white">Equipos:</span> 31 de Mayo</p>
-                                                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1"><span className="font-bold text-slate-900 dark:text-white">Jugadores:</span> 2 de Mayo</p>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-400"><span className="font-bold text-slate-900 dark:text-white">Equipos:</span> 1 de Junio</p>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1"><span className="font-bold text-slate-900 dark:text-white">Licencias:</span> 4 de Junio</p>
                                                     </div>
                                                 </div>
                                             </div>
