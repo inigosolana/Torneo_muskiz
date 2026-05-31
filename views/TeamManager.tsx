@@ -603,7 +603,6 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                         </div>
                     </div>
                 </div>
-            </div>
 
             {/* Manual Entry Modal */}
             {showManualModal && (
