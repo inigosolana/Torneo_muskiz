@@ -1099,7 +1099,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         const newCourt = patch.court ?? moving.court;
         const slotChange = patch.time !== undefined || patch.court !== undefined;
 
-        const validation = validateMatchSlotChange(ownerDraft.matches, matchId, patch);
+        const validation = validateMatchSlotChange(ownerDraft.matches, matchId, patch, teams);
         if (!validation.ok) {
             toast.error(validation.error, { duration: 8000 });
             return;
@@ -1116,7 +1116,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             const swapBack = validateMatchSlotChange(ownerDraft.matches, occupant.id, {
                 time: moving.time,
                 court: moving.court,
-            });
+            }, teams);
             if (!swapBack.ok) {
                 toast.error(
                     `No se puede intercambiar: ${swapBack.error}`,

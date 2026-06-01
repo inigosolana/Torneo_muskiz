@@ -1741,10 +1741,46 @@ export function getDivisionCodeFromRound(round?: string): string | null {
 export function resolveMatchDivision(match: Match, teams: Team[]): Team['division'] | null {
     const code = getDivisionCodeFromRound(match.round);
     if (code && CODE_TO_DIVISION[code]) return CODE_TO_DIVISION[code];
-    const ta = teams.find((t) => t.name === match.teamA);
-    if (ta) return ta.division;
-    const tb = teams.find((t) => t.name === match.teamB);
-    return tb?.division ?? null;
+
+    const linked = teams.filter((t) => t.name === match.teamA || t.name === match.teamB);
+    if (linked.length === 0) return null;
+    const divisions = new Set(linked.map((t) => t.division));
+    if (divisions.size === 1) return linked[0]!.division;
+    return null;
+}
+
+/** Equipo real de un bando del partido dentro de su categoría (evita homónimos CF/CM, etc.). */
+export function resolveTeamForMatchSide(
+    match: Match,
+    teamName: string,
+    teams: Team[]
+): Team | null {
+    const division = resolveMatchDivision(match, teams);
+    const roster = division
+        ? teams.filter((t) => t.division === division && t.name === teamName)
+        : teams.filter((t) => t.name === teamName);
+    if (roster.length === 1) return roster[0]!;
+    return null;
+}
+
+/** Misma identidad de equipo en dos partidos (solo compara dentro de la misma categoría). */
+export function isSameScheduledTeam(
+    teamName: string,
+    matchA: Match,
+    matchB: Match,
+    teams: Team[]
+): boolean {
+    const divA = resolveMatchDivision(matchA, teams);
+    const divB = resolveMatchDivision(matchB, teams);
+    if (!divA || !divB || divA !== divB) return false;
+
+    const teamA = resolveTeamForMatchSide(matchA, teamName, teams);
+    const teamB = resolveTeamForMatchSide(matchB, teamName, teams);
+    if (teamA && teamB) return teamA.id === teamB.id;
+    return (
+        (matchA.teamA === teamName || matchA.teamB === teamName) &&
+        (matchB.teamA === teamName || matchB.teamB === teamName)
+    );
 }
 
 export interface DayGridOptions {

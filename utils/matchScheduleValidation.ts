@@ -1,4 +1,5 @@
-import type { Match } from '../types';
+import type { Match, Team } from '../types';
+import { isSameScheduledTeam, resolveMatchDivision } from '../services/muskizScheduleSimulator';
 
 /** Equipos ficticios de cruces (no bloquean por duplicado de nombre). */
 export function isPlaceholderTeamName(name: string): boolean {
@@ -18,11 +19,13 @@ export type MatchSlotValidationResult =
 
 /**
  * Valida mover/editar un partido: misma franja horaria no puede repetir pista ni equipo real.
+ * Los equipos solo chocan dentro de la misma categoría (nombres iguales en CF/CM no se mezclan).
  */
 export function validateMatchSlotChange(
     matches: Match[],
     matchId: string,
-    patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>
+    patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>,
+    teams: Team[] = []
 ): MatchSlotValidationResult {
     const moving = matches.find((m) => m.id === matchId);
     if (!moving) return { ok: false, error: 'Partido no encontrado.' };
@@ -36,7 +39,9 @@ export function validateMatchSlotChange(
         return { ok: true };
     }
 
+    const movingWithPatch: Match = { ...moving, time: newTime, court: newCourt, teamA: newTeamA, teamB: newTeamB };
     const movingTeams = [newTeamA, newTeamB].filter((t) => t && !isPlaceholderTeamName(t));
+    const movingDivision = resolveMatchDivision(movingWithPatch, teams);
 
     for (const other of matches) {
         if (other.id === matchId) continue;
@@ -50,12 +55,16 @@ export function validateMatchSlotChange(
         }
 
         for (const team of movingTeams) {
-            if (teamsInMatch(other).includes(team)) {
-                return {
-                    ok: false,
-                    error: `«${team}» ya juega a las ${newTime} (${other.teamA} vs ${other.teamB} en ${other.court}).`,
-                };
-            }
+            const conflicts = teamsInMatch(other).some((otherTeam) =>
+                isSameScheduledTeam(team, movingWithPatch, other, teams)
+            );
+            if (!conflicts) continue;
+
+            const catHint = movingDivision ? ` (${movingDivision})` : '';
+            return {
+                ok: false,
+                error: `«${team}»${catHint} ya juega a las ${newTime} (${other.teamA} vs ${other.teamB} en ${other.court}).`,
+            };
         }
     }
 

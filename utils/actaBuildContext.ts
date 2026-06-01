@@ -3,7 +3,7 @@ import { siteContent } from '../constants/siteContent';
 import { inferMatchScheduleDay } from '../services/tournamentScheduleService';
 import { inferGenderMixLabel, formatPlayerNameForActa } from './matchReportSheetUtils';
 import { playersListedOnActa } from './squadLimits';
-import { resolveMatchDivision } from '../services/muskizScheduleSimulator';
+import { resolveMatchDivision, resolveTeamForMatchSide } from '../services/muskizScheduleSimulator';
 
 export interface ActaPlayerLine {
     number: string;
@@ -62,8 +62,8 @@ function safeFilePart(s: string): string {
 
 /** Datos del partido para rellenar acta digital / DOCX / PDF. */
 export function buildActaExportContext(match: Match, teams: Team[]): ActaExportContext {
-    const teamA = teams.find((t) => t.name === match.teamA);
-    const teamB = teams.find((t) => t.name === match.teamB);
+    const teamA = resolveTeamForMatchSide(match, match.teamA, teams);
+    const teamB = resolveTeamForMatchSide(match, match.teamB, teams);
     const category = resolveMatchDivision(match, teams) ?? teamA?.division ?? teamB?.division ?? '—';
     const day = inferMatchScheduleDay(match) ?? '';
     const blockA = teamBlock(teamA, match.teamA);
