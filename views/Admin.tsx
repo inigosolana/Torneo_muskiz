@@ -69,6 +69,7 @@ import {
     type AdminMainTab,
     type AdminPreviewMode,
 } from '../utils/adminUiPersistence';
+import { getTeamSquadReminderStatus } from '../utils/teamSquadReminder';
 
 interface AdminProps {
     onUpdateTeam: (team: Team) => void;
@@ -100,6 +101,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     // Generator State
     const [generatingMuskiz, setGeneratingMuskiz] = useState(false);
     const [muskizAiSlotAssist, setMuskizAiSlotAssist] = useState(true);
+    const [remindingSquadTeamId, setRemindingSquadTeamId] = useState<string | null>(null);
 
     const [simDrafts, setSimDrafts] = useState<CalendarDraft[]>([]);
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
@@ -782,6 +784,46 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         if (reason) {
             onUpdateTeam({ ...team, paymentStatus: 'EXPIRED', paymentFeedback: reason, status: 'rejected' });
             toast.info('Pago rechazado. La plaza ha sido liberada y el equipo marcado como EXPIRADO.');
+        }
+    };
+
+    const handleRemindManagerSquad = async (team: Team) => {
+        const reminder = getTeamSquadReminderStatus(team);
+        if (!reminder.needsReminder) {
+            toast.info('Este equipo no tiene pendientes de plantilla o seguro.');
+            return;
+        }
+        if (
+            !window.confirm(
+                `¿Enviar correo de recordatorio a ${team.managerEmail}?\n\n` +
+                    reminder.summaryLines.join('\n')
+            )
+        ) {
+            return;
+        }
+        setRemindingSquadTeamId(team.id);
+        try {
+            const { data, error } = await supabase.functions.invoke('remind-manager-squad', {
+                body: { teamId: team.id },
+            });
+            const payload = data as { error?: string; skipped?: boolean; message?: string; success?: boolean } | null;
+            if (payload?.error) {
+                toast.error(payload.error);
+                return;
+            }
+            if (error) {
+                toast.error(error.message ?? 'Error al enviar el recordatorio.');
+                return;
+            }
+            if (payload?.skipped) {
+                toast.info(payload.message ?? 'No se envió correo: plantilla completa.');
+                return;
+            }
+            toast.success(`Recordatorio enviado a ${team.managerEmail}`);
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Error al enviar recordatorio.');
+        } finally {
+            setRemindingSquadTeamId(null);
         }
     };
 
@@ -1783,6 +1825,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                         const rosterTeam = rosterSelectedTeamId
                             ? teams.find(t => t.id === rosterSelectedTeamId)
                             : null;
+                        const rosterReminder = rosterTeam ? getTeamSquadReminderStatus(rosterTeam) : null;
                         return (
                             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1797,6 +1840,22 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                         </p>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
+                                        {rosterTeam && rosterReminder?.needsReminder && (
+                                            <button
+                                                type="button"
+                                                disabled={remindingSquadTeamId === rosterTeam.id}
+                                                onClick={() => void handleRemindManagerSquad(rosterTeam)}
+                                                className="text-xs font-black px-3 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 flex items-center gap-1"
+                                                title={rosterReminder.summaryLines.join('\n')}
+                                            >
+                                                {remindingSquadTeamId === rosterTeam.id ? (
+                                                    <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                                                ) : (
+                                                    <span className="material-symbols-outlined text-sm">mail</span>
+                                                )}
+                                                Recordar plantilla/seguro
+                                            </button>
+                                        )}
                                         {rosterTeam && (
                                             <button
                                                 type="button"
@@ -2231,7 +2290,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {filteredTeams.map(team => (
+                                        {filteredTeams.map(team => {
+                                            const squadReminder = getTeamSquadReminderStatus(team);
+                                            return (
                                             <tr key={team.id} className="hover:bg-slate-50/50">
                                                 <td className="px-6 py-4 font-bold text-slate-800">
                                                     <div className="flex items-center gap-2">
@@ -2248,7 +2309,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                                 <span className="material-symbols-outlined text-white text-xs">edit</span>
                                                             </div>
                                                         </label>
-                                                        {team.name}
+                                                        <div>
+                                                            <span>{team.name}</span>
+                                                            {squadReminder.needsReminder && (
+                                                                <p
+                                                                    className="text-[10px] font-bold text-amber-700 mt-0.5 max-w-[220px] leading-snug"
+                                                                    title={squadReminder.summaryLines.join(' ')}
+                                                                >
+                                                                    Plantilla/seguro pendiente
+                                                                </p>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">{team.division}</td>
@@ -2321,6 +2392,22 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                                 APROBAR
                                                             </button>
                                                         )}
+                                                        {squadReminder.needsReminder && (
+                                                            <button
+                                                                type="button"
+                                                                disabled={remindingSquadTeamId === team.id}
+                                                                onClick={() => void handleRemindManagerSquad(team)}
+                                                                className="bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 text-[10px] font-black px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"
+                                                                title={squadReminder.summaryLines.join('\n')}
+                                                            >
+                                                                {remindingSquadTeamId === team.id ? (
+                                                                    <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>
+                                                                ) : (
+                                                                    <span className="material-symbols-outlined text-xs">mail</span>
+                                                                )}
+                                                                RECORDAR
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={() => handleEditTeam(team)}
                                                             className="bg-blue-50 text-blue-500 hover:bg-blue-500 hover:text-white text-[10px] font-black px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"
@@ -2340,7 +2427,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     </div>
                                                 </td>
                                             </tr>
-                                        ))}
+                                        );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>

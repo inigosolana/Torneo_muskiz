@@ -36,6 +36,7 @@ jobs:
           supabase functions deploy generate-bracket --project-ref "$PROJECT_REF"
           supabase functions deploy optimize-muskiz-slots --project-ref "$PROJECT_REF"
           supabase functions deploy handle-rejection --project-ref "$PROJECT_REF"
+          supabase functions deploy remind-manager-squad --project-ref "$PROJECT_REF"
 
           NO_JWT=(
             handle-approval

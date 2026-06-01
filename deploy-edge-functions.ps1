@@ -23,6 +23,7 @@ npx --yes supabase@latest functions deploy optimize-muskiz-slots --project-ref $
 
 # handle-rejection: dejar verificación JWT activa (coincide con el proyecto actual).
 npx --yes supabase@latest functions deploy handle-rejection --project-ref $ProjectRef
+npx --yes supabase@latest functions deploy remind-manager-squad --project-ref $ProjectRef
 
 # Resto: webhooks y acciones internas llamadas con service role / sin JWT de usuario.
 $noJwt = @(
