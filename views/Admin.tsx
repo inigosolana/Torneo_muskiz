@@ -22,17 +22,21 @@ import {
 } from '../services/tournamentScheduleService';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 import {
-    buildMuskizDayDraftMatches,
-    buildMuskizWeekendDraftsByDay,
     buildDivisionMinMatchesFromCategories,
     countMatchesPerTeamForDivision,
     divisionBelongsToScheduleDay,
     MIN_REAL_MATCHES_PER_TEAM,
     MIN_TEAMS_PER_GROUP,
+    MUSKIZ_AI_MAX_CALLS_PER_DAY,
+    MUSKIZ_AI_SLOT_ASSIST_MAX,
     resolveMatchDivision,
     resolveMinMatchesForDivision,
     type MuskizSimulatorOptions,
 } from '../services/muskizScheduleSimulator';
+import {
+    buildMuskizDayDraftMatchesHybrid,
+    buildMuskizWeekendDraftsByDayHybrid,
+} from '../services/muskizScheduleHybrid';
 import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
 import { CompetitionResultsTable } from '../components/CompetitionResultsTable';
 import { CompetitionDraftPicker } from '../components/CompetitionDraftPicker';
@@ -95,6 +99,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     // Generator State
     const [generatingMuskiz, setGeneratingMuskiz] = useState(false);
+    const [muskizAiSlotAssist, setMuskizAiSlotAssist] = useState(true);
 
     const [simDrafts, setSimDrafts] = useState<CalendarDraft[]>([]);
     const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
@@ -154,7 +159,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     const muskizSimulatorOptions = useMemo((): MuskizSimulatorOptions => ({
         divisionMinMatches: buildDivisionMinMatchesFromCategories(categories),
-    }), [categories]);
+        aiSlotAssist: muskizAiSlotAssist,
+    }), [categories, muskizAiSlotAssist]);
 
     const fetchSponsors = async () => {
         setSponsorsLoading(true);
@@ -823,8 +829,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         setGeneratingMuskiz(true);
         try {
+            const dayOptions: MuskizSimulatorOptions = {
+                ...muskizSimulatorOptions,
+                organizerNotes: activeDraft.formatDescription?.trim() || undefined,
+            };
             const { matches: newMatches, error: muskizError, warning: muskizWarning, lunchUsed } =
-                buildMuskizDayDraftMatches(teams, day, muskizSimulatorOptions);
+                await buildMuskizDayDraftMatchesHybrid(teams, day, dayOptions);
             if (muskizError) {
                 toast.error(muskizError);
                 return;
@@ -859,7 +869,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         setGeneratingMuskiz(true);
         try {
-            const { byDay, error: muskizError, warning: muskizWarning } = buildMuskizWeekendDraftsByDay(teams, muskizSimulatorOptions);
+            const notesByDay = Object.fromEntries(
+                weekendDrafts
+                    .filter((d) => d.scheduleDay && d.formatDescription?.trim())
+                    .map((d) => [d.scheduleDay!, d.formatDescription!.trim()])
+            ) as Partial<Record<'Viernes' | 'Sábado' | 'Domingo', string>>;
+            const { byDay, error: muskizError, warning: muskizWarning } =
+                await buildMuskizWeekendDraftsByDayHybrid(teams, muskizSimulatorOptions, notesByDay);
             if (muskizError) {
                 toast.error(muskizError);
                 return;
@@ -2611,8 +2627,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
                                                 <div className="rounded-lg border border-indigo-100 bg-indigo-50/80 px-4 py-3 text-xs text-indigo-950">
                                                     <strong>3 calendarios por día.</strong> Viernes (cadetes), Sábado (juvenil/senior) y Domingo
-                                                    (infantil) son borradores independientes. Genera con IA o el simulador Muskiz en cada uno, o usa
-                                                    «Generar los 3 días» para rellenarlos todos a la vez. Al publicar, puedes volcar solo el día activo o
+                                                    (infantil) son borradores independientes. El simulador Muskiz es determinístico; la IA solo refina
+                                                    PENDIENTE si está activada. Usa «Generar los 3 días» para rellenarlos todos a la vez. Al publicar, puedes volcar solo el día activo o
                                                     los tres juntos ({weekendMatchCount} partidos en total entre los 3).
                                                 </div>
 
@@ -2721,12 +2737,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </div>
                                                         <div>
                                                             <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
-                                                                Formato del torneo (nota para ti)
+                                                                Formato del torneo (también lo lee la IA al generar)
                                                             </label>
                                                             <input
                                                                 value={activeDraft.formatDescription ?? ''}
                                                                 onChange={(e) => void handleDraftMetadataChange({ formatDescription: e.target.value })}
-                                                                placeholder="Ej. 2 grupos de 4 + cruce 1º–2º..."
+                                                                placeholder="Ej. priorizar finales al cierre, evitar semis de CF y CM a la vez…"
                                                                 className="w-full border rounded-lg px-3 py-2 text-sm"
                                                             />
                                                         </div>
@@ -2785,8 +2801,25 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         <div>
                                                         <h4 className="font-bold text-teal-900 flex items-center gap-2">
                                                             <span className="material-symbols-outlined text-teal-700">event_available</span>
-                                                            Simulador fin de semana Muskiz (determinístico)
+                                                            Simulador fin de semana Muskiz (determinístico + IA opcional)
                                                         </h4>
+                                                        <label className="mt-3 flex items-start gap-3 cursor-pointer text-xs text-teal-950 max-w-3xl">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={muskizAiSlotAssist}
+                                                                onChange={(e) => setMuskizAiSlotAssist(e.target.checked)}
+                                                                className="mt-0.5 size-4 rounded border-teal-300 text-teal-700 focus:ring-teal-600"
+                                                            />
+                                                            <span>
+                                                                <strong>Ayuda Google AI (mix)</strong> — Primero el simulador{' '}
+                                                                <strong>determinístico</strong> (grupos, cuartos, semis, finales, comida sábado, mínimos por
+                                                                categoría). Luego la IA coloca <strong>PENDIENTE</strong> en lotes de {MUSKIZ_AI_SLOT_ASSIST_MAX}{' '}
+                                                                (máx. {MUSKIZ_AI_MAX_CALLS_PER_DAY} consultas/día). Usa el campo{' '}
+                                                                <strong>«Formato del torneo»</strong> del borrador como instrucciones. Al final, optimización
+                                                                local de descansos <strong>sin API</strong>. Si Gemini falla, se conserva el borrador
+                                                                determinístico.
+                                                            </span>
+                                                        </label>
                                                         <p className="text-xs text-teal-800 mt-2 leading-relaxed max-w-3xl">
                                                             <strong>Viernes:</strong> cadetes 17:00–21:00, 6 campos.{' '}
                                                             <strong>Sábado:</strong> juvenil/senior 9:00–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida fija 14:15–15:45, 6 campos.{' '}

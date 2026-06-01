@@ -7,6 +7,7 @@
  */
 import { supabase } from './supabaseClient';
 import { Match, Team } from '../types';
+import type { MuskizSlotAssignment, MuskizSlotOptimizePayload } from './muskizScheduleSimulator';
 
 const getLocalChatFallback = (newMessage: string, realTimeData: string): string => {
   const normalized = newMessage.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -100,6 +101,30 @@ async function readInvokeFailure(error: unknown, data: unknown): Promise<string>
   }
   return 'Error al invocar generate-bracket.';
 }
+
+/** Refina partidos PENDIENTE del simulador Muskiz (1 petición compacta, validada en servidor). */
+export const optimizeMuskizSlots = async (
+  payload: MuskizSlotOptimizePayload
+): Promise<{ assignments: MuskizSlotAssignment[]; error?: string }> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('optimize-muskiz-slots', {
+      body: payload,
+    });
+
+    const body = data as { assignments?: MuskizSlotAssignment[]; error?: string } | null;
+    if (body?.error) {
+      return { assignments: [], error: parseBracketError(body.error) };
+    }
+    if (error) {
+      const msg = await readInvokeFailure(error, data);
+      return { assignments: [], error: msg };
+    }
+    return { assignments: body?.assignments ?? [] };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { assignments: [], error: parseBracketError(msg) };
+  }
+};
 
 export const generateBracketAI = async (
   teams: Team[],

@@ -59,6 +59,46 @@ export interface MuskizSimulatorOptions {
     lunchEnd?: string;
     /** Mínimo (y objetivo) de partidos reales por equipo, por categoría. */
     divisionMinMatches?: DivisionMinMatchesMap;
+    /**
+     * Si quedan partidos PENDIENTE tras el greedy, intenta llamadas ligeras a Gemini
+     * (lotes de 24, máx. 3 por día). Por defecto true en el flujo híbrido del admin.
+     */
+    aiSlotAssist?: boolean;
+    /** Notas del organizador (campo «Formato del torneo» del borrador). */
+    organizerNotes?: string;
+}
+
+/** Máximo de partidos sin hueco por petición a Gemini. */
+export const MUSKIZ_AI_SLOT_ASSIST_MAX = 24;
+/** Máximo de peticiones Gemini por día (evita agotar cuota). */
+export const MUSKIZ_AI_MAX_CALLS_PER_DAY = 3;
+
+/** Reglas Muskiz resumidas para el prompt de IA (el calendario base ya las cumple). */
+export const MUSKIZ_RULES_SUMMARY = [
+    'Viernes: cadetes. Sábado: juvenil/senior, comida 14:15–15:45. Domingo: infantiles.',
+    '2–6 equipos: liguilla + final. 7–10: 2 grupos + semis + final. ≥11: 3 grupos + cuartos + semis + final.',
+    'Orden: todos los de grupos → cuartos → semis → finales al cierre del día.',
+    'Evitar dos partidos seguidos del mismo equipo si hay hueco.',
+].join(' ');
+
+export interface MuskizSlotOptimizePayload {
+    day: MuskizScheduleDayLabel;
+    slotDurationMins: number;
+    playStart: string;
+    playEndExclusive: string;
+    courts: string[];
+    lunch?: { start: string; end: string };
+    slots: string[];
+    placed: { id: string; time: string; court: string; teamA: string; teamB: string }[];
+    pending: { id: string; teamA: string; teamB: string; round: string }[];
+    organizerNotes?: string;
+    rulesSummary?: string;
+}
+
+export interface MuskizSlotAssignment {
+    id: string;
+    time: string;
+    court: string;
 }
 
 /** Construye el mapa categoría → mínimo desde filas de `categories`. */
@@ -886,8 +926,301 @@ function scheduleGreedy(
     }
 
     scheduleUnplacedRecovery(state, slotStartsMin);
+    exhaustivePlaceUnplaced(state);
 
     return { placed: state.placed, unplaced: state.unplaced };
+}
+
+/** Último intento local: prueba todas las franjas × pistas para partidos sin colocar. */
+function exhaustivePlaceUnplaced(state: ScheduleGreedyState): void {
+    if (!state.unplaced.length) return;
+
+    const { slotStartsMin, courts, slotMins, assigned } = state;
+    const remaining = [...state.unplaced];
+    state.unplaced = [];
+
+    const teamsBusy = (teams: [string, string], tStart: number, tEnd: number): boolean =>
+        assigned.some(
+            (x) =>
+                x.tStart < tEnd &&
+                x.tEnd > tStart &&
+                (x.teams.includes(teams[0]) || x.teams.includes(teams[1]))
+        );
+
+    const courtBusy = (courtIdx: number, tStart: number, tEnd: number): boolean =>
+        assigned.some((x) => x.courtIdx === courtIdx && x.tStart < tEnd && x.tEnd > tStart);
+
+    for (const spec of remaining) {
+        const teamsPair: [string, string] = [spec.teamA, spec.teamB];
+        let best: { ts: number; ci: number } | null = null;
+        let bestScore = Infinity;
+
+        for (const ts of slotStartsMin) {
+            const te = ts + slotMins;
+            for (let ci = 0; ci < courts.length; ci++) {
+                if (courtBusy(ci, ts, te) || teamsBusy(teamsPair, ts, te)) continue;
+                let score = ts * 10 + ci;
+                for (const t of teamsPair) {
+                    if (isPlaceholderTeamName(t)) continue;
+                    let last = -Infinity;
+                    for (const x of assigned) {
+                        if (x.teams.includes(t)) last = Math.max(last, x.tEnd);
+                    }
+                    const gap = Number.isFinite(last) && last !== -Infinity ? ts - last : Infinity;
+                    if (gap < slotMins) score += 50_000;
+                    else if (gap < 2 * slotMins) score += 5_000;
+                }
+                if (score < bestScore) {
+                    bestScore = score;
+                    best = { ts, ci };
+                }
+            }
+        }
+
+        if (best) {
+            const te = best.ts + slotMins;
+            assigned.push({ tStart: best.ts, tEnd: te, courtIdx: best.ci, teams: teamsPair });
+            state.placed.push({
+                timeMin: best.ts,
+                courtIdx: best.ci,
+                courtName: courts[best.ci]!,
+                spec,
+            });
+        } else {
+            state.unplaced.push(spec);
+        }
+    }
+}
+
+/** Payload compacto para la Edge Function de refinado IA (solo partidos PENDIENTE). */
+export function buildMuskizSlotOptimizePayload(
+    day: MuskizScheduleDayLabel,
+    matches: Match[],
+    options?: MuskizSimulatorOptions
+): MuskizSlotOptimizePayload | null {
+    const pending = matches.filter((m) => m.time === 'PENDIENTE');
+    if (!pending.length) return null;
+
+    const slotMins = options?.slotDurationMins ?? 35;
+    const cfg = getDayScheduleConfig(day, options);
+    const slots = buildFullDayTimeSlots(day, slotMins, options);
+    const placed = matches
+        .filter((m) => m.time !== 'PENDIENTE' && m.court !== 'Sin asignar')
+        .map((m) => ({
+            id: m.id,
+            time: m.time,
+            court: m.court,
+            teamA: m.teamA,
+            teamB: m.teamB,
+        }));
+
+    const notes = options?.organizerNotes?.trim();
+
+    return {
+        day,
+        slotDurationMins: slotMins,
+        playStart: cfg.playStart,
+        playEndExclusive: cfg.playEndExclusive,
+        courts: cfg.courts,
+        lunch: cfg.lunch,
+        slots,
+        placed,
+        pending: pending.map((m) => ({
+            id: m.id,
+            teamA: m.teamA,
+            teamB: m.teamB,
+            round: m.round ?? 'Partido',
+        })),
+        organizerNotes: notes || undefined,
+        rulesSummary: MUSKIZ_RULES_SUMMARY,
+    };
+}
+
+/** Intercambia hora/pista entre dos partidos colocados si mejora descansos (sin API). */
+export function improveScheduleRestGaps(
+    matches: Match[],
+    _day: MuskizScheduleDayLabel,
+    options?: MuskizSimulatorOptions
+): Match[] {
+    const slotMins = options?.slotDurationMins ?? 35;
+    const slots = new Set(
+        buildFullDayTimeSlots(_day, slotMins, options)
+    );
+    const courts = new Set(getDayScheduleConfig(_day, options).courts);
+
+    const placed = matches.filter((m) => m.time !== 'PENDIENTE' && m.court !== 'Sin asignar');
+    if (placed.length < 2) return matches;
+
+    const countViolations = (list: Match[]): number => {
+        const byTeam = new Map<string, number[]>();
+        for (const m of list) {
+            for (const t of [m.teamA, m.teamB]) {
+                if (isPlaceholderTeamName(t)) continue;
+                if (!byTeam.has(t)) byTeam.set(t, []);
+                byTeam.get(t)!.push(timeToMinutes(m.time));
+            }
+        }
+        let v = 0;
+        for (const starts of byTeam.values()) {
+            starts.sort((a, b) => a - b);
+            for (let i = 1; i < starts.length; i++) {
+                if (starts[i]! - starts[i - 1]! < slotMins) v++;
+            }
+        }
+        return v;
+    };
+
+    const swapValid = (list: Match[], ma: Match, mb: Match): boolean => {
+        if (!slots.has(ma.time) || !slots.has(mb.time)) return false;
+        if (!courts.has(ma.court) || !courts.has(mb.court)) return false;
+
+        const trial = list.map((m) => {
+            if (m.id === ma.id) return { ...m, time: mb.time, court: mb.court };
+            if (m.id === mb.id) return { ...m, time: ma.time, court: ma.court };
+            return m;
+        });
+        const trialPlaced = trial.filter((m) => m.time !== 'PENDIENTE');
+
+        for (const m of trialPlaced) {
+            const tStart = timeToMinutes(m.time);
+            const tEnd = tStart + slotMins;
+            const teams = [m.teamA, m.teamB];
+            for (const o of trialPlaced) {
+                if (o.id === m.id) continue;
+                const oStart = timeToMinutes(o.time);
+                const oEnd = oStart + slotMins;
+                if (tStart >= oEnd || tEnd <= oStart) continue;
+                if (o.court === m.court) return false;
+                const oTeams = [o.teamA, o.teamB];
+                if (teams.some((t) => oTeams.includes(t))) return false;
+            }
+        }
+        return true;
+    };
+
+    let current = [...matches];
+    let bestViolations = countViolations(placed);
+
+    for (let pass = 0; pass < 40; pass++) {
+        let improved = false;
+        const idxs = current.filter((m) => m.time !== 'PENDIENTE' && m.court !== 'Sin asignar');
+
+        for (let a = 0; a < idxs.length; a++) {
+            for (let b = a + 1; b < idxs.length; b++) {
+                const ma = idxs[a]!;
+                const mb = idxs[b]!;
+                if (!swapValid(current, ma, mb)) continue;
+
+                const swapped: Match[] = current.map((m) => {
+                    if (m.id === ma.id) return { ...m, time: mb.time, court: mb.court };
+                    if (m.id === mb.id) return { ...m, time: ma.time, court: ma.court };
+                    return m;
+                });
+                const v = countViolations(swapped.filter((m) => m.time !== 'PENDIENTE'));
+                if (v < bestViolations) {
+                    current = swapped;
+                    bestViolations = v;
+                    improved = true;
+                }
+            }
+        }
+        if (!improved) break;
+    }
+
+    return current;
+}
+
+type OccupiedSlot = { time: string; court: string; teamA: string; teamB: string };
+
+function occupiedSlotsForValidation(
+    payload: MuskizSlotOptimizePayload,
+    accepted: MuskizSlotAssignment[]
+): OccupiedSlot[] {
+    const out: OccupiedSlot[] = payload.placed.map((p) => ({
+        time: p.time,
+        court: p.court,
+        teamA: p.teamA,
+        teamB: p.teamB,
+    }));
+    for (const a of accepted) {
+        const p = payload.pending.find((x) => x.id === a.id);
+        if (!p) continue;
+        out.push({ time: a.time, court: a.court, teamA: p.teamA, teamB: p.teamB });
+    }
+    return out;
+}
+
+function slotAssignmentValid(
+    payload: MuskizSlotOptimizePayload,
+    assignment: MuskizSlotAssignment,
+    accepted: MuskizSlotAssignment[]
+): boolean {
+    if (!payload.slots.includes(assignment.time)) return false;
+    if (!payload.courts.includes(assignment.court)) return false;
+
+    const pending = payload.pending.find((p) => p.id === assignment.id);
+    if (!pending) return false;
+
+    const slotMins = payload.slotDurationMins;
+    const tStart = timeToMinutes(assignment.time);
+    const tEnd = tStart + slotMins;
+    const teams = [pending.teamA, pending.teamB];
+
+    for (const other of occupiedSlotsForValidation(payload, accepted)) {
+        const oStart = timeToMinutes(other.time);
+        const oEnd = oStart + slotMins;
+        const overlap = tStart < oEnd && tEnd > oStart;
+        if (!overlap) continue;
+        if (other.court === assignment.court) return false;
+        const oTeams = [other.teamA, other.teamB];
+        if (teams.some((t) => oTeams.includes(t))) return false;
+    }
+
+    return true;
+}
+
+/** Aplica asignaciones devueltas por IA (o validación local) al borrador. */
+export function applyMuskizSlotAssignments(
+    matches: Match[],
+    assignments: MuskizSlotAssignment[],
+    day: MuskizScheduleDayLabel,
+    options?: MuskizSimulatorOptions
+): { matches: Match[]; placedCount: number; rejectedCount: number } {
+    const payload = buildMuskizSlotOptimizePayload(day, matches, options);
+    if (!payload) return { matches, placedCount: 0, rejectedCount: assignments.length };
+
+    const dayCfg = getDayScheduleConfig(day, options);
+    const accepted: MuskizSlotAssignment[] = [];
+    let rejectedCount = 0;
+
+    for (const a of assignments) {
+        if (!payload.pending.some((p) => p.id === a.id)) {
+            rejectedCount++;
+            continue;
+        }
+        if (!slotAssignmentValid(payload, a, accepted)) {
+            rejectedCount++;
+            continue;
+        }
+        accepted.push(a);
+    }
+
+    const placedCount = accepted.length;
+
+    const next = matches.map((m) => {
+        const a = accepted.find((x) => x.id === m.id);
+        if (!a) return m;
+        const timeStr = a.time;
+        const roundTail = m.round?.split('·').map((s) => s.trim()).filter(Boolean).pop() ?? 'Partido';
+        return {
+            ...m,
+            time: timeStr,
+            court: a.court,
+            round: `${dayCfg.dayShort} · ${timeStr} · ${roundTail}`,
+        };
+    });
+
+    return { matches: next, placedCount, rejectedCount };
 }
 
 /** Cuenta equipos reales con dos partidos en franjas consecutivas (sin descanso). */
