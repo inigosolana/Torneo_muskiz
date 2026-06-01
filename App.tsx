@@ -32,10 +32,10 @@ const App: React.FC = () => {
   const [categoryLimits, setCategoryLimits] = useState<CategoryLimits>({
     'Infantil Femenino': 8,
     'Infantil Masculino': 8,
-    'Cadete Femenino': 12,
-    'Cadete Masculino': 12,
+    'Cadete Femenino': 8,
+    'Cadete Masculino': 8,
     'Juvenil Femenino': 8,
-    'Juvenil Masculino': 8,
+    'Juvenil Masculino': 9,
     'Senior Femenino': 8,
     'Senior Masculino': 12
   });
