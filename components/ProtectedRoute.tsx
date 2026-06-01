@@ -73,10 +73,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         </div>
       );
     }
-
-    if (!hasApprovedTeam) {
-      return <Navigate to="/registration" replace />;
-    }
+    /* Sin equipo aprobado: se muestra el panel vacío (no redirigir a inscripción). */
   }
 
   return <>{children}</>;

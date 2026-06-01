@@ -56,24 +56,20 @@ export const ManagerLogin: React.FC = () => {
                 await supabase.auth.signOut();
                 toast.error('Acceso denegado: Esta cuenta es de Staff.');
             } else {
-                const { count: approvedTeams, error: approvedTeamsError } = await supabase
+                const { count: approvedTeams } = await supabase
                     .from('teams')
                     .select('id', { count: 'exact', head: true })
                     .eq('manager_email', email)
                     .eq('status', 'approved');
 
-                if (approvedTeamsError) {
-                    await supabase.auth.signOut();
-                    toast.error('No se pudo validar tus equipos aprobados. Intenta de nuevo.');
-                } else if (!approvedTeams || approvedTeams < 1) {
-                    await supabase.auth.signOut();
-                    toast.error(
-                        'Aún no tienes ningún equipo aprobado. Cuando te autoricen el primero podrás entrar al panel.'
+                if (!approvedTeams || approvedTeams < 1) {
+                    toast.info(
+                        'Entras al panel de responsable. Aún no tienes equipos aprobados: puedes inscribir uno o esperar la validación.'
                     );
                 } else {
                     toast.success('Acceso concedido. Bienvenido a tu panel de gestión.');
-                    navigate('/team-manager');
                 }
+                navigate('/team-manager');
             }
         }
 
