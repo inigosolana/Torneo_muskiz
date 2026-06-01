@@ -154,9 +154,9 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                 <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase text-teal-800">Cuadrícula · {fixedDay}</span>
                     {onUpdateMatch && (
-                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1 max-w-md text-right">
                             <span className="material-symbols-outlined text-sm">drag_indicator</span>
-                            Arrastra o haz clic para editar
+                            Arrastra o edita. No se permite el mismo equipo a la misma hora.
                         </span>
                     )}
                 </div>

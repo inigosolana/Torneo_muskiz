@@ -23,6 +23,7 @@ import {
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 import {
     buildDivisionMinMatchesFromCategories,
+    countDivisionMatchBreakdown,
     countMatchesPerTeamForDivision,
     divisionBelongsToScheduleDay,
     MIN_REAL_MATCHES_PER_TEAM,
@@ -70,6 +71,7 @@ import {
     type AdminPreviewMode,
 } from '../utils/adminUiPersistence';
 import { getTeamSquadReminderStatus } from '../utils/teamSquadReminder';
+import { validateMatchSlotChange } from '../utils/matchScheduleValidation';
 
 interface AdminProps {
     onUpdateTeam: (team: Team) => void;
@@ -1096,12 +1098,33 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         const newTime = patch.time ?? moving.time;
         const newCourt = patch.court ?? moving.court;
         const slotChange = patch.time !== undefined || patch.court !== undefined;
+
+        const validation = validateMatchSlotChange(ownerDraft.matches, matchId, patch);
+        if (!validation.ok) {
+            toast.error(validation.error, { duration: 8000 });
+            return;
+        }
+
         const occupant =
             slotChange && newTime !== 'PENDIENTE'
                 ? ownerDraft.matches.find(
                       (m) => m.id !== matchId && m.time === newTime && m.court === newCourt
                   )
                 : undefined;
+
+        if (occupant) {
+            const swapBack = validateMatchSlotChange(ownerDraft.matches, occupant.id, {
+                time: moving.time,
+                court: moving.court,
+            });
+            if (!swapBack.ok) {
+                toast.error(
+                    `No se puede intercambiar: ${swapBack.error}`,
+                    { duration: 8000 }
+                );
+                return;
+            }
+        }
 
         const withTimeInRound = (m: Match, time: string): string | undefined => {
             if (!m.round) return m.round;
@@ -2568,25 +2591,70 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </p>
                                                     );
                                                 }
+                                                const breakdown = countDivisionMatchBreakdown(
+                                                    paidInDiv,
+                                                    muskizSimulatorOptions
+                                                );
+                                                const totals = breakdown.withMinPerTeam;
                                                 const rows = countMatchesPerTeamForDivision(paidInDiv, muskizSimulatorOptions);
                                                 const minForDiv = resolveMinMatchesForDivision(structureDivision, muskizSimulatorOptions);
                                                 return (
-                                                    <table className="w-full text-sm">
-                                                        <thead>
-                                                            <tr className="text-left text-[10px] font-black uppercase text-slate-400 border-b border-slate-100">
-                                                                <th className="py-2 pr-4">Equipo</th>
-                                                                <th className="py-2 text-right">Partidos</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y divide-slate-50">
-                                                            {rows.map((r) => (
-                                                                <tr key={r.name} className={r.matches < minForDiv ? 'bg-amber-50' : undefined}>
-                                                                    <td className="py-2 font-medium text-slate-800">{r.name}</td>
-                                                                    <td className="py-2 text-right font-black text-primary">{r.matches}</td>
+                                                    <>
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
+                                                            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                                                                <p className="text-[10px] font-black uppercase text-slate-500">Total</p>
+                                                                <p className="text-xl font-black text-slate-900">{totals.total}</p>
+                                                            </div>
+                                                            <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-center">
+                                                                <p className="text-[10px] font-black uppercase text-teal-800">Grupos</p>
+                                                                <p className="text-xl font-black text-teal-900">{totals.grupos}</p>
+                                                            </div>
+                                                            <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-center">
+                                                                <p className="text-[10px] font-black uppercase text-indigo-800">Eliminatoria</p>
+                                                                <p className="text-xl font-black text-indigo-900">{totals.eliminatoria}</p>
+                                                            </div>
+                                                            {totals.cuartos > 0 && (
+                                                                <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-center">
+                                                                    <p className="text-[10px] font-black uppercase text-violet-800">Cuartos</p>
+                                                                    <p className="text-xl font-black text-violet-900">{totals.cuartos}</p>
+                                                                </div>
+                                                            )}
+                                                            {totals.semis > 0 && (
+                                                                <div className="rounded-lg border border-pink-200 bg-pink-50 px-3 py-2 text-center">
+                                                                    <p className="text-[10px] font-black uppercase text-pink-800">Semis</p>
+                                                                    <p className="text-xl font-black text-pink-900">{totals.semis}</p>
+                                                                </div>
+                                                            )}
+                                                            {totals.final > 0 && (
+                                                                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-center">
+                                                                    <p className="text-[10px] font-black uppercase text-amber-800">Final</p>
+                                                                    <p className="text-xl font-black text-amber-900">{totals.final}</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        {totals.total !== breakdown.planned.total && (
+                                                            <p className="text-[11px] text-slate-500 mb-3">
+                                                                Formato base: {breakdown.planned.grupos} grupos + {breakdown.planned.eliminatoria} eliminatoria ={' '}
+                                                                {breakdown.planned.total} partidos. Con mínimo {minForDiv}/equipo: {totals.total} partidos.
+                                                            </p>
+                                                        )}
+                                                        <table className="w-full text-sm">
+                                                            <thead>
+                                                                <tr className="text-left text-[10px] font-black uppercase text-slate-400 border-b border-slate-100">
+                                                                    <th className="py-2 pr-4">Equipo</th>
+                                                                    <th className="py-2 text-right">Partidos</th>
                                                                 </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-50">
+                                                                {rows.map((r) => (
+                                                                    <tr key={r.name} className={r.matches < minForDiv ? 'bg-amber-50' : undefined}>
+                                                                        <td className="py-2 font-medium text-slate-800">{r.name}</td>
+                                                                        <td className="py-2 text-right font-black text-primary">{r.matches}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </>
                                                 );
                                             })()}
                                         </div>

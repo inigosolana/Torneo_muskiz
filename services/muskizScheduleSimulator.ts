@@ -283,6 +283,65 @@ export function computeGroups(teamList: Team[]): { key: string; names: string[] 
     return mergeUndersizedGroups(splitNamesIntoGroups(sorted, groupCount));
 }
 
+export interface DivisionMatchBreakdown {
+    grupos: number;
+    cuartos: number;
+    semis: number;
+    final: number;
+    /** Cuartos + semis + final */
+    eliminatoria: number;
+    total: number;
+}
+
+/** Totales de partidos previstos por fase (formato actual de la categoría). */
+export function countDivisionMatchBreakdown(
+    teamList: Team[],
+    options?: MuskizSimulatorOptions
+): { planned: DivisionMatchBreakdown; withMinPerTeam: DivisionMatchBreakdown } {
+    const empty: DivisionMatchBreakdown = {
+        grupos: 0,
+        cuartos: 0,
+        semis: 0,
+        final: 0,
+        eliminatoria: 0,
+        total: 0,
+    };
+    if (teamList.length < 2) {
+        return { planned: empty, withMinPerTeam: empty };
+    }
+
+    const min = resolveMinMatchesForDivision(divisionForTeams(teamList), options);
+    const base = specsForPaidDivision(teamList);
+    const full = ensureMinRealMatchesPerTeam(teamList, base, min);
+
+    const summarize = (specs: RawMatchSpec[]): DivisionMatchBreakdown => {
+        let grupos = 0;
+        let cuartos = 0;
+        let semis = 0;
+        let finals = 0;
+        for (const s of specs) {
+            if (s.phase === 'GRUPOS') grupos++;
+            else if (s.phase === 'CUARTOS') cuartos++;
+            else if (s.phase === 'SEMIS') semis++;
+            else if (s.phase === 'FINAL') finals++;
+        }
+        const eliminatoria = cuartos + semis + finals;
+        return {
+            grupos,
+            cuartos,
+            semis,
+            final: finals,
+            eliminatoria,
+            total: specs.length,
+        };
+    };
+
+    return {
+        planned: summarize(base),
+        withMinPerTeam: summarize(full),
+    };
+}
+
 /** Partidos previstos por equipo en la categoría (fase grupos + extras hasta objetivo). */
 export function countMatchesPerTeamForDivision(
     teamList: Team[],
