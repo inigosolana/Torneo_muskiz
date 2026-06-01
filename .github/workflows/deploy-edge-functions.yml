@@ -1,0 +1,57 @@
+name: Deploy Supabase Edge Functions
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - 'deploy-edge-functions.ps1'
+      - '.github/workflows/deploy-edge-functions.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy Edge Functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          PROJECT_REF="jwixdjmbwfnfwmtsmsau"
+
+          if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            echo "::error::Falta el secret SUPABASE_ACCESS_TOKEN en GitHub (Settings > Secrets > Actions)"
+            exit 1
+          fi
+
+          echo "Desplegando a proyecto ${PROJECT_REF}..."
+
+          supabase functions deploy generate-bracket --project-ref "$PROJECT_REF"
+          supabase functions deploy optimize-muskiz-slots --project-ref "$PROJECT_REF"
+          supabase functions deploy handle-rejection --project-ref "$PROJECT_REF"
+
+          NO_JWT=(
+            handle-approval
+            webhook-registration
+            webhook-team-update
+            telegram-bot-webhook
+            telegram-player-docs-bot-webhook
+            admin-review-action
+            notify-player-doc-manager-email
+            notify-ops-alert
+            configure-telegram-webhooks
+            request-manager-password-reset
+          )
+
+          for name in "${NO_JWT[@]}"; do
+            supabase functions deploy "$name" --project-ref "$PROJECT_REF" --no-verify-jwt
+          done
+
+          echo "Listo."
