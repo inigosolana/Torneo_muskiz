@@ -2613,6 +2613,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                                 <p className="text-[10px] font-black uppercase text-indigo-800">Eliminatoria</p>
                                                                 <p className="text-xl font-black text-indigo-900">{totals.eliminatoria}</p>
                                                             </div>
+                                                            {totals.repesca > 0 && (
+                                                                <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-center">
+                                                                    <p className="text-[10px] font-black uppercase text-orange-800">Repesca / Consol.</p>
+                                                                    <p className="text-xl font-black text-orange-900">{totals.repesca}</p>
+                                                                </div>
+                                                            )}
                                                             {totals.cuartos > 0 && (
                                                                 <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-center">
                                                                     <p className="text-[10px] font-black uppercase text-violet-800">Cuartos</p>
@@ -2981,7 +2987,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             <strong>Sábado:</strong> juvenil/senior 9:00–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida fija 14:15–15:45, 6 campos.{' '}
                                                             <strong>Domingo:</strong> infantiles 9:00–15:00, 4 campos.{' '}
                                                             Huecos <strong>35 min</strong>. Mínimo de partidos por equipo configurable en cada categoría (por defecto {MIN_REAL_MATCHES_PER_TEAM}).{' '}
-                                                            2–6 → liguilla + final · 7–10 → 2 grupos + semis + final · ≥11 → 3 grupos + cuartos + semis + final.{' '}
+                                                            ≤6 → liguilla + final · 7 → 3+4 + consolación + semis + final · 8–10 → 2 grupos + semis + final (9: 4+5) · ≥11 → 3 grupos + repesca + cuartos + semis + final (11: 4+4+3).{' '}
                                                             Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo cuando hay varios grupos.{' '}
                                                             Categorías mezcladas en el horario. Intenta evitar <strong>dos partidos seguidos</strong>, pero los permite si no caben todos (menos PENDIENTE). Partidos sin hueco: <strong>PENDIENTE</strong>.
                                                         </p>
@@ -3016,7 +3022,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         <p className="mt-2 text-[11px] text-teal-800">
                                                             La comida del sábado es fija de 14:15 a 15:45 para todas las categorías; la tarde arranca justo al terminar.
                                                             Semifinales, cuartos y finales solo después de terminar todos los partidos de grupos.
-                                                            Orden estricto: fase de grupos → cuartos (≥11 equipos) → semis → finales al cierre del día.
+                                                            Orden: grupos → consolación/repesca (si aplica) → cuartos (≥11 equipos) → semis → finales. ≥11: mejor 3º directo y repesca entre los 2 peores terceros.
                                                             La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).
                                                             Ajusta partidos a mano en la lista de abajo o en Calendario (tabla / cuadrícula).
                                                         </p>

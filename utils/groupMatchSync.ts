@@ -3,6 +3,7 @@ import {
     autoGroupCount,
     computeGroups,
     DIVISION_CODE,
+    expectedGroupSizesForTeamCount,
     MIN_TEAMS_PER_GROUP,
     resolveMatchDivision,
 } from '../services/muskizScheduleSimulator';
@@ -141,13 +142,29 @@ export function validateGroupDistribution(
             `${counts.size} grupo(s) asignados, el formato con ${n} equipos espera ${expectedGroupCount}`
         );
     }
+    if (n >= 7 && n <= 10 && counts.size === 3) {
+        issues.push('Con 7–10 equipos se esperan 2 grupos, no 3');
+    }
+    if (n >= 11 && expectedGroupCount === 3 && counts.size > 0 && counts.size !== 3) {
+        issues.push(`Con ${n} equipos se esperan 3 grupos (p. ej. 11 → 4+4+3)`);
+    }
+    const fixedSizes = expectedGroupSizesForTeamCount(n);
+    if (fixedSizes && groupSizes.length === fixedSizes.length) {
+        const actual = groupSizes.map((g) => g.count);
+        if (actual.some((c, i) => c !== fixedSizes[i])) {
+            issues.push(
+                `Tamaños de grupo ${actual.join('+')} (esperado ${fixedSizes.join('+')} con ${n} equipos)`
+            );
+        }
+    }
+
     if (expectedGroupCount > 1) {
         for (const { key, count } of groupSizes) {
             if (count < MIN_TEAMS_PER_GROUP) {
                 issues.push(`Grupo ${key}: ${count} equipos (mín. ${MIN_TEAMS_PER_GROUP})`);
             }
         }
-        if (groupSizes.length > 0) {
+        if (groupSizes.length > 0 && !fixedSizes) {
             const sizes = groupSizes.map((g) => g.count);
             const max = Math.max(...sizes);
             const min = Math.min(...sizes);

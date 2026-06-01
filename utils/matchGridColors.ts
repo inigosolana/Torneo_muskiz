@@ -143,6 +143,7 @@ export function getMatchPhaseTone(round?: string): MatchPhaseTone {
     if (!round) return 'default';
     if (/\bFinal\b/i.test(round)) return 'final';
     if (/\bSemis?\b/i.test(round)) return 'semi';
+    if (/\bRepesca\b/i.test(round) || /\bConsolaci[oó]n\b/i.test(round)) return 'cuartos';
     if (/\bCuartos?\b/i.test(round)) return 'cuartos';
 
     const afterCode = round.match(/\b(?:CF|CM|JF|JM|SF|SM|IF|IM)-([A-Da-d])\b/);

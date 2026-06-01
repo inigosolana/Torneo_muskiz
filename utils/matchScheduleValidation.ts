@@ -3,7 +3,7 @@ import type { Match } from '../types';
 /** Equipos ficticios de cruces (no bloquean por duplicado de nombre). */
 export function isPlaceholderTeamName(name: string): boolean {
     return (
-        /grupo|gr\.\s*[a-d]\b|clasificado|gan\.|ganador|ctos?\b|mejor/i.test(name) ||
+        /grupo|gr\.\s*[a-d]\b|clasificado|gan\.|ganador|ctos?\b|mejor|peor|repesca|consolaci[oó]n/i.test(name) ||
         /^\d+º/i.test(name)
     );
 }

@@ -8,8 +8,9 @@
  *
  * Formato por número de equipos en la categoría (Viernes, Sábado y Domingo):
  * - 2–6 equipos : liguilla (1 grupo) → final 1º vs 2º (sin semifinales)
- * - 7–10 equipos: 2 grupos → semis (1ºA vs 2ºB, 1ºB vs 2ºA) → final
- * - ≥11 equipos  : 3 grupos (mín. 3 por grupo) → cuartos (6 primeros + 2 mejores 3º) → semis → final
+ * - 7 equipos   : grupos 3+4 → consolación (3ºA vs 3ºB) → semis (2 mejores/grupo) → final
+ * - 8–10 equipos : 2 grupos → semis → final (9: 4+5)
+ * - ≥11 equipos  : 3 grupos (11: 4+4+3) → repesca 2 peores 3º + cuartos + semis → final
  *
  * El simulador intenta que cada equipo juegue ≥4 partidos reales; si no cabe, baja a ≥3.
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
@@ -76,8 +77,8 @@ export const MUSKIZ_AI_MAX_CALLS_PER_DAY = 3;
 /** Reglas Muskiz resumidas para el prompt de IA (el calendario base ya las cumple). */
 export const MUSKIZ_RULES_SUMMARY = [
     'Viernes: cadetes. Sábado: juvenil/senior, comida 14:15–15:45. Domingo: infantiles.',
-    '2–6 equipos: liguilla + final. 7–10: 2 grupos + semis + final. ≥11: 3 grupos + cuartos + semis + final.',
-    'Orden: todos los de grupos → cuartos → semis → finales al cierre del día.',
+    '2–6: liguilla + final. 7: 3+4 + consolación + semis + final. 8–10: 2 grupos + semis + final. ≥11: 3 grupos + repesca 3º + cuartos + semis + final.',
+    'Orden: grupos → consolación/repesca (si aplica) → cuartos (≥11) → semis → finales.',
     'Evitar dos partidos seguidos del mismo equipo si hay hueco.',
 ].join(' ');
 
@@ -182,7 +183,7 @@ function generateSlotStarts(
 }
 
 // ─── Fases ─────────────────────────────────────────────────────────────────
-type Phase = 'GRUPOS' | 'CUARTOS' | 'SEMIS' | 'FINAL';
+type Phase = 'GRUPOS' | 'REPESCA' | 'CUARTOS' | 'SEMIS' | 'FINAL';
 
 interface RawMatchSpec {
     teamA: string;
@@ -208,8 +209,21 @@ function roundRobinPairs(names: string[]): { a: string; b: string }[] {
 export function autoGroupCount(n: number): number {
     if (n < 2) return 0;
     if (n <= 6) return 1; // liguilla → final
-    if (n <= 10) return 2; // 2 grupos → semis → final
-    return 3; // ≥11 → 3 grupos (mín. 3 por grupo) → cuartos → semis → final
+    if (n >= 11) return 3; // ≥11 → 3 grupos → repesca + cuartos + semis + final
+    return 2; // 7–10 → 2 grupos → semis + final (7: + consolación 3º)
+}
+
+/** ¿Formato con cuartos de final? Con 11 equipos o más. */
+export function usesQuarterFinalFormat(n: number): boolean {
+    return n >= 11;
+}
+
+/** Tamaños fijos de grupo A, B… cuando el formato lo exige. */
+export function expectedGroupSizesForTeamCount(n: number): number[] | null {
+    if (n === 7) return [3, 4];
+    if (n === 9) return [4, 5];
+    if (n === 11) return [4, 4, 3];
+    return null;
 }
 
 function splitNamesIntoGroups(sorted: string[], groupCount: number): { key: string; names: string[] }[] {
@@ -228,6 +242,25 @@ function splitNamesIntoGroups(sorted: string[], groupCount: number): { key: stri
         }
     }
     return groups;
+}
+
+/** Reparto automático; 7 y 9 equipos usan tamaños fijos 3+4 y 4+5. */
+function splitNamesForTeamCount(
+    sorted: string[],
+    n: number,
+    groupCount: number
+): { key: string; names: string[] }[] {
+    const fixed = expectedGroupSizesForTeamCount(n);
+    if (fixed && groupCount === fixed.length) {
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+        let idx = 0;
+        return fixed.map((size, i) => {
+            const names = sorted.slice(idx, idx + size);
+            idx += size;
+            return { key: letters[i] ?? String(i + 1), names };
+        });
+    }
+    return splitNamesIntoGroups(sorted, groupCount);
 }
 
 /** Fusiona grupos con menos de MIN_TEAMS_PER_GROUP en otros hasta cumplir el mínimo. */
@@ -280,15 +313,17 @@ export function computeGroups(teamList: Team[]): { key: string; names: string[] 
     let groupCount = autoGroupCount(n);
     while (groupCount > 1 && Math.floor(n / groupCount) < MIN_TEAMS_PER_GROUP) groupCount--;
     if (groupCount <= 0) return [];
-    return mergeUndersizedGroups(splitNamesIntoGroups(sorted, groupCount));
+    return mergeUndersizedGroups(splitNamesForTeamCount(sorted, n, groupCount));
 }
 
 export interface DivisionMatchBreakdown {
     grupos: number;
+    /** Repesca entre los dos peores 3º (formato ≥11, 3 grupos). */
+    repesca: number;
     cuartos: number;
     semis: number;
     final: number;
-    /** Cuartos + semis + final */
+    /** Repesca + cuartos + semis + final */
     eliminatoria: number;
     total: number;
 }
@@ -300,6 +335,7 @@ export function countDivisionMatchBreakdown(
 ): { planned: DivisionMatchBreakdown; withMinPerTeam: DivisionMatchBreakdown } {
     const empty: DivisionMatchBreakdown = {
         grupos: 0,
+        repesca: 0,
         cuartos: 0,
         semis: 0,
         final: 0,
@@ -316,18 +352,21 @@ export function countDivisionMatchBreakdown(
 
     const summarize = (specs: RawMatchSpec[]): DivisionMatchBreakdown => {
         let grupos = 0;
+        let repesca = 0;
         let cuartos = 0;
         let semis = 0;
         let finals = 0;
         for (const s of specs) {
             if (s.phase === 'GRUPOS') grupos++;
+            else if (s.phase === 'REPESCA') repesca++;
             else if (s.phase === 'CUARTOS') cuartos++;
             else if (s.phase === 'SEMIS') semis++;
             else if (s.phase === 'FINAL') finals++;
         }
-        const eliminatoria = cuartos + semis + finals;
+        const eliminatoria = repesca + cuartos + semis + finals;
         return {
             grupos,
+            repesca,
             cuartos,
             semis,
             final: finals,
@@ -365,8 +404,9 @@ function divisionForTeams(teams: Team[]): Team['division'] {
 // ─── Especificaciones de partido (sin hora ni pista) ───────────────────────
 /**
  * 2–6 equipos  → liguilla (1 grupo) + final
- * 7–10 equipos → 2 grupos + semis + final
- * ≥11 equipos  → 3 grupos + cuartos + semis + final
+ * 7 equipos    → 2 grupos (3+4) + consolación 3º + semis + final
+ * 8–10 equipos → 2 grupos + semis + final
+ * ≥11 equipos  → 3 grupos + repesca 3º + cuartos + semis + final
  */
 function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     const div = divisionForTeams(teams);
@@ -390,28 +430,53 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     }
 
     // ── Fases eliminatorias ─────────────────────────────────────────────────
-    if (numGroups === 3) {
-        // ≥11 equipos: 1º y 2º de cada grupo (6) + 2 mejores 3º → cuartos → semis → final
+    if (numGroups === 3 && usesQuarterFinalFormat(n)) {
+        // ≥11 equipos: 6 primeros + mejor 3º (coef.) + ganador repesca de los 2 peores 3º → cuartos
         const [ga, gb, gc] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B', gkeys[2] ?? 'C'];
+        out.push({
+            teamA: '3º peor 1',
+            teamB: '3º peor 2',
+            division: div,
+            phase: 'REPESCA',
+            phaseOrder: 1,
+            roundLabel: `Repesca 3º · ${code}`,
+        });
         out.push(
-            { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 1` },
-            { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 2` },
-            { teamA: `1º Gr.${gc}`, teamB: `3º mejor 2`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 3` },
-            { teamA: `2º Gr.${gc}`, teamB: `3º mejor 1`, division: div, phase: 'CUARTOS', phaseOrder: 1, roundLabel: `Cuartos · ${code} 4` },
+            { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 1` },
+            { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 2` },
+            { teamA: `1º Gr.${gc}`, teamB: `3º mejor 2`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 3` },
+            { teamA: `2º Gr.${gc}`, teamB: `3º mejor 1`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 4` },
         );
         out.push(
-            { teamA: `Gan.Ctos ${code} 1`, teamB: `Gan.Ctos ${code} 2`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 1` },
-            { teamA: `Gan.Ctos ${code} 3`, teamB: `Gan.Ctos ${code} 4`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 2` },
+            { teamA: `Gan.Ctos ${code} 1`, teamB: `Gan.Ctos ${code} 2`, division: div, phase: 'SEMIS', phaseOrder: 3, roundLabel: `Semi · ${code} 1` },
+            { teamA: `Gan.Ctos ${code} 3`, teamB: `Gan.Ctos ${code} 4`, division: div, phase: 'SEMIS', phaseOrder: 3, roundLabel: `Semi · ${code} 2` },
         );
-        out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 3, roundLabel: `Final · ${code}` });
+        out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 4, roundLabel: `Final · ${code}` });
     } else if (numGroups >= 2) {
-        // 7–10 equipos: semis + final
         const [ga, gb] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B'];
-        out.push(
-            { teamA: `1º Grupo ${ga}`, teamB: `2º Grupo ${gb}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 1` },
-            { teamA: `1º Grupo ${gb}`, teamB: `2º Grupo ${ga}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 2` },
-        );
-        out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 2, roundLabel: `Final · ${code}` });
+        if (n === 7) {
+            // 7 equipos (3+4): pasan 2 por grupo; consolación entre los 3º
+            out.push({
+                teamA: `3º Gr.${ga}`,
+                teamB: `3º Gr.${gb}`,
+                division: div,
+                phase: 'REPESCA',
+                phaseOrder: 1,
+                roundLabel: `Consolación 3º · ${code}`,
+            });
+            out.push(
+                { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 1` },
+                { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 2` },
+            );
+            out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 3, roundLabel: `Final · ${code}` });
+        } else {
+            // 8–10 equipos (9 → 4+5; 8 → 4+4; 10 → 5+5): semis + final
+            out.push(
+                { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 1` },
+                { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 2` },
+            );
+            out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 2, roundLabel: `Final · ${code}` });
+        }
     } else {
         // 2–6 equipos, 1 grupo: liguilla → final 1º vs 2º (sin semifinales)
         out.push({ teamA: '1º Clasificado', teamB: '2º Clasificado', division: div, phase: 'FINAL', phaseOrder: 1, roundLabel: `Final · ${code}` });
@@ -629,7 +694,7 @@ interface ScheduledCell {
 /** Equipos ficticios de cruces (no aplican descanso entre partidos). */
 function isPlaceholderTeamName(name: string): boolean {
     return (
-        /grupo|gr\.\s*[a-d]\b|clasificado|gan\.|ganador|ctos?\b|mejor/i.test(name) ||
+        /grupo|gr\.\s*[a-d]\b|clasificado|gan\.|ganador|ctos?\b|mejor|peor|repesca|consolaci[oó]n/i.test(name) ||
         /^\d+º/i.test(name)
     );
 }
@@ -844,6 +909,24 @@ function maxAssignedEndMin(state: ScheduleGreedyState): number {
     return Math.max(...state.assigned.map((a) => a.tEnd));
 }
 
+function maxAssignedEndForPhase(state: ScheduleGreedyState, phase: Phase): number {
+    let max = -Infinity;
+    for (const p of state.placed) {
+        if (p.spec.phase !== phase) continue;
+        max = Math.max(max, p.timeMin + state.slotMins);
+    }
+    return max;
+}
+
+/** Mayor hora de inicio de una fase ya colocada (para bloquear eliminatorias antes de grupos). */
+function maxPhaseStartMin(state: ScheduleGreedyState, phase: Phase): number {
+    let max = -Infinity;
+    for (const p of state.placed) {
+        if (p.spec.phase === phase) max = Math.max(max, p.timeMin);
+    }
+    return max;
+}
+
 /** Primera franja ≥ snapshot de fin de fase anterior (usar snapshot fijo, no releer estado a mitad de lote). */
 function minSlotStartFromPhaseEnd(slotStartsMin: number[], phaseEndSnapshot: number): number | undefined {
     if (!Number.isFinite(phaseEndSnapshot) || phaseEndSnapshot === -Infinity) return undefined;
@@ -867,26 +950,25 @@ function reservedKnockoutSlotStarts(
 function specsByPhase(specs: RawMatchSpec[]) {
     return {
         grupos: specs.filter((s) => s.phase === 'GRUPOS'),
+        repesca: specs.filter((s) => s.phase === 'REPESCA'),
         cuartos: specs.filter((s) => s.phase === 'CUARTOS'),
         semis: specs.filter((s) => s.phase === 'SEMIS'),
         finals: specs.filter((s) => s.phase === 'FINAL'),
     };
 }
 
-/**
- * Reintenta colocar partidos PENDIENTE permitiendo partidos seguidos y relajando reservas de franja.
- */
+/** Reintento por fase sin saltar el orden grupos → cuartos → semis → final. */
 function scheduleUnplacedRecovery(state: ScheduleGreedyState, slotStartsMin: number[]): void {
     if (!state.unplaced.length) return;
 
-    const remaining = [...state.unplaced];
+    const pool = [...state.unplaced];
     state.unplaced = [];
 
-    const phaseOrder: Phase[] = ['GRUPOS', 'CUARTOS', 'SEMIS', 'FINAL'];
+    const phaseOrder: Phase[] = ['GRUPOS', 'REPESCA', 'CUARTOS', 'SEMIS', 'FINAL'];
     let phaseEndSnapshot = maxAssignedEndMin(state);
 
     for (const phase of phaseOrder) {
-        const batch = remaining.filter((s) => s.phase === phase);
+        const batch = pool.filter((s) => s.phase === phase);
         if (!batch.length) continue;
 
         const minAfterPrevious =
@@ -897,23 +979,39 @@ function scheduleUnplacedRecovery(state: ScheduleGreedyState, slotStartsMin: num
         scheduleSpecBatch(state, batch, {
             slotTimePolicy: phase === 'FINAL' ? 'latest' : 'earliest',
             allowBackToBackOnly: true,
-            relaxSlotRestrictions: true,
+            relaxSlotRestrictions: phase === 'GRUPOS',
             minSlotStartMin: minAfterPrevious,
         });
 
         phaseEndSnapshot = maxAssignedEndMin(state);
     }
+}
 
-    if (!state.unplaced.length) return;
+/** Termina de colocar partidos de grupos antes de cualquier eliminatoria. */
+function finishGruposPhase(
+    state: ScheduleGreedyState,
+    slotStartsMin: number[],
+    groupsForbidden: number[]
+): void {
+    for (let round = 0; round < 6; round++) {
+        const before = state.unplaced.filter((s) => s.phase === 'GRUPOS').length;
+        if (before === 0) return;
 
-    const still = [...state.unplaced];
-    state.unplaced = [];
-    scheduleSpecBatch(state, still, {
-        slotTimePolicy: 'earliest',
-        allowBackToBackOnly: true,
-        relaxSlotRestrictions: true,
-        relaxPhaseMinStart: true,
-    });
+        exhaustivePlaceUnplacedPhased(state, { onlyPhase: 'GRUPOS', forbiddenSlotStarts: groupsForbidden });
+
+        const stillGrupos = state.unplaced.filter((s) => s.phase === 'GRUPOS');
+        if (stillGrupos.length > 0) {
+            scheduleSpecBatch(state, stillGrupos, {
+                slotTimePolicy: 'earliest',
+                allowBackToBackOnly: true,
+                relaxSlotRestrictions: true,
+                forbiddenSlotStarts: groupsForbidden,
+            });
+        }
+
+        const after = state.unplaced.filter((s) => s.phase === 'GRUPOS').length;
+        if (after >= before) break;
+    }
 }
 
 /**
@@ -932,11 +1030,11 @@ function scheduleGreedy(
     const slotStartsMin = generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch);
     const courts = cfg.courts;
 
-    const { grupos, cuartos, semis, finals } = specsByPhase(specs);
+    const { grupos, repesca, cuartos, semis, finals } = specsByPhase(specs);
     const reservedFinalSlots = reservedFinalSlotStarts(slotStartsMin, finals.length, courts.length);
     const reservedKnockoutSlots = reservedKnockoutSlotStarts(
         slotStartsMin,
-        cuartos.length + semis.length,
+        repesca.length + cuartos.length + semis.length,
         courts.length,
         reservedFinalSlots
     );
@@ -948,19 +1046,50 @@ function scheduleGreedy(
         slotTimePolicy: 'earliest',
         forbiddenSlotStarts: groupsForbidden,
     });
-    const endAfterGrupos = maxAssignedEndMin(state);
+
+    finishGruposPhase(state, slotStartsMin, groupsForbidden);
+
+    const endAfterGrupos = Math.max(
+        maxAssignedEndForPhase(state, 'GRUPOS'),
+        maxAssignedEndMin(state)
+    );
+    const minAfterGrupos = minSlotStartFromPhaseEnd(slotStartsMin, endAfterGrupos);
+
+    const knockoutSlotsAfterGrupos = (slots: number[]) =>
+        slots.filter((ts) => minAfterGrupos == null || ts >= minAfterGrupos);
+
+    scheduleSpecBatch(state, repesca, {
+        slotTimePolicy: 'earliest',
+        allowedSlotStarts: repesca.length > 0 ? knockoutSlotsAfterGrupos(reservedKnockoutSlots) : undefined,
+        forbiddenSlotStarts: reservedFinalSlots,
+        minSlotStartMin: minAfterGrupos,
+    });
+    const endAfterRepesca = Math.max(maxAssignedEndForPhase(state, 'REPESCA'), endAfterGrupos);
+    const minAfterRepesca = minSlotStartFromPhaseEnd(slotStartsMin, endAfterRepesca);
 
     scheduleSpecBatch(state, cuartos, {
         slotTimePolicy: 'earliest',
+        allowedSlotStarts:
+            cuartos.length > 0
+                ? knockoutSlotsAfterGrupos(reservedKnockoutSlots)
+                : undefined,
         forbiddenSlotStarts: reservedFinalSlots,
-        minSlotStartMin: minSlotStartFromPhaseEnd(slotStartsMin, endAfterGrupos),
+        minSlotStartMin: minAfterRepesca,
     });
-    const endAfterCuartos = maxAssignedEndMin(state);
+    const endAfterCuartos = Math.max(
+        maxAssignedEndForPhase(state, 'CUARTOS'),
+        endAfterRepesca
+    );
+    const minAfterCuartos = minSlotStartFromPhaseEnd(slotStartsMin, endAfterCuartos);
 
     scheduleSpecBatch(state, semis, {
         slotTimePolicy: 'earliest',
+        allowedSlotStarts:
+            semis.length > 0
+                ? knockoutSlotsAfterGrupos(reservedKnockoutSlots)
+                : undefined,
         forbiddenSlotStarts: reservedFinalSlots,
-        minSlotStartMin: minSlotStartFromPhaseEnd(slotStartsMin, endAfterCuartos),
+        minSlotStartMin: minAfterCuartos,
     });
     const endAfterSemis = maxAssignedEndMin(state);
 
@@ -985,18 +1114,106 @@ function scheduleGreedy(
     }
 
     scheduleUnplacedRecovery(state, slotStartsMin);
-    exhaustivePlaceUnplaced(state);
+    exhaustivePlaceUnplacedPhased(state);
+
+    enforcePhaseTimeOrder(state, slotStartsMin, slotMins);
 
     return { placed: state.placed, unplaced: state.unplaced };
 }
 
-/** Último intento local: prueba todas las franjas × pistas para partidos sin colocar. */
-function exhaustivePlaceUnplaced(state: ScheduleGreedyState): void {
+/** Si una eliminatoria empieza antes de que acabe el último partido de grupos, se reintenta. */
+function enforcePhaseTimeOrder(
+    state: ScheduleGreedyState,
+    slotStartsMin: number[],
+    _slotMins: number
+): void {
+    const lastGrupoEnd = maxAssignedEndForPhase(state, 'GRUPOS');
+    const earliestAfterGrupos = minSlotStartFromPhaseEnd(slotStartsMin, lastGrupoEnd);
+    if (earliestAfterGrupos == null) return;
+
+    const lastRepescaEnd = maxAssignedEndForPhase(state, 'REPESCA');
+    const earliestCuartos =
+        Number.isFinite(lastRepescaEnd) && lastRepescaEnd !== -Infinity
+            ? minSlotStartFromPhaseEnd(slotStartsMin, lastRepescaEnd)
+            : earliestAfterGrupos;
+
+    const toRequeue: ScheduledCell[] = [];
+    for (const cell of state.placed) {
+        if (cell.spec.phase === 'GRUPOS') continue;
+        if (cell.spec.phase === 'REPESCA') {
+            if (cell.timeMin < earliestAfterGrupos) toRequeue.push(cell);
+            continue;
+        }
+        const minStart = earliestCuartos ?? earliestAfterGrupos;
+        if (cell.timeMin < minStart) toRequeue.push(cell);
+    }
+
+    for (const cell of toRequeue) {
+        state.placed = state.placed.filter(
+            (p) => !(p.timeMin === cell.timeMin && p.courtIdx === cell.courtIdx && p.spec === cell.spec)
+        );
+        state.assigned = state.assigned.filter(
+            (a) =>
+                !(
+                    a.tStart === cell.timeMin &&
+                    a.courtIdx === cell.courtIdx &&
+                    a.teams[0] === cell.spec.teamA &&
+                    a.teams[1] === cell.spec.teamB
+                )
+        );
+        state.unplaced.push(cell.spec);
+    }
+
+    if (!toRequeue.length) return;
+
+    exhaustivePlaceUnplacedPhased(state);
+    scheduleUnplacedRecovery(state, slotStartsMin);
+}
+
+type ExhaustivePhaseOptions = {
+    onlyPhase?: Phase;
+    forbiddenSlotStarts?: number[];
+};
+
+/** Coloca pendientes respetando orden de fase (nunca semis antes de acabar grupos). */
+function exhaustivePlaceUnplacedPhased(
+    state: ScheduleGreedyState,
+    options?: ExhaustivePhaseOptions
+): void {
     if (!state.unplaced.length) return;
 
     const { slotStartsMin, courts, slotMins, assigned } = state;
-    const remaining = [...state.unplaced];
-    state.unplaced = [];
+    const forbiddenSet = options?.forbiddenSlotStarts?.length
+        ? new Set(options.forbiddenSlotStarts)
+        : null;
+
+    const phases: Phase[] = options?.onlyPhase
+        ? [options.onlyPhase]
+        : ['GRUPOS', 'REPESCA', 'CUARTOS', 'SEMIS', 'FINAL'];
+
+    const allPending = [...state.unplaced];
+    const holdOther = options?.onlyPhase
+        ? allPending.filter((s) => s.phase !== options.onlyPhase)
+        : [];
+    const remaining = options?.onlyPhase
+        ? allPending.filter((s) => s.phase === options.onlyPhase)
+        : allPending;
+    state.unplaced = [...holdOther];
+
+    const teamAssignedStarts = (team: string): number[] =>
+        assigned.filter((x) => x.teams.includes(team)).map((x) => x.tStart);
+
+    const hasTripleConsecutive = (team: string, proposedStart: number): boolean => {
+        if (isPlaceholderTeamName(team)) return false;
+        const starts = [...teamAssignedStarts(team), proposedStart].sort((a, b) => a - b);
+        for (let i = 0; i <= starts.length - 3; i++) {
+            const s0 = starts[i]!;
+            const s1 = starts[i + 1]!;
+            const s2 = starts[i + 2]!;
+            if (s1 - s0 < slotMins && s2 - s1 < slotMins) return true;
+        }
+        return false;
+    };
 
     const teamsBusy = (teams: [string, string], tStart: number, tEnd: number): boolean =>
         assigned.some(
@@ -1009,46 +1226,71 @@ function exhaustivePlaceUnplaced(state: ScheduleGreedyState): void {
     const courtBusy = (courtIdx: number, tStart: number, tEnd: number): boolean =>
         assigned.some((x) => x.courtIdx === courtIdx && x.tStart < tEnd && x.tEnd > tStart);
 
-    for (const spec of remaining) {
-        const teamsPair: [string, string] = [spec.teamA, spec.teamB];
-        let best: { ts: number; ci: number } | null = null;
-        let bestScore = Infinity;
+    let phaseEndSnapshot = maxAssignedEndMin(state);
 
-        for (const ts of slotStartsMin) {
-            const te = ts + slotMins;
-            for (let ci = 0; ci < courts.length; ci++) {
-                if (courtBusy(ci, ts, te) || teamsBusy(teamsPair, ts, te)) continue;
-                let score = ts * 10 + ci;
-                for (const t of teamsPair) {
-                    if (isPlaceholderTeamName(t)) continue;
-                    let last = -Infinity;
-                    for (const x of assigned) {
-                        if (x.teams.includes(t)) last = Math.max(last, x.tEnd);
+    for (const phase of phases) {
+        const batch = remaining.filter((s) => s.phase === phase);
+        const minStart =
+            phase === 'GRUPOS'
+                ? undefined
+                : minSlotStartFromPhaseEnd(slotStartsMin, phaseEndSnapshot);
+
+        for (const spec of batch) {
+            const teamsPair: [string, string] = [spec.teamA, spec.teamB];
+            let best: { ts: number; ci: number } | null = null;
+            let bestScore = Infinity;
+
+            for (const ts of slotStartsMin) {
+                if (minStart != null && ts < minStart) continue;
+                if (forbiddenSet?.has(ts)) continue;
+
+                const te = ts + slotMins;
+                for (let ci = 0; ci < courts.length; ci++) {
+                    if (courtBusy(ci, ts, te) || teamsBusy(teamsPair, ts, te)) continue;
+                    if (hasTripleConsecutive(teamsPair[0], ts) || hasTripleConsecutive(teamsPair[1], ts)) {
+                        continue;
                     }
-                    const gap = Number.isFinite(last) && last !== -Infinity ? ts - last : Infinity;
-                    if (gap < slotMins) score += 50_000;
-                    else if (gap < 2 * slotMins) score += 5_000;
+
+                    let score = ts * 10 + ci;
+                    for (const t of teamsPair) {
+                        if (isPlaceholderTeamName(t)) continue;
+                        let last = -Infinity;
+                        for (const x of assigned) {
+                            if (x.teams.includes(t)) last = Math.max(last, x.tEnd);
+                        }
+                        const gap = Number.isFinite(last) && last !== -Infinity ? ts - last : Infinity;
+                        if (gap < slotMins) score += 50_000;
+                        else if (gap < 2 * slotMins) score += 5_000;
+                    }
+                    if (score < bestScore) {
+                        bestScore = score;
+                        best = { ts, ci };
+                    }
                 }
-                if (score < bestScore) {
-                    bestScore = score;
-                    best = { ts, ci };
-                }
+            }
+
+            if (best) {
+                const te = best.ts + slotMins;
+                assigned.push({ tStart: best.ts, tEnd: te, courtIdx: best.ci, teams: teamsPair });
+                state.placed.push({
+                    timeMin: best.ts,
+                    courtIdx: best.ci,
+                    courtName: courts[best.ci]!,
+                    spec,
+                });
+            } else {
+                state.unplaced.push(spec);
             }
         }
 
-        if (best) {
-            const te = best.ts + slotMins;
-            assigned.push({ tStart: best.ts, tEnd: te, courtIdx: best.ci, teams: teamsPair });
-            state.placed.push({
-                timeMin: best.ts,
-                courtIdx: best.ci,
-                courtName: courts[best.ci]!,
-                spec,
-            });
-        } else {
-            state.unplaced.push(spec);
-        }
+        phaseEndSnapshot = maxAssignedEndMin(state);
     }
+
+}
+
+/** @deprecated Usar exhaustivePlaceUnplacedPhased */
+function exhaustivePlaceUnplaced(state: ScheduleGreedyState): void {
+    exhaustivePlaceUnplacedPhased(state);
 }
 
 /** Payload compacto para la Edge Function de refinado IA (solo partidos PENDIENTE). */
