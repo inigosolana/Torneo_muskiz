@@ -16,9 +16,11 @@
  * Las fases de grupos/cuartos se programan antes que semis/finales.
  * Las finales se reservan en las últimas franjas del día (cierre del calendario).
  * Orden estricto: todos los grupos → cuartos → semis → finales (sin mezclar fases).
+ * Entre fases se usa un snapshot de maxAssignedEndMin antes de cada lote (no nextPhaseSlotMin dinámico).
+ * Máximo 2 partidos consecutivos por equipo; nunca 3 seguidos (rechazo duro en scoreSlot).
  * Se mezclan categorías en la tabla (interleaved) para mayor variedad.
  * Evita partidos seguidos del mismo equipo cuando hay hueco; si no caben todos,
- * permite partidos consecutivos para reducir PENDIENTE.
+ * permite hasta 2 consecutivos para reducir PENDIENTE.
  */
 import type { Match, Team } from '../types';
 
@@ -623,6 +625,25 @@ function scheduleSpecBatch(
         return false;
     };
 
+    const teamAssignedStarts = (team: string): number[] =>
+        assigned.filter((x) => x.teams.includes(team)).map((x) => x.tStart);
+
+    /** Tres franjas seguidas (sin descanso) si se coloca el partido en proposedStart. */
+    const hasTripleConsecutive = (team: string, proposedStart: number): boolean => {
+        if (isPlaceholderTeamName(team)) return false;
+        const starts = [...teamAssignedStarts(team), proposedStart].sort((a, b) => a - b);
+        for (let i = 0; i <= starts.length - 3; i++) {
+            const s0 = starts[i]!;
+            const s1 = starts[i + 1]!;
+            const s2 = starts[i + 2]!;
+            if (s1 - s0 < slotMins && s2 - s1 < slotMins) return true;
+        }
+        return false;
+    };
+
+    const matchWouldTripleConsecutive = (teams: [string, string], ts: number): boolean =>
+        hasTripleConsecutive(teams[0], ts) || hasTripleConsecutive(teams[1], ts);
+
     const scoreSlot = (
         teams: [string, string],
         ts: number,
@@ -633,6 +654,7 @@ function scheduleSpecBatch(
     ): number | null => {
         const te = ts + slotMins;
         if (courtBusy(ci, ts, te) || teamsBusy(teams, ts, te)) return null;
+        if (matchWouldTripleConsecutive(teams, ts)) return null;
 
         const gapA = restGapBefore(teams[0], ts);
         const gapB = restGapBefore(teams[1], ts);
@@ -723,11 +745,10 @@ function maxAssignedEndMin(state: ScheduleGreedyState): number {
     return Math.max(...state.assigned.map((a) => a.tEnd));
 }
 
-/** Primera franja válida en o después del fin de la fase anterior. */
-function nextPhaseSlotMin(slotStartsMin: number[], state: ScheduleGreedyState): number | undefined {
-    const maxEnd = maxAssignedEndMin(state);
-    if (!Number.isFinite(maxEnd) || maxEnd === -Infinity) return undefined;
-    return slotStartsMin.find((ts) => ts >= maxEnd);
+/** Primera franja ≥ snapshot de fin de fase anterior (usar snapshot fijo, no releer estado a mitad de lote). */
+function minSlotStartFromPhaseEnd(slotStartsMin: number[], phaseEndSnapshot: number): number | undefined {
+    if (!Number.isFinite(phaseEndSnapshot) || phaseEndSnapshot === -Infinity) return undefined;
+    return slotStartsMin.find((ts) => ts >= phaseEndSnapshot);
 }
 
 /** Franjas reservadas antes de las finales para cuartos/semis (no mezclar con grupos). */
@@ -763,12 +784,16 @@ function scheduleUnplacedRecovery(state: ScheduleGreedyState, slotStartsMin: num
     state.unplaced = [];
 
     const phaseOrder: Phase[] = ['GRUPOS', 'CUARTOS', 'SEMIS', 'FINAL'];
+    let phaseEndSnapshot = maxAssignedEndMin(state);
+
     for (const phase of phaseOrder) {
         const batch = remaining.filter((s) => s.phase === phase);
         if (!batch.length) continue;
 
         const minAfterPrevious =
-            phase === 'GRUPOS' ? undefined : nextPhaseSlotMin(slotStartsMin, state);
+            phase === 'GRUPOS'
+                ? undefined
+                : minSlotStartFromPhaseEnd(slotStartsMin, phaseEndSnapshot);
 
         scheduleSpecBatch(state, batch, {
             slotTimePolicy: phase === 'FINAL' ? 'latest' : 'earliest',
@@ -776,6 +801,8 @@ function scheduleUnplacedRecovery(state: ScheduleGreedyState, slotStartsMin: num
             relaxSlotRestrictions: true,
             minSlotStartMin: minAfterPrevious,
         });
+
+        phaseEndSnapshot = maxAssignedEndMin(state);
     }
 
     if (!state.unplaced.length) return;
@@ -822,20 +849,23 @@ function scheduleGreedy(
         slotTimePolicy: 'earliest',
         forbiddenSlotStarts: groupsForbidden,
     });
+    const endAfterGrupos = maxAssignedEndMin(state);
 
     scheduleSpecBatch(state, cuartos, {
         slotTimePolicy: 'earliest',
         forbiddenSlotStarts: reservedFinalSlots,
-        minSlotStartMin: nextPhaseSlotMin(slotStartsMin, state),
+        minSlotStartMin: minSlotStartFromPhaseEnd(slotStartsMin, endAfterGrupos),
     });
+    const endAfterCuartos = maxAssignedEndMin(state);
 
     scheduleSpecBatch(state, semis, {
         slotTimePolicy: 'earliest',
         forbiddenSlotStarts: reservedFinalSlots,
-        minSlotStartMin: nextPhaseSlotMin(slotStartsMin, state),
+        minSlotStartMin: minSlotStartFromPhaseEnd(slotStartsMin, endAfterCuartos),
     });
+    const endAfterSemis = maxAssignedEndMin(state);
 
-    const minAfterKnockout = nextPhaseSlotMin(slotStartsMin, state);
+    const minAfterKnockout = minSlotStartFromPhaseEnd(slotStartsMin, endAfterSemis);
     const finalSlots = reservedFinalSlots.filter(
         (ts) => minAfterKnockout == null || ts >= minAfterKnockout
     );
@@ -851,7 +881,7 @@ function scheduleGreedy(
         state.unplaced = state.unplaced.filter((s) => s.phase !== 'FINAL');
         scheduleSpecBatch(state, unplacedFinals, {
             slotTimePolicy: 'latest',
-            minSlotStartMin: nextPhaseSlotMin(slotStartsMin, state),
+            minSlotStartMin: minAfterKnockout,
         });
     }
 
