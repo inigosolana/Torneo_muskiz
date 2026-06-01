@@ -14,7 +14,7 @@ type Payload = {
   courts: string[];
   lunch?: { start: string; end: string };
   slots: string[];
-  placed: { id: string; time: string; court: string; teamA: string; teamB: string }[];
+  placed: { id: string; time: string; court: string; teamA: string; teamB: string; round?: string }[];
   pending: { id: string; teamA: string; teamB: string; round: string }[];
   organizerNotes?: string;
   rulesSummary?: string;
@@ -27,17 +27,68 @@ function timeToMinutes(t: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-function occupied(payload: Payload, accepted: Assignment[]) {
-  const out = payload.placed.map((p) => ({
+type OccupiedSlot = { time: string; court: string; teamA: string; teamB: string; round?: string };
+
+const DIVISION_CODE_RX = /\b(CF|CM|JF|JM|SF|SM|IF|IM)\b/;
+
+function divisionFromRound(round?: string): string | null {
+  if (!round) return null;
+  const m = DIVISION_CODE_RX.exec(round);
+  return m?.[1] ?? null;
+}
+
+function normalizeLabel(name: string): string {
+  return name.trim().replace(/\s+/g, " ");
+}
+
+function isPlaceholder(name: string): boolean {
+  const n = normalizeLabel(name);
+  if (/^\d+º\b/u.test(n)) return true;
+  if (/^Gan\./i.test(n)) return true;
+  if (/^[12]º\s+Clasificado\b/i.test(n)) return true;
+  if (/^3º\s+(peor|mejor)\b/i.test(n)) return true;
+  if (/^3º\s+Gr\./i.test(n)) return true;
+  if (/^1º\s+Grupo\b/i.test(n)) return true;
+  if (/^2º\s+Grupo\b/i.test(n)) return true;
+  if (/^1º\s+Gr\./i.test(n)) return true;
+  if (/^2º\s+Gr\./i.test(n)) return true;
+  return false;
+}
+
+function sameRealTeam(
+  a: { teamA: string; teamB: string; round?: string },
+  b: { teamA: string; teamB: string; round?: string },
+): boolean {
+  const codeA = divisionFromRound(a.round);
+  const codeB = divisionFromRound(b.round);
+  if (!codeA || !codeB || codeA !== codeB) return false;
+  const aTeams = [a.teamA, a.teamB]
+    .filter((t) => t && !isPlaceholder(t))
+    .map((t) => normalizeLabel(t));
+  const bSet = new Set(
+    [b.teamA, b.teamB].filter((t) => t && !isPlaceholder(t)).map((t) => normalizeLabel(t)),
+  );
+  return aTeams.some((t) => bSet.has(t));
+}
+
+function occupied(payload: Payload, accepted: Assignment[]): OccupiedSlot[] {
+  const out: OccupiedSlot[] = payload.placed.map((p) => ({
     time: p.time,
     court: p.court,
     teamA: p.teamA,
     teamB: p.teamB,
+    round: p.round,
   }));
   for (const a of accepted) {
     const p = payload.pending.find((x) => x.id === a.id);
     if (!p) continue;
-    out.push({ time: a.time, court: a.court, teamA: p.teamA, teamB: p.teamB });
+    out.push({
+      time: a.time,
+      court: a.court,
+      teamA: p.teamA,
+      teamB: p.teamB,
+      round: p.round,
+    });
   }
   return out;
 }
@@ -51,14 +102,14 @@ function isValid(payload: Payload, assignment: Assignment, accepted: Assignment[
   const slotMins = payload.slotDurationMins;
   const tStart = timeToMinutes(assignment.time);
   const tEnd = tStart + slotMins;
-  const teams = [pending.teamA, pending.teamB];
+  const moving = { teamA: pending.teamA, teamB: pending.teamB, round: pending.round };
 
   for (const other of occupied(payload, accepted)) {
     const oStart = timeToMinutes(other.time);
     const oEnd = oStart + slotMins;
     if (tStart >= oEnd || tEnd <= oStart) continue;
     if (other.court === assignment.court) return false;
-    if (teams.some((t) => [other.teamA, other.teamB].includes(t))) return false;
+    if (sameRealTeam(moving, other)) return false;
   }
   return true;
 }

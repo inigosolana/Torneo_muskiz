@@ -691,12 +691,43 @@ interface ScheduledCell {
     spec: RawMatchSpec;
 }
 
-/** Equipos ficticios de cruces (no aplican descanso entre partidos). */
-function isPlaceholderTeamName(name: string): boolean {
-    return (
-        /grupo|gr\.\s*[a-d]\b|clasificado|gan\.|ganador|ctos?\b|mejor|peor|repesca|consolaci[oó]n/i.test(name) ||
-        /^\d+º/i.test(name)
+/** Normaliza nombre de equipo para comparaciones (sin confundir por espacios). */
+export function normalizeTeamLabel(name: string): string {
+    return name.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Cruces ficticos (1º Gr.A, Gan.Semi…). Solo patrones de plantilla, no subcadenas
+ * («grupo», «mejor»…) que aparecen en nombres reales de clubes.
+ */
+export function isPlaceholderTeamName(name: string): boolean {
+    const n = normalizeTeamLabel(name);
+    if (!n) return false;
+    if (/^\d+º\b/u.test(n)) return true;
+    if (/^Gan\./i.test(n)) return true;
+    if (/^[12]º\s+Clasificado\b/i.test(n)) return true;
+    if (/^3º\s+(peor|mejor)\b/i.test(n)) return true;
+    if (/^3º\s+Gr\./i.test(n)) return true;
+    if (/^1º\s+Grupo\b/i.test(n)) return true;
+    if (/^2º\s+Grupo\b/i.test(n)) return true;
+    if (/^1º\s+Gr\./i.test(n)) return true;
+    if (/^2º\s+Gr\./i.test(n)) return true;
+    return false;
+}
+
+/** Clave estable por equipo real (id de BD) o placeholder; nunca por subcadena del nombre. */
+export function resolveScheduleTeamKey(
+    division: Team['division'],
+    teamName: string,
+    teams: Team[]
+): string {
+    const label = normalizeTeamLabel(teamName);
+    if (isPlaceholderTeamName(label)) return `ph:${division}:${label}`;
+    const roster = teams.filter(
+        (t) => t.division === division && normalizeTeamLabel(t.name) === label
     );
+    if (roster.length >= 1) return `id:${roster[0]!.id}`;
+    return `name:${division}:${label}`;
 }
 
 /** Franjas reservadas al final del día para colocar todas las finales. */
@@ -714,40 +745,42 @@ type GreedyAssignment = {
     tEnd: number;
     courtIdx: number;
     teams: [string, string];
+    teamKeys: [string, string];
     division: Team['division'];
 };
 
-function assignmentUsesTeam(a: GreedyAssignment, teamName: string): boolean {
-    return a.teams[0] === teamName || a.teams[1] === teamName;
+function assignmentUsesKey(a: GreedyAssignment, teamKey: string): boolean {
+    return a.teamKeys[0] === teamKey || a.teamKeys[1] === teamKey;
 }
 
-/** Conflicto de equipo solo dentro de la misma división (Cadete F ≠ Cadete M). */
+function isRealTeamKey(key: string): boolean {
+    return key.startsWith('id:') || key.startsWith('name:');
+}
+
+/** Conflicto de equipo solo misma división y misma identidad (id), no nombres parecidos. */
 function teamsBusyInDivision(
     assigned: GreedyAssignment[],
     division: Team['division'],
-    teamsPair: [string, string],
+    teamKeys: [string, string],
     tStart: number,
     tEnd: number
 ): boolean {
     return assigned.some((x) => {
         if (x.division !== division) return false;
         if (x.tStart >= tEnd || x.tEnd <= tStart) return false;
-        for (const t of teamsPair) {
-            if (isPlaceholderTeamName(t)) continue;
-            if (assignmentUsesTeam(x, t)) return true;
+        for (const k of teamKeys) {
+            if (!isRealTeamKey(k)) continue;
+            if (assignmentUsesKey(x, k)) return true;
         }
         return false;
     });
-}
-
-function teamScheduleKey(division: Team['division'], teamName: string): string {
-    return `${division}\0${teamName}`;
 }
 
 interface ScheduleGreedyState {
     slotStartsMin: number[];
     courts: string[];
     slotMins: number;
+    scheduleTeams: Team[];
     assigned: GreedyAssignment[];
     placed: ScheduledCell[];
     unplaced: RawMatchSpec[];
@@ -756,9 +789,21 @@ interface ScheduleGreedyState {
 function createScheduleGreedyState(
     slotStartsMin: number[],
     courts: string[],
-    slotMins: number
+    slotMins: number,
+    scheduleTeams: Team[]
 ): ScheduleGreedyState {
-    return { slotStartsMin, courts, slotMins, assigned: [], placed: [], unplaced: [] };
+    return { slotStartsMin, courts, slotMins, scheduleTeams, assigned: [], placed: [], unplaced: [] };
+}
+
+function pairTeamKeys(
+    division: Team['division'],
+    teamsPair: [string, string],
+    scheduleTeams: Team[]
+): [string, string] {
+    return [
+        resolveScheduleTeamKey(division, teamsPair[0], scheduleTeams),
+        resolveScheduleTeamKey(division, teamsPair[1], scheduleTeams),
+    ];
 }
 
 function scheduleSpecBatch(
@@ -790,47 +835,53 @@ function scheduleSpecBatch(
 
     const courtUsage = () => courts.map((_, ci) => assigned.filter((x) => x.courtIdx === ci).length);
 
-    const teamLastEnd = (division: Team['division'], team: string): number => {
+    const { scheduleTeams } = state;
+
+    const teamLastEnd = (division: Team['division'], teamKey: string): number => {
         let last = -Infinity;
         for (const x of assigned) {
             if (x.division !== division) continue;
-            if (assignmentUsesTeam(x, team)) last = Math.max(last, x.tEnd);
+            if (assignmentUsesKey(x, teamKey)) last = Math.max(last, x.tEnd);
         }
         return last;
     };
 
-    const teamMatchCount = (division: Team['division'], team: string): number =>
-        assigned.filter((x) => x.division === division && assignmentUsesTeam(x, team)).length;
+    const teamMatchCount = (division: Team['division'], teamKey: string): number =>
+        assigned.filter((x) => x.division === division && assignmentUsesKey(x, teamKey)).length;
 
-    const restGapBefore = (division: Team['division'], team: string, ts: number): number => {
-        const last = teamLastEnd(division, team);
+    const restGapBefore = (division: Team['division'], teamKey: string, ts: number): number => {
+        const last = teamLastEnd(division, teamKey);
         return Number.isFinite(last) && last !== -Infinity ? ts - last : Infinity;
     };
 
     const courtBusy = (courtIdx: number, tStart: number, tEnd: number): boolean =>
         assigned.some((x) => x.courtIdx === courtIdx && x.tStart < tEnd && x.tEnd > tStart);
 
-    const hasBackToBack = (division: Team['division'], teams: [string, string], ts: number): boolean => {
-        for (const t of teams) {
-            if (isPlaceholderTeamName(t)) continue;
-            if (restGapBefore(division, t, ts) < slotMins) return true;
+    const hasBackToBack = (
+        division: Team['division'],
+        teamKeys: [string, string],
+        ts: number
+    ): boolean => {
+        for (const k of teamKeys) {
+            if (!isRealTeamKey(k)) continue;
+            if (restGapBefore(division, k, ts) < slotMins) return true;
         }
         return false;
     };
 
-    const teamAssignedStarts = (division: Team['division'], team: string): number[] =>
+    const teamAssignedStarts = (division: Team['division'], teamKey: string): number[] =>
         assigned
-            .filter((x) => x.division === division && assignmentUsesTeam(x, team))
+            .filter((x) => x.division === division && assignmentUsesKey(x, teamKey))
             .map((x) => x.tStart);
 
     /** Tres franjas seguidas (sin descanso) si se coloca el partido en proposedStart. */
     const hasTripleConsecutive = (
         division: Team['division'],
-        team: string,
+        teamKey: string,
         proposedStart: number
     ): boolean => {
-        if (isPlaceholderTeamName(team)) return false;
-        const starts = [...teamAssignedStarts(division, team), proposedStart].sort((a, b) => a - b);
+        if (!isRealTeamKey(teamKey)) return false;
+        const starts = [...teamAssignedStarts(division, teamKey), proposedStart].sort((a, b) => a - b);
         for (let i = 0; i <= starts.length - 3; i++) {
             const s0 = starts[i]!;
             const s1 = starts[i + 1]!;
@@ -842,14 +893,15 @@ function scheduleSpecBatch(
 
     const matchWouldTripleConsecutive = (
         division: Team['division'],
-        teams: [string, string],
+        teamKeys: [string, string],
         ts: number
     ): boolean =>
-        hasTripleConsecutive(division, teams[0], ts) || hasTripleConsecutive(division, teams[1], ts);
+        hasTripleConsecutive(division, teamKeys[0], ts) ||
+        hasTripleConsecutive(division, teamKeys[1], ts);
 
     const scoreSlot = (
         division: Team['division'],
-        teams: [string, string],
+        teamKeys: [string, string],
         ts: number,
         ci: number,
         usage: number[],
@@ -857,14 +909,16 @@ function scheduleSpecBatch(
         slotTimePolicy: SlotTimePolicy
     ): number | null => {
         const te = ts + slotMins;
-        if (courtBusy(ci, ts, te) || teamsBusyInDivision(assigned, division, teams, ts, te)) return null;
-        if (matchWouldTripleConsecutive(division, teams, ts)) return null;
+        if (courtBusy(ci, ts, te) || teamsBusyInDivision(assigned, division, teamKeys, ts, te)) {
+            return null;
+        }
+        if (matchWouldTripleConsecutive(division, teamKeys, ts)) return null;
 
-        const gapA = restGapBefore(division, teams[0], ts);
-        const gapB = restGapBefore(division, teams[1], ts);
+        const gapA = restGapBefore(division, teamKeys[0], ts);
+        const gapB = restGapBefore(division, teamKeys[1], ts);
         const minGap = Math.min(gapA, gapB);
 
-        if (!allowBackToBack && hasBackToBack(division, teams, ts)) return null;
+        if (!allowBackToBack && hasBackToBack(division, teamKeys, ts)) return null;
 
         const PENALTY_BACK_TO_BACK = 50_000_000;
         const PENALTY_ONE_SLOT_REST = 8_000_000;
@@ -884,7 +938,7 @@ function scheduleSpecBatch(
 
     const findBestSlot = (
         division: Team['division'],
-        teams: [string, string],
+        teamKeys: [string, string],
         allowBackToBack: boolean,
         slotTimePolicy: SlotTimePolicy
     ): { ts: number; ci: number } | null => {
@@ -902,7 +956,7 @@ function scheduleSpecBatch(
             const usage = courtUsage();
             const courtOrder = courts.map((_, ci) => ci).sort((a, b) => usage[a]! - usage[b]!);
             for (const ci of courtOrder) {
-                const score = scoreSlot(division, teams, ts, ci, usage, allowBackToBack, slotTimePolicy);
+                const score = scoreSlot(division, teamKeys, ts, ci, usage, allowBackToBack, slotTimePolicy);
                 if (score !== null && score < bestScore) {
                     bestScore = score;
                     best = { ts, ci };
@@ -915,9 +969,23 @@ function scheduleSpecBatch(
     const sortedSpecs = [...specs].sort((a, b) => {
         if (a.phaseOrder !== b.phaseOrder) return a.phaseOrder - b.phaseOrder;
         const loadA =
-            teamMatchCount(a.division, a.teamA) + teamMatchCount(a.division, a.teamB);
+            teamMatchCount(
+                a.division,
+                resolveScheduleTeamKey(a.division, a.teamA, scheduleTeams)
+            ) +
+            teamMatchCount(
+                a.division,
+                resolveScheduleTeamKey(a.division, a.teamB, scheduleTeams)
+            );
         const loadB =
-            teamMatchCount(b.division, b.teamA) + teamMatchCount(b.division, b.teamB);
+            teamMatchCount(
+                b.division,
+                resolveScheduleTeamKey(b.division, b.teamA, scheduleTeams)
+            ) +
+            teamMatchCount(
+                b.division,
+                resolveScheduleTeamKey(b.division, b.teamB, scheduleTeams)
+            );
         if (loadB !== loadA) return loadB - loadA;
         return a.roundLabel.localeCompare(b.roundLabel, 'es');
     });
@@ -925,11 +993,12 @@ function scheduleSpecBatch(
     for (const spec of sortedSpecs) {
         const teamsPair: [string, string] = [spec.teamA, spec.teamB];
         const div = spec.division;
+        const keys = pairTeamKeys(div, teamsPair, scheduleTeams);
         let best = options.allowBackToBackOnly
-            ? findBestSlot(div, teamsPair, true, options.slotTimePolicy)
-            : findBestSlot(div, teamsPair, false, options.slotTimePolicy);
+            ? findBestSlot(div, keys, true, options.slotTimePolicy)
+            : findBestSlot(div, keys, false, options.slotTimePolicy);
         if (!best && !options.allowBackToBackOnly) {
-            best = findBestSlot(div, teamsPair, true, options.slotTimePolicy);
+            best = findBestSlot(div, keys, true, options.slotTimePolicy);
         }
 
         if (best) {
@@ -939,6 +1008,7 @@ function scheduleSpecBatch(
                 tEnd: te,
                 courtIdx: best.ci,
                 teams: teamsPair,
+                teamKeys: keys,
                 division: div,
             });
             state.placed.push({
@@ -1074,7 +1144,8 @@ function scheduleGreedy(
     day: MuskizScheduleDayLabel,
     specs: RawMatchSpec[],
     configs: Record<MuskizScheduleDayLabel, DayConfig>,
-    slotMins: number
+    slotMins: number,
+    scheduleTeams: Team[]
 ): { placed: ScheduledCell[]; unplaced: RawMatchSpec[] } {
     const cfg = configs[day];
     const slotStartsMin = generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch);
@@ -1090,7 +1161,7 @@ function scheduleGreedy(
     );
     const groupsForbidden = [...new Set([...reservedFinalSlots, ...reservedKnockoutSlots])];
 
-    const state = createScheduleGreedyState(slotStartsMin, courts, slotMins);
+    const state = createScheduleGreedyState(slotStartsMin, courts, slotMins, scheduleTeams);
 
     scheduleSpecBatch(state, grupos, {
         slotTimePolicy: 'earliest',
@@ -1207,8 +1278,9 @@ function enforcePhaseTimeOrder(
                 !(
                     a.tStart === cell.timeMin &&
                     a.courtIdx === cell.courtIdx &&
-                    a.teams[0] === cell.spec.teamA &&
-                    a.teams[1] === cell.spec.teamB
+                    normalizeTeamLabel(a.teams[0]) === normalizeTeamLabel(cell.spec.teamA) &&
+                    normalizeTeamLabel(a.teams[1]) === normalizeTeamLabel(cell.spec.teamB) &&
+                    a.division === cell.spec.division
                 )
         );
         state.unplaced.push(cell.spec);
@@ -1253,18 +1325,20 @@ function exhaustivePlaceUnplacedPhased(
     const courtBusy = (courtIdx: number, tStart: number, tEnd: number): boolean =>
         assigned.some((x) => x.courtIdx === courtIdx && x.tStart < tEnd && x.tEnd > tStart);
 
-    const teamAssignedStarts = (division: Team['division'], team: string): number[] =>
+    const { scheduleTeams } = state;
+
+    const teamAssignedStarts = (division: Team['division'], teamKey: string): number[] =>
         assigned
-            .filter((x) => x.division === division && assignmentUsesTeam(x, team))
+            .filter((x) => x.division === division && assignmentUsesKey(x, teamKey))
             .map((x) => x.tStart);
 
     const hasTripleConsecutive = (
         division: Team['division'],
-        team: string,
+        teamKey: string,
         proposedStart: number
     ): boolean => {
-        if (isPlaceholderTeamName(team)) return false;
-        const starts = [...teamAssignedStarts(division, team), proposedStart].sort((a, b) => a - b);
+        if (!isRealTeamKey(teamKey)) return false;
+        const starts = [...teamAssignedStarts(division, teamKey), proposedStart].sort((a, b) => a - b);
         for (let i = 0; i <= starts.length - 3; i++) {
             const s0 = starts[i]!;
             const s1 = starts[i + 1]!;
@@ -1286,6 +1360,7 @@ function exhaustivePlaceUnplacedPhased(
         for (const spec of batch) {
             const teamsPair: [string, string] = [spec.teamA, spec.teamB];
             const div = spec.division;
+            const keys = pairTeamKeys(div, teamsPair, scheduleTeams);
             let best: { ts: number; ci: number } | null = null;
             let bestScore = Infinity;
 
@@ -1295,22 +1370,22 @@ function exhaustivePlaceUnplacedPhased(
 
                 const te = ts + slotMins;
                 for (let ci = 0; ci < courts.length; ci++) {
-                    if (courtBusy(ci, ts, te) || teamsBusyInDivision(assigned, div, teamsPair, ts, te)) {
+                    if (courtBusy(ci, ts, te) || teamsBusyInDivision(assigned, div, keys, ts, te)) {
                         continue;
                     }
                     if (
-                        hasTripleConsecutive(div, teamsPair[0], ts) ||
-                        hasTripleConsecutive(div, teamsPair[1], ts)
+                        hasTripleConsecutive(div, keys[0], ts) ||
+                        hasTripleConsecutive(div, keys[1], ts)
                     ) {
                         continue;
                     }
 
                     let score = ts * 10 + ci;
-                    for (const t of teamsPair) {
-                        if (isPlaceholderTeamName(t)) continue;
+                    for (const k of keys) {
+                        if (!isRealTeamKey(k)) continue;
                         let last = -Infinity;
                         for (const x of assigned) {
-                            if (x.division !== div || !assignmentUsesTeam(x, t)) continue;
+                            if (x.division !== div || !assignmentUsesKey(x, k)) continue;
                             last = Math.max(last, x.tEnd);
                         }
                         const gap = Number.isFinite(last) && last !== -Infinity ? ts - last : Infinity;
@@ -1331,6 +1406,7 @@ function exhaustivePlaceUnplacedPhased(
                     tEnd: te,
                     courtIdx: best.ci,
                     teams: teamsPair,
+                    teamKeys: keys,
                     division: div,
                 });
                 state.placed.push({
@@ -1599,12 +1675,17 @@ export function applyMuskizSlotAssignments(
 }
 
 /** Cuenta equipos reales con dos partidos en franjas consecutivas (sin descanso). */
-function countBackToBackTeamSlots(placed: ScheduledCell[], slotMins: number): number {
+function countBackToBackTeamSlots(
+    placed: ScheduledCell[],
+    slotMins: number,
+    scheduleTeams: Team[]
+): number {
     const byTeam = new Map<string, number[]>();
     for (const cell of placed) {
         for (const t of [cell.spec.teamA, cell.spec.teamB]) {
             if (isPlaceholderTeamName(t)) continue;
-            const key = teamScheduleKey(cell.spec.division, t);
+            const key = resolveScheduleTeamKey(cell.spec.division, t, scheduleTeams);
+            if (!isRealTeamKey(key)) continue;
             if (!byTeam.has(key)) byTeam.set(key, []);
             byTeam.get(key)!.push(cell.timeMin);
         }
@@ -1698,9 +1779,9 @@ export function buildMuskizDayDraftMatches(
         };
     }
 
-    const { placed, unplaced } = scheduleGreedy(targetDay, interleaved, configs, slotMins);
+    const { placed, unplaced } = scheduleGreedy(targetDay, interleaved, configs, slotMins, paid);
 
-    const backToBack = countBackToBackTeamSlots(placed, slotMins);
+    const backToBack = countBackToBackTeamSlots(placed, slotMins, paid);
     if (backToBack > 0) {
         const pendingNote = unplaced.length > 0 ? ' Algunos siguen sin hueco (PENDIENTE).' : '';
         warnings.push(
@@ -1826,8 +1907,14 @@ function realTeamsOverlapInSameDivision(
     const divA = divisionFromMatchRound(a.round);
     const divB = divisionFromMatchRound(b.round);
     if (!divA || !divB || divA !== divB) return false;
-    const aTeams = [a.teamA, a.teamB].filter((t) => t && !isPlaceholderTeamName(t));
-    const bSet = new Set([b.teamA, b.teamB]);
+    const aTeams = [a.teamA, a.teamB]
+        .filter((t) => t && !isPlaceholderTeamName(t))
+        .map((t) => normalizeTeamLabel(t));
+    const bSet = new Set(
+        [b.teamA, b.teamB]
+            .filter((t) => t && !isPlaceholderTeamName(t))
+            .map((t) => normalizeTeamLabel(t))
+    );
     return aTeams.some((t) => bSet.has(t));
 }
 
@@ -1849,14 +1936,15 @@ export function resolveTeamForMatchSide(
     teams: Team[]
 ): Team | null {
     const division = resolveMatchDivision(match, teams);
+    const label = normalizeTeamLabel(teamName);
     const roster = division
-        ? teams.filter((t) => t.division === division && t.name === teamName)
-        : teams.filter((t) => t.name === teamName);
+        ? teams.filter((t) => t.division === division && normalizeTeamLabel(t.name) === label)
+        : teams.filter((t) => normalizeTeamLabel(t.name) === label);
     if (roster.length === 1) return roster[0]!;
     return null;
 }
 
-/** Misma identidad de equipo en dos partidos (solo compara dentro de la misma categoría). */
+/** Misma identidad de equipo en dos partidos (id de BD; nunca por subcadena del nombre). */
 export function isSameScheduledTeam(
     teamName: string,
     matchA: Match,
@@ -1867,13 +1955,20 @@ export function isSameScheduledTeam(
     const divB = resolveMatchDivision(matchB, teams);
     if (!divA || !divB || divA !== divB) return false;
 
+    const keyA = resolveScheduleTeamKey(divA, teamName, teams);
+    const keyB = resolveScheduleTeamKey(divB, teamName, teams);
+    if (isRealTeamKey(keyA) && keyA === keyB) return true;
+
     const teamA = resolveTeamForMatchSide(matchA, teamName, teams);
     const teamB = resolveTeamForMatchSide(matchB, teamName, teams);
     if (teamA && teamB) return teamA.id === teamB.id;
-    return (
-        (matchA.teamA === teamName || matchA.teamB === teamName) &&
-        (matchB.teamA === teamName || matchB.teamB === teamName)
-    );
+
+    const label = normalizeTeamLabel(teamName);
+    const inA =
+        normalizeTeamLabel(matchA.teamA) === label || normalizeTeamLabel(matchA.teamB) === label;
+    const inB =
+        normalizeTeamLabel(matchB.teamA) === label || normalizeTeamLabel(matchB.teamB) === label;
+    return inA && inB;
 }
 
 export interface DayGridOptions {

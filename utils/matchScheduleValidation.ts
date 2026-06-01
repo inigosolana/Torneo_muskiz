@@ -1,17 +1,11 @@
 import type { Match, Team } from '../types';
-import { isSameScheduledTeam, resolveMatchDivision } from '../services/muskizScheduleSimulator';
+import {
+    isPlaceholderTeamName,
+    isSameScheduledTeam,
+    resolveMatchDivision,
+} from '../services/muskizScheduleSimulator';
 
-/** Equipos ficticios de cruces (no bloquean por duplicado de nombre). */
-export function isPlaceholderTeamName(name: string): boolean {
-    return (
-        /grupo|gr\.\s*[a-d]\b|clasificado|gan\.|ganador|ctos?\b|mejor|peor|repesca|consolaci[oó]n/i.test(name) ||
-        /^\d+º/i.test(name)
-    );
-}
-
-function teamsInMatch(m: Match): string[] {
-    return [m.teamA, m.teamB].filter((t) => t && !isPlaceholderTeamName(t));
-}
+export { isPlaceholderTeamName };
 
 export type MatchSlotValidationResult =
     | { ok: true }
@@ -19,7 +13,7 @@ export type MatchSlotValidationResult =
 
 /**
  * Valida mover/editar un partido: misma franja horaria no puede repetir pista ni equipo real.
- * Los equipos solo chocan dentro de la misma categoría (nombres iguales en CF/CM no se mezclan).
+ * Los equipos solo chocan dentro de la misma división (id de equipo, no nombres parecidos).
  */
 export function validateMatchSlotChange(
     matches: Match[],
@@ -55,10 +49,7 @@ export function validateMatchSlotChange(
         }
 
         for (const team of movingTeams) {
-            const conflicts = teamsInMatch(other).some((otherTeam) =>
-                isSameScheduledTeam(team, movingWithPatch, other, teams)
-            );
-            if (!conflicts) continue;
+            if (!isSameScheduledTeam(team, movingWithPatch, other, teams)) continue;
 
             const catHint = movingDivision ? ` (${movingDivision})` : '';
             return {
