@@ -1,25 +1,51 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { getEdgeFunctionErrorMessage } from '../utils/invokeEdgeFunction';
+
+function isPasswordRecoveryUrl(): boolean {
+    if (typeof window === 'undefined') return false;
+    const hash = window.location.hash.replace(/^#/, '');
+    const params = new URLSearchParams(hash);
+    if (params.get('type') === 'recovery') return true;
+    return window.location.search.includes('type=recovery');
+}
 
 export const ManagerLogin: React.FC = () => {
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [recoveryMode, setRecoveryMode] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isResetting, setIsResetting] = useState(false);
+
+    useEffect(() => {
+        if (isPasswordRecoveryUrl()) {
+            setRecoveryMode(true);
+        }
+
+        const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                setRecoveryMode(true);
+            }
+        });
+
+        return () => sub.subscription.unsubscribe();
+    }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
 
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        
+
         if (error) {
             toast.error('Email o contraseña incorrectos.');
             console.error('Auth error:', error.message);
         } else if (data.user) {
-            // Role validation first
             const { data: profile } = await supabase
                 .from('profiles')
                 .select('role')
@@ -41,7 +67,9 @@ export const ManagerLogin: React.FC = () => {
                     toast.error('No se pudo validar tus equipos aprobados. Intenta de nuevo.');
                 } else if (!approvedTeams || approvedTeams < 1) {
                     await supabase.auth.signOut();
-                    toast.error('Aun no tienes ningun equipo aprobado. Cuando te autoricen el primero podras entrar al panel.');
+                    toast.error(
+                        'Aún no tienes ningún equipo aprobado. Cuando te autoricen el primero podrás entrar al panel.'
+                    );
                 } else {
                     toast.success('Acceso concedido. Bienvenido a tu panel de gestión.');
                     navigate('/team-manager');
@@ -53,23 +81,114 @@ export const ManagerLogin: React.FC = () => {
     };
 
     const handleForgotPassword = async () => {
-        if (!email) {
+        if (!email.trim()) {
             toast.error('Introduce tu email para restablecer la contraseña.');
             return;
         }
 
-        const { data, error } = await supabase.functions.invoke('request-manager-password-reset', {
-            body: { email },
-        });
+        setIsLoading(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('request-manager-password-reset', {
+                body: { email: email.trim().toLowerCase() },
+            });
 
-        if (error) {
-            toast.error('Error: ' + error.message);
-        } else if ((data as any)?.error) {
-            toast.error((data as any).error);
-        } else {
-            toast.success('Se ha enviado un email de recuperación a tu correo.');
+            if (error) {
+                const msg = await getEdgeFunctionErrorMessage(error, data);
+                toast.error(msg);
+            } else if (data && typeof data === 'object' && 'error' in data && (data as { error?: string }).error) {
+                toast.error((data as { error: string }).error);
+            } else {
+                toast.success(
+                    'Si el correo está registrado, recibirás un enlace para restablecer la contraseña (revisa spam).'
+                );
+            }
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Error al solicitar recuperación.');
+        } finally {
+            setIsLoading(false);
         }
     };
+
+    const handleSetNewPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newPassword.length < 6) {
+            toast.error('La contraseña debe tener al menos 6 caracteres.');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            toast.error('Las contraseñas no coinciden.');
+            return;
+        }
+
+        setIsResetting(true);
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        setIsResetting(false);
+
+        if (error) {
+            toast.error(error.message || 'No se pudo guardar la contraseña. Solicita un nuevo enlace.');
+            return;
+        }
+
+        toast.success('Contraseña actualizada. Ya puedes entrar con tu nueva contraseña.');
+        setRecoveryMode(false);
+        setNewPassword('');
+        setConfirmPassword('');
+        window.history.replaceState({}, '', '/manager-login');
+        await supabase.auth.signOut();
+    };
+
+    if (recoveryMode) {
+        return (
+            <div className="min-h-[80vh] flex flex-col items-center justify-center bg-background-light dark:bg-background-dark p-4">
+                <div className="w-full max-w-md bg-white dark:bg-surface-dark p-8 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/5">
+                    <div className="text-center mb-6">
+                        <span className="material-symbols-outlined text-4xl text-primary">lock_reset</span>
+                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mt-3">Nueva contraseña</h2>
+                        <p className="text-slate-500 text-sm mt-2">
+                            Elige una contraseña nueva para tu cuenta de responsable.
+                        </p>
+                    </div>
+                    <form onSubmit={handleSetNewPassword} className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                                Nueva contraseña
+                            </label>
+                            <input
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                autoComplete="new-password"
+                                required
+                                minLength={6}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                                Repetir contraseña
+                            </label>
+                            <input
+                                type="password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                autoComplete="new-password"
+                                required
+                                minLength={6}
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={isResetting}
+                            className="w-full bg-primary text-background-dark font-bold py-3 rounded-xl disabled:opacity-60"
+                        >
+                            {isResetting ? 'Guardando…' : 'Guardar contraseña'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-[80vh] flex flex-col items-center justify-center bg-background-light dark:bg-background-dark p-4">
@@ -79,14 +198,20 @@ export const ManagerLogin: React.FC = () => {
                         <span className="material-symbols-outlined text-4xl">management</span>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Panel de Responsables</h2>
-                    <p className="text-slate-500 text-sm mt-2">Gestiona tus equipos y sube la documentación de tus jugadores.</p>
+                    <p className="text-slate-500 text-sm mt-2">
+                        Gestiona tus equipos y sube la documentación de tus jugadores.
+                    </p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-6">
                     <div>
-                        <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Email del Responsable</label>
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-2">
+                            Email del Responsable
+                        </label>
                         <div className="relative">
-                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">mail</span>
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                                mail
+                            </span>
                             <input
                                 type="email"
                                 value={email}
@@ -101,7 +226,9 @@ export const ManagerLogin: React.FC = () => {
                     <div>
                         <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Contraseña</label>
                         <div className="relative">
-                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">lock</span>
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                                lock
+                            </span>
                             <input
                                 type="password"
                                 value={password}
@@ -116,7 +243,7 @@ export const ManagerLogin: React.FC = () => {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-4 rounded-xl shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                        className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-4 rounded-xl shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-60"
                     >
                         {isLoading ? (
                             <span className="material-symbols-outlined animate-spin">progress_activity</span>
@@ -132,11 +259,12 @@ export const ManagerLogin: React.FC = () => {
                         <button
                             type="button"
                             onClick={handleForgotPassword}
-                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs transition-colors"
+                            disabled={isLoading}
+                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs transition-colors disabled:opacity-50"
                         >
                             ¿Has olvidado tu contraseña?
                         </button>
-                        
+
                         <div className="space-y-1">
                             <p className="text-xs text-slate-400">¿Todavía no has inscrito a tu equipo?</p>
                             <button
