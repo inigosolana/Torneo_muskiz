@@ -244,23 +244,113 @@ function splitNamesIntoGroups(sorted: string[], groupCount: number): { key: stri
     return groups;
 }
 
+/** Club organizador: repartir en grupos distintos y priorizar primeras franjas del día. */
+export function isKolosauriosAffinity(team: Pick<Team, 'name' | 'city'>): boolean {
+    const blob = `${team.name} ${team.city ?? ''}`.toLowerCase();
+    return /kolosaur/.test(blob);
+}
+
+function groupCapacitiesForCount(n: number, groupCount: number): number[] {
+    const fixed = expectedGroupSizesForTeamCount(n);
+    if (fixed && fixed.length === groupCount) return fixed;
+    const caps: number[] = [];
+    const base = Math.floor(n / groupCount);
+    const extras = n % groupCount;
+    for (let i = 0; i < groupCount; i++) caps.push(base + (i < extras ? 1 : 0));
+    return caps;
+}
+
+/**
+ * Reparto automático con Kolosaurios repartidos entre grupos (1 por grupo si cabe).
+ * 7 y 9 equipos usan tamaños fijos 3+4 y 4+5.
+ */
+function distributeTeamsIntoGroups(
+    teamList: Team[],
+    groupCount: number
+): { key: string; names: string[] }[] {
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const n = teamList.length;
+    const capacities = groupCapacitiesForCount(n, groupCount);
+    const groups = capacities.map((capacity, i) => ({
+        key: letters[i] ?? String(i + 1),
+        names: [] as string[],
+        capacity,
+    }));
+
+    const kolosaurios = teamList
+        .filter(isKolosauriosAffinity)
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    const others = teamList
+        .filter((t) => !isKolosauriosAffinity(t))
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
+    const groupHasKolosaurios = (g: (typeof groups)[0]) =>
+        g.names.some((name) => kolosaurios.some((k) => k.name === name));
+
+    const placeInGroup = (g: (typeof groups)[0], team: Team) => {
+        if (g.names.length < g.capacity) g.names.push(team.name);
+    };
+
+    // 1) Un Kolosaurios por grupo cuando hay suficientes grupos
+    let ki = 0;
+    for (let g = 0; g < groups.length && ki < kolosaurios.length; g++) {
+        const grp = groups[g]!;
+        if (groupHasKolosaurios(grp)) continue;
+        placeInGroup(grp, kolosaurios[ki]!);
+        ki++;
+    }
+
+    // 2) Resto de Kolosaurios → grupo con más hueco (evitar mismo grupo si se puede)
+    for (; ki < kolosaurios.length; ki++) {
+        const team = kolosaurios[ki]!;
+        const candidates = groups
+            .filter((g) => g.names.length < g.capacity)
+            .sort((a, b) => {
+                const aHas = groupHasKolosaurios(a) ? 1 : 0;
+                const bHas = groupHasKolosaurios(b) ? 1 : 0;
+                if (aHas !== bHas) return aHas - bHas;
+                return a.capacity - a.names.length - (b.capacity - b.names.length);
+            });
+        if (!candidates[0]) break;
+        placeInGroup(candidates[0]!, team);
+    }
+
+    // 3) Resto de equipos, round-robin por huecos
+    let oi = 0;
+    let guard = 0;
+    while (oi < others.length && guard < others.length * groupCount + 10) {
+        guard++;
+        let placed = false;
+        for (const g of groups) {
+            if (oi < others.length && g.names.length < g.capacity) {
+                placeInGroup(g, others[oi]!);
+                oi++;
+                placed = true;
+            }
+        }
+        if (!placed) break;
+    }
+
+    return groups.map((g) => ({
+        key: g.key,
+        names: g.names.sort((a, b) => a.localeCompare(b, 'es')),
+    }));
+}
+
 /** Reparto automático; 7 y 9 equipos usan tamaños fijos 3+4 y 4+5. */
 function splitNamesForTeamCount(
     sorted: string[],
     n: number,
     groupCount: number
 ): { key: string; names: string[] }[] {
-    const fixed = expectedGroupSizesForTeamCount(n);
-    if (fixed && groupCount === fixed.length) {
-        const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
-        let idx = 0;
-        return fixed.map((size, i) => {
-            const names = sorted.slice(idx, idx + size);
-            idx += size;
-            return { key: letters[i] ?? String(i + 1), names };
-        });
-    }
-    return splitNamesIntoGroups(sorted, groupCount);
+    const capacities = groupCapacitiesForCount(n, groupCount);
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+    let idx = 0;
+    return capacities.map((size, i) => {
+        const names = sorted.slice(idx, idx + size);
+        idx += size;
+        return { key: letters[i] ?? String(i + 1), names };
+    });
 }
 
 /** Fusiona grupos con menos de MIN_TEAMS_PER_GROUP en otros hasta cumplir el mínimo. */
@@ -306,14 +396,10 @@ export function computeGroups(teamList: Team[]): { key: string; names: string[] 
         return raw;
     }
 
-    const sorted = [...teamList]
-        .sort((x, y) => x.name.localeCompare(y.name, 'es'))
-        .map((t) => t.name);
-
     let groupCount = autoGroupCount(n);
     while (groupCount > 1 && Math.floor(n / groupCount) < MIN_TEAMS_PER_GROUP) groupCount--;
     if (groupCount <= 0) return [];
-    return mergeUndersizedGroups(splitNamesForTeamCount(sorted, n, groupCount));
+    return mergeUndersizedGroups(distributeTeamsIntoGroups(teamList, groupCount));
 }
 
 export interface DivisionMatchBreakdown {
@@ -565,7 +651,31 @@ function ensureMinRealMatchesPerTeam(teams: Team[], specs: RawMatchSpec[], min: 
  * Mezcla specs de distintas categorías dentro de cada fase.
  * Resultado: CF, CM, JF, JM, CF, CM, JF, JM… (una vuelta por categoría).
  */
-function interleaveSpecsByDivision(specs: RawMatchSpec[]): RawMatchSpec[] {
+function specInvolvesKolosaurios(spec: RawMatchSpec, scheduleTeams: Team[]): boolean {
+    const checkName = (name: string) => {
+        if (isPlaceholderTeamName(name)) return false;
+        const label = normalizeTeamLabel(name);
+        const roster = scheduleTeams.filter(
+            (t) => t.division === spec.division && normalizeTeamLabel(t.name) === label
+        );
+        if (roster.some(isKolosauriosAffinity)) return true;
+        return /kolosaur/i.test(label);
+    };
+    return checkName(spec.teamA) || checkName(spec.teamB);
+}
+
+function compareSpecSchedulePriority(
+    a: RawMatchSpec,
+    b: RawMatchSpec,
+    scheduleTeams: Team[]
+): number {
+    const kA = specInvolvesKolosaurios(a, scheduleTeams) ? 0 : 1;
+    const kB = specInvolvesKolosaurios(b, scheduleTeams) ? 0 : 1;
+    if (kA !== kB) return kA - kB;
+    return 0;
+}
+
+function interleaveSpecsByDivision(specs: RawMatchSpec[], scheduleTeams: Team[]): RawMatchSpec[] {
     const byPhaseDiv = new Map<number, Map<string, RawMatchSpec[]>>();
     for (const s of specs) {
         if (!byPhaseDiv.has(s.phaseOrder)) byPhaseDiv.set(s.phaseOrder, new Map());
@@ -580,6 +690,9 @@ function interleaveSpecsByDivision(specs: RawMatchSpec[]): RawMatchSpec[] {
     for (const ph of phases) {
         const dm = byPhaseDiv.get(ph)!;
         const arrays = [...dm.values()];
+        for (const arr of arrays) {
+            arr.sort((a, b) => compareSpecSchedulePriority(a, b, scheduleTeams));
+        }
         const maxLen = Math.max(...arrays.map((a) => a.length));
         for (let i = 0; i < maxLen; i++) {
             for (const arr of arrays) {
@@ -899,8 +1012,25 @@ function scheduleSpecBatch(
         hasTripleConsecutive(division, teamKeys[0], ts) ||
         hasTripleConsecutive(division, teamKeys[1], ts);
 
+    const pairInvolvesKolosaurios = (
+        division: Team['division'],
+        teamsPair: [string, string]
+    ): boolean => {
+        for (const name of teamsPair) {
+            if (isPlaceholderTeamName(name)) continue;
+            const label = normalizeTeamLabel(name);
+            const roster = scheduleTeams.find(
+                (t) => t.division === division && normalizeTeamLabel(t.name) === label
+            );
+            if (roster && isKolosauriosAffinity(roster)) return true;
+            if (/kolosaur/i.test(label)) return true;
+        }
+        return false;
+    };
+
     const scoreSlot = (
         division: Team['division'],
+        teamsPair: [string, string],
         teamKeys: [string, string],
         ts: number,
         ci: number,
@@ -933,11 +1063,19 @@ function scheduleSpecBatch(
         else if (minGap < 2 * slotMins) score += PENALTY_ONE_SLOT_REST;
         else score -= Math.min(minGap, 6 * slotMins);
 
+        if (slotTimePolicy === 'earliest' && pairInvolvesKolosaurios(division, teamsPair)) {
+            const firstSlot = slotStartsMin[0] ?? ts;
+            const lastSlot = slotStartsMin[slotStartsMin.length - 1] ?? ts;
+            const span = Math.max(slotMins, lastSlot - firstSlot);
+            score += ((ts - firstSlot) / span) * 150_000;
+        }
+
         return score;
     };
 
     const findBestSlot = (
         division: Team['division'],
+        teamsPair: [string, string],
         teamKeys: [string, string],
         allowBackToBack: boolean,
         slotTimePolicy: SlotTimePolicy
@@ -956,7 +1094,16 @@ function scheduleSpecBatch(
             const usage = courtUsage();
             const courtOrder = courts.map((_, ci) => ci).sort((a, b) => usage[a]! - usage[b]!);
             for (const ci of courtOrder) {
-                const score = scoreSlot(division, teamKeys, ts, ci, usage, allowBackToBack, slotTimePolicy);
+                const score = scoreSlot(
+                    division,
+                    teamsPair,
+                    teamKeys,
+                    ts,
+                    ci,
+                    usage,
+                    allowBackToBack,
+                    slotTimePolicy
+                );
                 if (score !== null && score < bestScore) {
                     bestScore = score;
                     best = { ts, ci };
@@ -968,6 +1115,8 @@ function scheduleSpecBatch(
 
     const sortedSpecs = [...specs].sort((a, b) => {
         if (a.phaseOrder !== b.phaseOrder) return a.phaseOrder - b.phaseOrder;
+        const koloCmp = compareSpecSchedulePriority(a, b, scheduleTeams);
+        if (koloCmp !== 0) return koloCmp;
         const loadA =
             teamMatchCount(
                 a.division,
@@ -995,10 +1144,10 @@ function scheduleSpecBatch(
         const div = spec.division;
         const keys = pairTeamKeys(div, teamsPair, scheduleTeams);
         let best = options.allowBackToBackOnly
-            ? findBestSlot(div, keys, true, options.slotTimePolicy)
-            : findBestSlot(div, keys, false, options.slotTimePolicy);
+            ? findBestSlot(div, teamsPair, keys, true, options.slotTimePolicy)
+            : findBestSlot(div, teamsPair, keys, false, options.slotTimePolicy);
         if (!best && !options.allowBackToBackOnly) {
-            best = findBestSlot(div, keys, true, options.slotTimePolicy);
+            best = findBestSlot(div, teamsPair, keys, true, options.slotTimePolicy);
         }
 
         if (best) {
@@ -1356,6 +1505,8 @@ function exhaustivePlaceUnplacedPhased(
             phase === 'GRUPOS'
                 ? undefined
                 : minSlotStartFromPhaseEnd(slotStartsMin, phaseEndSnapshot);
+
+        batch.sort((a, b) => compareSpecSchedulePriority(a, b, scheduleTeams));
 
         for (const spec of batch) {
             const teamsPair: [string, string] = [spec.teamA, spec.teamB];
@@ -1770,7 +1921,7 @@ export function buildMuskizDayDraftMatches(
     }
 
     // ── Segunda pasada: mezclar categorías e intentar programar ────────────
-    const interleaved = interleaveSpecsByDivision(allDivSpecs);
+    const interleaved = interleaveSpecsByDivision(allDivSpecs, paid);
 
     if (targetDay === 'Sábado') {
         configs.Sábado = {
