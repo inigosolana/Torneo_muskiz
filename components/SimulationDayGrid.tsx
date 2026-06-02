@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import type { Match } from '../types';
 import {
     buildFullDayTimeSlots,
+    getDayScheduleConfig,
     groupMatchesForDayGrid,
 } from '../services/muskizScheduleSimulator';
 import type { MuskizScheduleDayLabel } from '../services/muskizScheduleSimulator';
@@ -115,6 +116,8 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
 
     const { courts, times, grid } = groupMatchesForDayGrid(matches, viewDay, { fillEmptySlots });
     const slotTimesForEdit = fillEmptySlots ? buildFullDayTimeSlots(viewDay) : [];
+    const dayCfg = getDayScheduleConfig(viewDay);
+    const lunch = dayCfg.lunch;
 
     // Leyenda: categoría + tono de grupo / fase
     const legendEntries = useMemo(
@@ -188,87 +191,102 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                         </thead>
                         <tbody>
                             {times.map((t) => (
-                                <tr key={t} className={t === 'PENDIENTE' ? 'bg-amber-50/80' : 'hover:bg-teal-50/20'}>
-                                    <td className={`border border-slate-200 font-mono font-bold px-1 py-1 text-center whitespace-nowrap ${t === 'PENDIENTE' ? 'bg-amber-100 text-amber-900' : 'bg-slate-50'}`}>
-                                        {t}
-                                    </td>
-                                    {courts.map((c) => {
-                                        const m = grid[t]?.[c] ?? null;
-                                        const isDropTarget = dropTarget?.time === t && dropTarget?.court === c;
-                                        const colors = getMatchGridColors(m?.round);
-                                        return (
-                                            <td
-                                                key={c}
-                                                className={`border border-slate-200 align-top p-0.5 min-h-[48px] h-[48px] max-w-[140px] transition-colors ${isDropTarget ? 'bg-teal-100 border-2 border-teal-400' : m ? colors.cell : onUpdateMatch ? 'bg-slate-50/80' : ''}`}
-                                                onDragEnter={(e) => {
-                                                    if (!onUpdateMatch) return;
-                                                    e.preventDefault();
-                                                    setDropTarget({ time: t, court: c });
-                                                }}
-                                                onDragOver={(e) => {
-                                                    if (!onUpdateMatch) return;
-                                                    e.preventDefault();
-                                                    e.dataTransfer.dropEffect = 'move';
-                                                    setDropTarget({ time: t, court: c });
-                                                }}
-                                                onDragLeave={(e) => {
-                                                    if (isDragLeaveEvent(e.currentTarget, e.relatedTarget)) {
-                                                        setDropTarget((prev) =>
-                                                            prev?.time === t && prev?.court === c ? null : prev
-                                                        );
-                                                    }
-                                                }}
-                                                onDrop={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    setDropTarget(null);
-                                                    const draggedId =
-                                                        e.dataTransfer.getData(MATCH_DRAG_MIME) ||
-                                                        dragMatchId.current;
-                                                    if (!onUpdateMatch || !draggedId) return;
-                                                    onUpdateMatch(draggedId, { time: t, court: c });
-                                                    dragMatchId.current = null;
-                                                }}
-                                            >
-                                                {m ? (
-                                                    <div
-                                                        draggable={!!onUpdateMatch}
-                                                        onDragStart={(e) => {
-                                                            dragMatchId.current = m.id;
-                                                            e.dataTransfer.setData(MATCH_DRAG_MIME, m.id);
-                                                            e.dataTransfer.effectAllowed = 'move';
-                                                        }}
-                                                        onDragEnd={() => {
-                                                            dragMatchId.current = null;
-                                                            setDropTarget(null);
-                                                        }}
-                                                        onClick={() => onUpdateMatch && setEditingMatch(m)}
-                                                        className={`rounded leading-tight p-1 h-full min-h-[44px] ${onUpdateMatch ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} ${colors.cell} border ${colors.drag} select-none`}
-                                                    >
-                                                        <div className="text-[9px] font-semibold text-slate-800 line-clamp-2">
-                                                            {m.teamA} <span className="text-slate-400">vs</span> {m.teamB}
-                                                        </div>
-                                                        <div className="mt-0.5 text-[8px] text-slate-500 truncate" title={m.round}>
-                                                            {(m.round ?? '').split('·').slice(2).join('·').trim()}
-                                                        </div>
-                                                        {onUpdateMatch && (
-                                                            <div className="mt-0.5 text-[7px] text-slate-400 flex items-center gap-0.5">
-                                                                <span className="material-symbols-outlined" style={{ fontSize: 9 }}>edit</span> editar
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    onUpdateMatch && (
-                                                        <div
-                                                            className="min-h-[44px] h-full w-full rounded border border-dashed border-slate-300/80 bg-transparent pointer-events-none"
-                                                            aria-hidden
-                                                        />
-                                                    )
-                                                )}
+                                <React.Fragment key={t}>
+                                    {lunch && t === lunch.end && (
+                                        <tr className="bg-red-100">
+                                            <td className="border border-red-300 bg-red-200 text-red-900 font-black text-center px-1 py-1 whitespace-nowrap">
+                                                PAUSA
                                             </td>
-                                        );
-                                    })}
-                                </tr>
+                                            <td
+                                                colSpan={courts.length}
+                                                className="border border-red-300 text-red-900 px-2 py-1 text-[10px] font-bold uppercase tracking-wide"
+                                            >
+                                                Pausa comida: {lunch.start} - {lunch.end}
+                                            </td>
+                                        </tr>
+                                    )}
+                                    <tr className={t === 'PENDIENTE' ? 'bg-amber-50/80' : 'hover:bg-teal-50/20'}>
+                                        <td className={`border border-slate-200 font-mono font-bold px-1 py-1 text-center whitespace-nowrap ${t === 'PENDIENTE' ? 'bg-amber-100 text-amber-900' : 'bg-slate-50'}`}>
+                                            {t}
+                                        </td>
+                                        {courts.map((c) => {
+                                            const m = grid[t]?.[c] ?? null;
+                                            const isDropTarget = dropTarget?.time === t && dropTarget?.court === c;
+                                            const colors = getMatchGridColors(m?.round);
+                                            return (
+                                                <td
+                                                    key={c}
+                                                    className={`border border-slate-200 align-top p-0.5 min-h-[48px] h-[48px] max-w-[140px] transition-colors ${isDropTarget ? 'bg-teal-100 border-2 border-teal-400' : m ? colors.cell : onUpdateMatch ? 'bg-slate-50/80' : ''}`}
+                                                    onDragEnter={(e) => {
+                                                        if (!onUpdateMatch) return;
+                                                        e.preventDefault();
+                                                        setDropTarget({ time: t, court: c });
+                                                    }}
+                                                    onDragOver={(e) => {
+                                                        if (!onUpdateMatch) return;
+                                                        e.preventDefault();
+                                                        e.dataTransfer.dropEffect = 'move';
+                                                        setDropTarget({ time: t, court: c });
+                                                    }}
+                                                    onDragLeave={(e) => {
+                                                        if (isDragLeaveEvent(e.currentTarget, e.relatedTarget)) {
+                                                            setDropTarget((prev) =>
+                                                                prev?.time === t && prev?.court === c ? null : prev
+                                                            );
+                                                        }
+                                                    }}
+                                                    onDrop={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        setDropTarget(null);
+                                                        const draggedId =
+                                                            e.dataTransfer.getData(MATCH_DRAG_MIME) ||
+                                                            dragMatchId.current;
+                                                        if (!onUpdateMatch || !draggedId) return;
+                                                        onUpdateMatch(draggedId, { time: t, court: c });
+                                                        dragMatchId.current = null;
+                                                    }}
+                                                >
+                                                    {m ? (
+                                                        <div
+                                                            draggable={!!onUpdateMatch}
+                                                            onDragStart={(e) => {
+                                                                dragMatchId.current = m.id;
+                                                                e.dataTransfer.setData(MATCH_DRAG_MIME, m.id);
+                                                                e.dataTransfer.effectAllowed = 'move';
+                                                            }}
+                                                            onDragEnd={() => {
+                                                                dragMatchId.current = null;
+                                                                setDropTarget(null);
+                                                            }}
+                                                            onClick={() => onUpdateMatch && setEditingMatch(m)}
+                                                            className={`rounded leading-tight p-1 h-full min-h-[44px] ${onUpdateMatch ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} ${colors.cell} border ${colors.drag} select-none`}
+                                                        >
+                                                            <div className="text-[9px] font-semibold text-slate-800 line-clamp-2">
+                                                                {m.teamA} <span className="text-slate-400">vs</span> {m.teamB}
+                                                            </div>
+                                                            <div className="mt-0.5 text-[8px] text-slate-500 truncate" title={m.round}>
+                                                                {(m.round ?? '').split('·').slice(2).join('·').trim()}
+                                                            </div>
+                                                            {onUpdateMatch && (
+                                                                <div className="mt-0.5 text-[7px] text-slate-400 flex items-center gap-0.5">
+                                                                    <span className="material-symbols-outlined" style={{ fontSize: 9 }}>edit</span> editar
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        onUpdateMatch && (
+                                                            <div
+                                                                className="min-h-[44px] h-full w-full rounded border border-dashed border-slate-300/80 bg-transparent pointer-events-none"
+                                                                aria-hidden
+                                                            />
+                                                        )
+                                                    )}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                </React.Fragment>
                             ))}
                         </tbody>
                     </table>

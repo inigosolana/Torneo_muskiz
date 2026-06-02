@@ -1475,6 +1475,110 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
+    const handleApplyWeekendRetimeToCurrentSimulation = async () => {
+        const toMinutes = (time: string): number | null => {
+            if (!/^\d{2}:\d{2}$/.test(time)) return null;
+            const [h, m] = time.split(':').map(Number);
+            return h * 60 + m;
+        };
+        const toTime = (mins: number): string => {
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        };
+        const updateRoundTime = (round: string | undefined, oldTime: string, nextTime: string): string | undefined => {
+            if (!round) return round;
+            if (oldTime === nextTime) return round;
+            if (!/\d{2}:\d{2}/.test(round)) return round;
+            return round.replace(/\d{2}:\d{2}/, nextTime);
+        };
+
+        if (
+            !window.confirm(
+                'Se aplicará sobre la simulación actual:\n' +
+                    '- Sábado y domingo +35 min\n' +
+                    '- Sábado: todo lo de 13:40 pasa después de comer\n\n' +
+                    'No regenera partidos, solo mueve horas. ¿Continuar?'
+            )
+        ) {
+            return;
+        }
+
+        const SLOT = 35;
+        const SAT_LUNCH_START = 13 * 60 + 40; // 13:40
+        const SAT_LUNCH_END = 15 * 60 + 45; // 15:45
+
+        const retimeDayMatches = (day: 'Sábado' | 'Domingo', matches: Match[]): Match[] => {
+            const queued: Match[] = [];
+            const fixed: Match[] = [];
+
+            for (const m of matches) {
+                const mins = toMinutes(m.time);
+                if (mins == null) {
+                    fixed.push(m);
+                    continue;
+                }
+                if (day === 'Domingo') {
+                    const next = toTime(mins + SLOT);
+                    fixed.push({ ...m, time: next, round: updateRoundTime(m.round, m.time, next) });
+                    continue;
+                }
+
+                // Sábado
+                const shifted = mins + SLOT;
+                const from1340 = mins === SAT_LUNCH_START;
+                const landsInLunch = shifted >= SAT_LUNCH_START && shifted < SAT_LUNCH_END;
+                if (from1340 || landsInLunch) {
+                    queued.push(m);
+                } else {
+                    const next = toTime(shifted);
+                    fixed.push({ ...m, time: next, round: updateRoundTime(m.round, m.time, next) });
+                }
+            }
+
+            if (day !== 'Sábado' || queued.length === 0) return fixed;
+
+            const usedByCourt = new Map<string, Set<number>>();
+            for (const m of fixed) {
+                const mins = toMinutes(m.time);
+                if (mins == null) continue;
+                if (!usedByCourt.has(m.court)) usedByCourt.set(m.court, new Set());
+                usedByCourt.get(m.court)!.add(mins);
+            }
+
+            const queueSorted = [...queued].sort((a, b) => {
+                const ta = toMinutes(a.time) ?? 0;
+                const tb = toMinutes(b.time) ?? 0;
+                if (ta !== tb) return ta - tb;
+                return a.court.localeCompare(b.court, 'es');
+            });
+
+            const moved: Match[] = queueSorted.map((m) => {
+                if (!usedByCourt.has(m.court)) usedByCourt.set(m.court, new Set());
+                const used = usedByCourt.get(m.court)!;
+                let slot = SAT_LUNCH_END;
+                while (used.has(slot)) slot += SLOT;
+                used.add(slot);
+                const next = toTime(slot);
+                return { ...m, time: next, round: updateRoundTime(m.round, m.time, next) };
+            });
+
+            return [...fixed, ...moved];
+        };
+
+        const nextDrafts = simDrafts.map((d) => {
+            if (d.scheduleDay !== 'Sábado' && d.scheduleDay !== 'Domingo') return d;
+            return {
+                ...d,
+                matches: retimeDayMatches(d.scheduleDay, d.matches),
+            };
+        });
+
+        setSimDrafts(nextDrafts);
+        await persistSimDraftsAsync(nextDrafts, activeDraftId);
+        toast.success('Simulación actual actualizada: sábado/domingo retrasados y 13:40 del sábado movido tras comida.');
+    };
+
     const applyGroupMatchUpdates = async (
         updatedTeams: Team[],
         updater: (matches: Match[]) => Match[],
@@ -3563,8 +3667,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </label>
                                                         <p className="text-xs text-teal-800 mt-2 leading-relaxed max-w-3xl">
                                                             <strong>Viernes:</strong> cadetes 17:00–21:00, 6 campos.{' '}
-                                                            <strong>Sábado:</strong> juvenil/senior 9:00–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida fija 14:15–15:45, 6 campos.{' '}
-                                                            <strong>Domingo:</strong> infantiles 9:00–15:00, 4 campos.{' '}
+                                                            <strong>Sábado:</strong> juvenil/senior 9:35–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida fija 13:40–15:45, 6 campos.{' '}
+                                                            <strong>Domingo:</strong> infantiles 9:35–15:00, 4 campos.{' '}
                                                             Huecos <strong>35 min</strong>. Mínimo de partidos por equipo configurable en cada categoría (por defecto {MIN_REAL_MATCHES_PER_TEAM}).{' '}
                                                             ≤6 → liguilla + final · 7 → 3+4 + consolación + semis + final · 8–10 → 2 grupos + semis + final (9: 4+5) · ≥11 → 3 grupos + repesca + cuartos + semis + final (11: 4+4+3).{' '}
                                                             Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo cuando hay varios grupos.{' '}
@@ -3600,7 +3704,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             </p>
                                                         </div>
                                                         <p className="mt-2 text-[11px] text-teal-800">
-                                                            La comida del sábado es fija de 14:15 a 15:45 para todas las categorías; la tarde arranca justo al terminar.
+                                                            La comida del sábado es fija de 13:40 a 15:45 para todas las categorías; la tarde arranca justo al terminar.
                                                             Semifinales, cuartos y finales solo después de terminar todos los partidos de grupos.
                                                             Orden: grupos → consolación/repesca (si aplica) → cuartos (≥11 equipos) → semis → finales. ≥11: mejor 3º directo + repesca entre los 2 peores terceros; cuartos: 1º vs 3º mejor, 1º vs gan. repesca, 1º vs 2º y 2º vs 2º.
                                                             La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).
@@ -3626,6 +3730,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </div>
                                                     </div>
                                                     <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void handleApplyWeekendRetimeToCurrentSimulation()}
+                                                            disabled={generatingMuskiz || weekendDrafts.length < 2}
+                                                            className="flex-1 min-w-[250px] bg-orange-600 hover:bg-orange-700 text-white py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                                                        >
+                                                            <span className="material-symbols-outlined">schedule</span>
+                                                            Aplicar nuevo horario a simulación actual
+                                                        </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => void handleCreateRandomGroups()}
