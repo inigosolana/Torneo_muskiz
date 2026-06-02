@@ -713,6 +713,36 @@ function countRealRealMatches(specs: RawMatchSpec[], realNames: Set<string>): Ma
     return m;
 }
 
+function parseGroupLabelFromRoundOrLabel(roundOrLabel: string): string | null {
+    const gm = /Grupos\s*·\s*([A-Z]{2}-[A-Z0-9]+)/i.exec(roundOrLabel);
+    return gm?.[1] ?? null;
+}
+
+function countGroupReturnLegsInSpecs(specs: RawMatchSpec[], groupLabel: string): number {
+    return specs.filter(
+        (s) =>
+            s.phase === 'GRUPOS' &&
+            s.roundLabel.includes(groupLabel) &&
+            /vuelta/i.test(s.roundLabel)
+    ).length;
+}
+
+/** Quita «extraN» obsoletos cuando el grupo de 3 ya tiene ida y vuelta completa (6 partidos). */
+function stripObsoleteGroupExtraSpecs(
+    specs: RawMatchSpec[],
+    groups: { key: string; names: string[] }[],
+    code: string
+): RawMatchSpec[] {
+    return specs.filter((s) => {
+        if (s.phase !== 'GRUPOS' || !/extra\d*/i.test(s.roundLabel)) return true;
+        const groupLabel = parseGroupLabelFromRoundOrLabel(s.roundLabel);
+        if (!groupLabel) return true;
+        const g = groups.find((gr) => `${code}-${gr.key}` === groupLabel);
+        if (!g || g.names.length !== 3) return true;
+        return countGroupReturnLegsInSpecs(specs, groupLabel) < 3;
+    });
+}
+
 /**
  * Añade partidos de liguilla/grupo repetidos hasta que cada equipo tenga al menos `min` enfrentamientos reales.
  * Los extras se generan siempre dentro del mismo grupo de competición.
@@ -742,6 +772,14 @@ function ensureMinRealMatchesPerTeam(teams: Team[], specs: RawMatchSpec[], min: 
         let needy: string | null = null;
         let lowest = Infinity;
         for (const t of teams) {
+            const gOfT = groups.find((gr) => gr.names.includes(t.name));
+            if (
+                gOfT &&
+                gOfT.names.length === 3 &&
+                countGroupReturnLegsInSpecs(out, `${code}-${gOfT.key}`) >= 3
+            ) {
+                continue;
+            }
             const c = m.get(t.name) ?? 0;
             if (c < min && c < lowest) {
                 lowest = c;
@@ -774,7 +812,7 @@ function ensureMinRealMatchesPerTeam(teams: Team[], specs: RawMatchSpec[], min: 
         supIdx++;
     }
 
-    return out;
+    return stripObsoleteGroupExtraSpecs(out, groups, code);
 }
 
 // ─── Interleave de categorías (mezcla en el horario) ──────────────────────
@@ -2510,6 +2548,50 @@ export function syncMissingThreeTeamGroupReturnLegsInSaturdayDraft(
     return { matches: merged, changed: true, added: toAdd.length };
 }
 
+export function isGroupExtraMatch(m: Pick<Match, 'round'>): boolean {
+    const r = (m.round ?? '').toLowerCase();
+    return r.includes('grupos') && /extra\d*/i.test(r);
+}
+
+function countGroupReturnLegsInMatches(matches: Match[], groupLabel: string): number {
+    const label = groupLabel.toLowerCase();
+    return matches.filter((m) => {
+        const r = (m.round ?? '').toLowerCase();
+        return r.includes('grupos') && r.includes(label) && r.includes('vuelta');
+    }).length;
+}
+
+/** Elimina partidos «extraN» del sábado si el grupo de 3 ya tiene las 3 vueltas. */
+export function removeObsoleteGroupExtrasFromSaturdayDraft(
+    teams: Team[],
+    saturdayMatches: Match[]
+): { matches: Match[]; changed: boolean; removed: number } {
+    const paid = teams.filter((t) => t.paymentStatus === 'PAID');
+    const toDrop = new Set<string>();
+
+    for (const m of saturdayMatches) {
+        if (!isGroupExtraMatch(m)) continue;
+        const div = divisionFromMatchRound(m.round);
+        const groupLabel = parseGroupLabelFromRoundOrLabel(m.round ?? '');
+        if (!div || !groupLabel) continue;
+        const roster = paid.filter((t) => t.division === div);
+        const groups = computeGroups(roster);
+        const code = DIVISION_CODE[div];
+        const g = groups?.find((gr) => `${code}-${gr.key}` === groupLabel);
+        if (!g || g.names.length !== 3) continue;
+        if (countGroupReturnLegsInMatches(saturdayMatches, groupLabel) >= 3) {
+            toDrop.add(m.id);
+        }
+    }
+
+    if (toDrop.size === 0) return { matches: saturdayMatches, changed: false, removed: 0 };
+    return {
+        matches: saturdayMatches.filter((m) => !toDrop.has(m.id)),
+        changed: true,
+        removed: toDrop.size,
+    };
+}
+
 /** Parches del borrador del sábado (semis SF, vueltas de grupos de 3, etc.). */
 export function patchSaturdaySimulationDraft(
     teams: Team[],
@@ -2518,6 +2600,16 @@ export function patchSaturdaySimulationDraft(
 ): { matches: Match[]; changed: boolean; notes: string[] } {
     let matches = saturdayMatches;
     const notes: string[] = [];
+
+    const cleaned = removeObsoleteGroupExtrasFromSaturdayDraft(teams, matches);
+    if (cleaned.changed) {
+        matches = cleaned.matches;
+        notes.push(
+            cleaned.removed === 1
+                ? 'eliminado 1 partido extra obsoleto'
+                : `eliminados ${cleaned.removed} partidos extra obsoletos`
+        );
+    }
 
     const semis = syncSeniorFemeninoSemisInSaturdayDraft(teams, matches, options);
     if (semis.changed) {
