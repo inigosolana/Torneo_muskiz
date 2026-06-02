@@ -92,6 +92,17 @@ const ADMIN_MAIN_NAV: { id: AdminMainTab; label: string; shortLabel: string; ico
     { id: 'categories', label: 'Configuración', shortLabel: 'Config', icon: 'settings_suggest' },
 ];
 
+const DIVISIONS_LIST: Team['division'][] = [
+    'Infantil Femenino',
+    'Infantil Masculino',
+    'Cadete Femenino',
+    'Cadete Masculino',
+    'Juvenil Femenino',
+    'Juvenil Masculino',
+    'Senior Femenino',
+    'Senior Masculino',
+];
+
 const DIVISION_OPTIONS: Team['division'][] = [
     'Infantil Femenino',
     'Infantil Masculino',
@@ -824,17 +835,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     );
 
     const activeDraft = useMemo(() => simDrafts.find((d) => d.id === activeDraftId) ?? null, [simDrafts, activeDraftId]);
-
-    const DIVISIONS_LIST: Team['division'][] = [
-        'Infantil Femenino',
-        'Infantil Masculino',
-        'Cadete Femenino',
-        'Cadete Masculino',
-        'Juvenil Femenino',
-        'Juvenil Masculino',
-        'Senior Femenino',
-        'Senior Masculino',
-    ];
 
     const weekendDrafts = useMemo(
         () => WEEKEND_SCHEDULE_DAYS.map((day) => simDrafts.find((d) => d.scheduleDay === day)).filter(Boolean) as CalendarDraft[],
