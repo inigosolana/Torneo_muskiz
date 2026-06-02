@@ -26,6 +26,7 @@ import {
     splitThirdPlaceQualification,
 } from '../utils/thirdPlaceQualification';
 import {
+    buildFullDayTimeSlots,
     autoGroupCount,
     buildDivisionMinMatchesFromCategories,
     countDivisionMatchBreakdown,
@@ -1495,6 +1496,125 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         } catch {
             toast.error('No se pudieron guardar los grupos automáticos.');
         }
+    };
+
+    const handleEnsureSeniorMasculinoGroupCReturnLegs = async () => {
+        const saturdayDraft = simDrafts.find((d) => d.scheduleDay === 'Sábado');
+        if (!saturdayDraft) {
+            toast.error('No hay borrador de Sábado para revisar.');
+            return;
+        }
+
+        const groupCTeams = teams.filter(
+            (t) => t.division === 'Senior Masculino' && (t.competitionGroup ?? '').trim() === 'C'
+        );
+        if (groupCTeams.length !== 3) {
+            toast.error('Senior Masculino Grupo C no tiene exactamente 3 equipos asignados.');
+            return;
+        }
+
+        const names = groupCTeams.map((t) => t.name);
+        const expectedPairs: Array<{ a: string; b: string }> = [];
+        for (let i = 0; i < names.length; i += 1) {
+            for (let j = 0; j < names.length; j += 1) {
+                if (i === j) continue;
+                expectedPairs.push({ a: names[i]!, b: names[j]! });
+            }
+        }
+
+        const smcMatches = saturdayDraft.matches.filter((m) => {
+            if (resolveMatchDivision(m, teams) !== 'Senior Masculino') return false;
+            if (!names.includes(m.teamA) || !names.includes(m.teamB)) return false;
+            return (m.round ?? '').includes('Grupos');
+        });
+
+        const hasPair = (a: string, b: string) =>
+            smcMatches.some((m) => m.teamA === a && m.teamB === b);
+        const missing = expectedPairs.filter((p) => !hasPair(p.a, p.b));
+        if (missing.length === 0) {
+            toast.success('Senior Masculino Grupo C ya tiene todos los partidos ida/vuelta.');
+            return;
+        }
+
+        const slots = buildFullDayTimeSlots('Sábado');
+        const slotMinutes = (time: string): number | null => {
+            if (!/^\d{2}:\d{2}$/.test(time)) return null;
+            const [h, m] = time.split(':').map(Number);
+            return h * 60 + m;
+        };
+        const lunchStart = slotMinutes('14:15')!;
+        const lunchEnd = slotMinutes('15:45')!;
+        const validSlots = slots.filter((t) => {
+            const tm = slotMinutes(t);
+            if (tm == null) return false;
+            return tm < lunchStart || tm >= lunchEnd;
+        });
+
+        const courts = ['Campo 1', 'Campo 2', 'Campo 3', 'Campo 4', 'Campo 5', 'Campo 6'];
+        const usedByTimeCourt = new Set(
+            saturdayDraft.matches
+                .filter((m) => m.time !== 'PENDIENTE' && m.court !== 'Sin asignar')
+                .map((m) => `${m.time}|${m.court}`)
+        );
+        const teamsBusyAtTime = new Map<string, Set<string>>();
+        for (const m of saturdayDraft.matches) {
+            if (m.time === 'PENDIENTE') continue;
+            if (!teamsBusyAtTime.has(m.time)) teamsBusyAtTime.set(m.time, new Set());
+            teamsBusyAtTime.get(m.time)!.add(m.teamA);
+            teamsBusyAtTime.get(m.time)!.add(m.teamB);
+        }
+
+        const template = saturdayDraft.matches.find(
+            (m) =>
+                resolveMatchDivision(m, teams) === 'Senior Masculino' &&
+                (m.round ?? '').includes('Grupos') &&
+                (m.round ?? '').includes('SM-C')
+        );
+        const roundLabel = template?.round ?? 'Sab · Grupos · SM-C';
+
+        const additions: Match[] = [];
+        for (const miss of missing) {
+            let placed: Match | null = null;
+            for (let s = validSlots.length - 1; s >= 0 && !placed; s -= 1) {
+                const time = validSlots[s]!;
+                const busy = teamsBusyAtTime.get(time);
+                if (busy?.has(miss.a) || busy?.has(miss.b)) continue;
+                for (const court of courts) {
+                    const k = `${time}|${court}`;
+                    if (usedByTimeCourt.has(k)) continue;
+                    usedByTimeCourt.add(k);
+                    if (!teamsBusyAtTime.has(time)) teamsBusyAtTime.set(time, new Set());
+                    teamsBusyAtTime.get(time)!.add(miss.a);
+                    teamsBusyAtTime.get(time)!.add(miss.b);
+                    placed = {
+                        id: `manual-smc-${crypto.randomUUID()}`,
+                        time,
+                        court,
+                        teamA: miss.a,
+                        teamB: miss.b,
+                        scoreA: null,
+                        scoreB: null,
+                        status: 'SCHEDULED',
+                        round: roundLabel,
+                        scheduleDay: 'Sábado',
+                        isPublic: true,
+                    };
+                    break;
+                }
+            }
+            if (!placed) {
+                toast.error(`No hay hueco libre para ${miss.a} vs ${miss.b}.`);
+                return;
+            }
+            additions.push(placed);
+        }
+
+        const nextDrafts = simDrafts.map((d) =>
+            d.id === saturdayDraft.id ? { ...d, matches: [...d.matches, ...additions] } : d
+        );
+        setSimDrafts(nextDrafts);
+        await persistSimDraftsAsync(nextDrafts, activeDraftId);
+        toast.success(`Añadidos ${additions.length} partido(s) faltante(s) en Senior Masculino Grupo C.`);
     };
 
     const applyGroupMatchUpdates = async (
@@ -3649,6 +3769,14 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </div>
                                                     </div>
                                                     <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void handleEnsureSeniorMasculinoGroupCReturnLegs()}
+                                                            className="flex-1 min-w-[280px] bg-cyan-700 hover:bg-cyan-800 text-white py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors"
+                                                        >
+                                                            <span className="material-symbols-outlined">checklist</span>
+                                                            Completar ida/vuelta SM Grupo C (Sábado)
+                                                        </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => void handleCreateRandomGroups()}

@@ -103,6 +103,7 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
     fillEmptySlots = true,
     onUpdateMatch,
 }) => {
+    const SLOT_MINS = 35;
     const [day, setDay] = useState<MuskizScheduleDayLabel>(fixedDay ?? 'Sábado');
     const viewDay = fixedDay ?? day;
 
@@ -138,6 +139,23 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
         ? slotTimesForEdit
         : [...new Set(matches.map((m) => m.time))].sort();
     const allCourts = [...new Set(matches.map(m => m.court))].sort();
+    const timesToRender = useMemo(() => {
+        if (!(fillEmptySlots && viewDay === 'Viernes')) return times;
+        return times.filter((t) => {
+            if (t === 'PENDIENTE') return true;
+            return courts.some((c) => Boolean(grid[t]?.[c]));
+        });
+    }, [fillEmptySlots, viewDay, times, courts, grid]);
+    const toMinutes = (time: string): number | null => {
+        if (!/^\d{2}:\d{2}$/.test(time)) return null;
+        const [h, m] = time.split(':').map(Number);
+        return h * 60 + m;
+    };
+    const toTime = (mins: number): string => {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
 
     return (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -190,8 +208,31 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                             </tr>
                         </thead>
                         <tbody>
-                            {times.map((t) => (
+                            {timesToRender.map((t, idx) => (
                                 <React.Fragment key={t}>
+                                    {idx > 0 && (() => {
+                                        const prev = timesToRender[idx - 1]!;
+                                        const prevMin = toMinutes(prev);
+                                        const currMin = toMinutes(t);
+                                        if (prevMin == null || currMin == null) return null;
+                                        const gap = currMin - prevMin - SLOT_MINS;
+                                        if (gap <= 0) return null;
+                                        const gapStart = prevMin + SLOT_MINS;
+                                        const gapEnd = currMin;
+                                        return (
+                                            <tr className="bg-amber-100/80">
+                                                <td className="border border-amber-300 bg-amber-200 text-amber-950 font-black text-center px-1 py-1 whitespace-nowrap">
+                                                    PAUSA
+                                                </td>
+                                                <td
+                                                    colSpan={courts.length}
+                                                    className="border border-amber-300 text-amber-950 px-2 py-1 text-[10px] font-black uppercase tracking-wide"
+                                                >
+                                                    Pausa {gap} min: {toTime(gapStart)} - {toTime(gapEnd)}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })()}
                                     {lunch && t === lunch.end && (
                                         <tr className="bg-lime-200">
                                             <td className="border border-lime-500 bg-lime-400 text-lime-950 font-black text-center px-1 py-1 whitespace-nowrap">
