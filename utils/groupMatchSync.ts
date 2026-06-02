@@ -135,7 +135,7 @@ export function validateGroupDistribution(
 ): GroupDistributionValidation {
     const roster = rosterForDivision(teams, division, onlyPaid);
     const n = roster.length;
-    const expectedGroupCount = n < 2 ? 0 : autoGroupCount(n);
+    const expectedGroupCount = n < 2 ? 0 : autoGroupCount(n, division);
     const counts = new Map<string, number>();
     let unassigned = 0;
 
@@ -318,7 +318,7 @@ function explicitGroupDistribution(roster: Team[]): { key: string; teams: Team[]
         assigned.get(k)!.push(t);
     }
 
-    const expected = autoGroupCount(roster.length);
+    const expected = autoGroupCount(roster.length, roster[0]?.division);
     const keys = new Set<string>();
     for (let i = 0; i < Math.max(expected, 1); i++) {
         keys.add(String.fromCharCode(65 + i));

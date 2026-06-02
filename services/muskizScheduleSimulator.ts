@@ -7,7 +7,7 @@
  * - Domingo: infantiles (♀♂), 9:35–15:35, 4 campos.
  *
  * Formato por número de equipos en la categoría (Viernes, Sábado y Domingo):
- * - 2–6 equipos : liguilla (1 grupo) → final 1º vs 2º (sin semifinales)
+ * - 2–6 equipos : liguilla (1 grupo) → final 1º vs 2º (sin semifinales), salvo Senior Femenino (semis + final)
  * - 7 equipos   : grupos 3+4 → consolación (3ºA vs 3ºB) → semis (2 mejores/grupo) → final
  * - 8–10 equipos : 2 grupos → semis → final (9: 4+5)
  * - ≥11 equipos  : 3 grupos (11: 4+4+3) → repesca 2 peores 3º + cuartos (2×1º vs 3º, 1º vs 2º, 2º vs 2º) + semis → final
@@ -221,8 +221,15 @@ function roundRobinPairs(names: string[]): { a: string; b: string }[] {
 }
 
 // ─── Cálculo de grupos ─────────────────────────────────────────────────────
-export function autoGroupCount(n: number): number {
+/** Senior Femenino: semifinales + final aunque haya pocos equipos (liguilla o 2 grupos). */
+export function seniorFemeninoRequiresSemifinals(division: Team['division']): boolean {
+    return division === 'Senior Femenino';
+}
+
+export function autoGroupCount(n: number, division?: Team['division']): number {
     if (n < 2) return 0;
+    // 6 equipos SF → 3+3 (semis cruzadas), no liguilla única
+    if (division === 'Senior Femenino' && n === 6) return 2;
     if (n <= 6) return 1; // liguilla → final
     if (n >= 11) return 3; // ≥11 → 3 grupos → repesca + cuartos + semis + final
     return 2; // 7–10 → 2 grupos → semis + final (7: + consolación 3º)
@@ -442,7 +449,7 @@ export function computeGroups(teamList: Team[]): { key: string; names: string[] 
         }
     }
 
-    let groupCount = autoGroupCount(n);
+    let groupCount = autoGroupCount(n, teamList[0]?.division);
     while (groupCount > 1 && Math.floor(n / groupCount) < MIN_TEAMS_PER_GROUP) groupCount--;
     if (groupCount <= 0) return [];
     return mergeUndersizedGroups(distributeTeamsIntoGroups(teamList, groupCount));
@@ -536,11 +543,65 @@ function divisionForTeams(teams: Team[]): Team['division'] {
 
 // ─── Especificaciones de partido (sin hora ni pista) ───────────────────────
 /**
- * 2–6 equipos  → liguilla (1 grupo) + final
+ * 2–6 equipos  → liguilla (1 grupo) + final (Senior Femenino: semis + final)
  * 7 equipos    → 2 grupos (3+4) + consolación 3º + semis + final
  * 8–10 equipos → 2 grupos + semis + final
  * ≥11 equipos  → 3 grupos + repesca 3º + cuartos + semis + final
  */
+function appendSeniorFemeninoSemisAndFinal(
+    out: RawMatchSpec[],
+    div: Team['division'],
+    code: string,
+    n: number,
+    phaseOrderStart: number
+): void {
+    if (n >= 4) {
+        out.push(
+            {
+                teamA: '1º Clasificado',
+                teamB: '4º Clasificado',
+                division: div,
+                phase: 'SEMIS',
+                phaseOrder: phaseOrderStart,
+                roundLabel: `Semi · ${code} 1`,
+            },
+            {
+                teamA: '2º Clasificado',
+                teamB: '3º Clasificado',
+                division: div,
+                phase: 'SEMIS',
+                phaseOrder: phaseOrderStart,
+                roundLabel: `Semi · ${code} 2`,
+            }
+        );
+        out.push({
+            teamA: `Gan.Semi ${code} 1`,
+            teamB: `Gan.Semi ${code} 2`,
+            division: div,
+            phase: 'FINAL',
+            phaseOrder: phaseOrderStart + 1,
+            roundLabel: `Final · ${code}`,
+        });
+    } else if (n === 3) {
+        out.push({
+            teamA: '1º Clasificado',
+            teamB: '2º Clasificado',
+            division: div,
+            phase: 'SEMIS',
+            phaseOrder: phaseOrderStart,
+            roundLabel: `Semi · ${code}`,
+        });
+        out.push({
+            teamA: `Gan.Semi ${code}`,
+            teamB: '3º Clasificado',
+            division: div,
+            phase: 'FINAL',
+            phaseOrder: phaseOrderStart + 1,
+            roundLabel: `Final · ${code}`,
+        });
+    }
+}
+
 function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     const div = divisionForTeams(teams);
     const code = DIVISION_CODE[div];
@@ -631,6 +692,8 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
             );
             out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 2, roundLabel: `Final · ${code}` });
         }
+    } else if (seniorFemeninoRequiresSemifinals(div) && n >= 3) {
+        appendSeniorFemeninoSemisAndFinal(out, div, code, n, 1);
     } else {
         // 2–6 equipos, 1 grupo: liguilla → final 1º vs 2º (sin semifinales)
         out.push({ teamA: '1º Clasificado', teamB: '2º Clasificado', division: div, phase: 'FINAL', phaseOrder: 1, roundLabel: `Final · ${code} · 1º vs 2º` });
@@ -816,7 +879,10 @@ export function getMuskizDayGenDefaults(day: MuskizScheduleDayLabel): {
         intervalMins: 35,
         courtsInput: courts,
         lunchBreak: !!cfg.lunch,
-        customPrompt: `Solo categorías de ${day} (${categories}). Fase de grupos por categoría y solo la gran final (sin cuartos ni semifinales). Reparte horarios y pistas sin solapes. Todo debe caber entre ${cfg.playStart} y ${cfg.playEndExclusive}.`,
+        customPrompt:
+            day === 'Sábado'
+                ? `Solo categorías de ${day} (${categories}). Fase de grupos, semifinales y final por categoría (Senior Femenino siempre con 2 semifinales). Sin cuartos salvo formato ≥11 equipos. Reparte horarios y pistas sin solapes. Todo debe caber entre ${cfg.playStart} y ${cfg.playEndExclusive}.`
+                : `Solo categorías de ${day} (${categories}). Fase de grupos por categoría y solo la gran final (sin cuartos ni semifinales). Reparte horarios y pistas sin solapes. Todo debe caber entre ${cfg.playStart} y ${cfg.playEndExclusive}.`,
     };
 }
 
@@ -2337,6 +2403,61 @@ export function getDivisionCodeFromRound(round?: string): string | null {
 export function divisionFromMatchRound(round?: string): Team['division'] | null {
     const code = getDivisionCodeFromRound(round);
     return code ? CODE_TO_DIVISION[code] ?? null : null;
+}
+
+/** Partido eliminatorio de Senior Femenino (semis o final) en el borrador. */
+export function isSeniorFemeninoEliminationMatch(m: Pick<Match, 'round'>): boolean {
+    if (divisionFromMatchRound(m.round) !== 'Senior Femenino') return false;
+    const r = (m.round ?? '').toLowerCase();
+    return r.includes('semi') || r.includes('final');
+}
+
+export function countSeniorFemeninoSemisInMatches(matches: Pick<Match, 'round'>[]): number {
+    return matches.filter((m) => {
+        if (divisionFromMatchRound(m.round) !== 'Senior Femenino') return false;
+        return (m.round ?? '').toLowerCase().includes('semi');
+    }).length;
+}
+
+/** Semifinales previstas según plantilla de Senior Femenino. */
+export function expectedSeniorFemeninoSemiCount(paidTeamCount: number): number {
+    if (paidTeamCount < 3) return 0;
+    if (paidTeamCount === 3) return 1;
+    return 2;
+}
+
+/**
+ * Si el borrador del sábado no incluye las semifinales SF, las toma de una generación
+ * fresca (con horario) y sustituye solo el bloque eliminatorio SF.
+ */
+export function syncSeniorFemeninoSemisInSaturdayDraft(
+    teams: Team[],
+    saturdayMatches: Match[],
+    options?: MuskizSimulatorOptions
+): { matches: Match[]; changed: boolean } {
+    const sfTeams = teams.filter(
+        (t) => t.division === 'Senior Femenino' && t.paymentStatus === 'PAID'
+    );
+    const expectedSemis = expectedSeniorFemeninoSemiCount(sfTeams.length);
+    if (expectedSemis === 0) return { matches: saturdayMatches, changed: false };
+
+    const haveSemis = countSeniorFemeninoSemisInMatches(saturdayMatches);
+    if (haveSemis >= expectedSemis) return { matches: saturdayMatches, changed: false };
+
+    const { matches: freshSaturday } = buildMuskizDayDraftMatches(teams, 'Sábado', options);
+    const freshSfElim = freshSaturday.filter(isSeniorFemeninoEliminationMatch);
+    const freshSemiCount = countSeniorFemeninoSemisInMatches(freshSfElim);
+    if (freshSemiCount < expectedSemis) return { matches: saturdayMatches, changed: false };
+
+    const withoutSfElim = saturdayMatches.filter((m) => !isSeniorFemeninoEliminationMatch(m));
+    const merged = [...withoutSfElim, ...freshSfElim].sort((a, b) => {
+        const ta = a.time === 'PENDIENTE' ? 99_999 : timeToMinutes(a.time);
+        const tb = b.time === 'PENDIENTE' ? 99_999 : timeToMinutes(b.time);
+        if (ta !== tb) return ta - tb;
+        return (a.court ?? '').localeCompare(b.court ?? '', 'es');
+    });
+
+    return { matches: merged, changed: true };
 }
 
 function realTeamsOverlapInSameDivision(

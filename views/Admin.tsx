@@ -41,6 +41,7 @@ import {
     resolveMatchDivision,
     resolveMinMatchesForDivision,
     resolveTeamForMatchSide,
+    syncSeniorFemeninoSemisInSaturdayDraft,
     teamsEligibleForSchedule,
     type MuskizSimulatorOptions,
 } from '../services/muskizScheduleSimulator';
@@ -806,6 +807,29 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             setSimulationsSaving(false);
         }
     };
+
+    /** Añade semifinales SF al borrador del sábado si la simulación guardada aún no las tiene. */
+    useEffect(() => {
+        if (!simulationsLoaded || teams.length === 0 || simDrafts.length === 0) return;
+        const saturdayDraft = simDrafts.find((d) => d.scheduleDay === 'Sábado');
+        if (!saturdayDraft) return;
+
+        const { matches, changed } = syncSeniorFemeninoSemisInSaturdayDraft(
+            teams,
+            saturdayDraft.matches,
+            muskizSimulatorOptions
+        );
+        if (!changed) return;
+
+        const normalized = ensureStableDraftMatchIds(matches);
+        const nextDrafts = simDrafts.map((d) =>
+            d.id === saturdayDraft.id ? { ...d, matches: normalized } : d
+        );
+        setSimDrafts(nextDrafts);
+        void persistSimDraftsAsync(nextDrafts, activeDraftId);
+        toast.info('Semifinales Senior Femenino añadidas al calendario del sábado.', { duration: 8000 });
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- evita bucle al actualizar simDrafts
+    }, [simulationsLoaded, teams, muskizSimulatorOptions]);
 
     const handleExcelImport = useCallback(
         (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3606,7 +3630,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             <strong>Sábado:</strong> juvenil/senior 9:35–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida fija 14:15–15:45, 6 campos.{' '}
                                                             <strong>Domingo:</strong> infantiles 9:35–15:35, 4 campos.{' '}
                                                             Huecos <strong>35 min</strong>. Mínimo de partidos por equipo configurable en cada categoría (por defecto {MIN_REAL_MATCHES_PER_TEAM}).{' '}
-                                                            ≤6 → liguilla + final · 7 → 3+4 + consolación + semis + final · 8–10 → 2 grupos + semis + final (9: 4+5) · ≥11 → 3 grupos + repesca + cuartos + semis + final (11: 4+4+3).{' '}
+                                                            ≤6 → liguilla + final (Senior Femenino: semis + final; con 6 equipos, 2 grupos) · 7 → 3+4 + consolación + semis + final · 8–10 → 2 grupos + semis + final (9: 4+5) · ≥11 → 3 grupos + repesca + cuartos + semis + final (11: 4+4+3).{' '}
                                                             Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo cuando hay varios grupos.{' '}
                                                             Categorías mezcladas en el horario. Intenta evitar <strong>dos partidos seguidos</strong>, pero los permite si no caben todos (menos PENDIENTE). Partidos sin hueco: <strong>PENDIENTE</strong>.{' '}
                                                             <strong>Homónimos:</strong> equipos con el mismo nombre en distintas categorías se distinguen por código (CF, CM, JF…) y por id en base de datos; no se mezclan al validar solapes.
