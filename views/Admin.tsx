@@ -62,7 +62,6 @@ import {
     getGroupDistributionForDivision,
     getTeamsInDivisionGroup,
     remapMatchesAfterGroupChange,
-    remapMatchesAfterGroupSwap,
     validateGroupDistribution,
 } from '../utils/groupMatchSync';
 import {
@@ -1396,8 +1395,16 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     };
 
     const handleSwapTeamsInGroups = async (teamA: Team, teamB: Team) => {
-        const groupA = (teamA.competitionGroup ?? '').trim();
-        const groupB = (teamB.competitionGroup ?? '').trim();
+        const resolveEffectiveGroup = (team: Team): string => {
+            const explicit = (team.competitionGroup ?? '').trim();
+            if (explicit) return explicit;
+            const dist = getGroupDistributionForDivision(teams, team.division, false);
+            const block = dist.find((g) => g.teams.some((t) => t.id === team.id));
+            return block?.key ?? '';
+        };
+
+        const groupA = resolveEffectiveGroup(teamA);
+        const groupB = resolveEffectiveGroup(teamB);
         if (!groupA || !groupB || groupA === groupB) return;
 
         try {
@@ -1418,7 +1425,26 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
         await applyGroupMatchUpdates(
             updatedTeams,
-            (list) => remapMatchesAfterGroupSwap(list, updatedTeams, teamA, teamB),
+            (list) => {
+                let next = list;
+                next = remapMatchesAfterGroupChange(
+                    next,
+                    updatedTeams,
+                    teamA.name,
+                    groupA,
+                    groupB,
+                    teamA.division
+                );
+                next = remapMatchesAfterGroupChange(
+                    next,
+                    updatedTeams,
+                    teamB.name,
+                    groupB,
+                    groupA,
+                    teamB.division
+                );
+                return next;
+            },
             `${teamA.name} ↔ ${teamB.name} (Grupo ${groupA} ↔ ${groupB}). Partidos actualizados.`
         );
 

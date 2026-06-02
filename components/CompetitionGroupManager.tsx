@@ -78,6 +78,12 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
     }, [teams, division, onlyPaid, namesInDisplayedGroups]);
 
     const findTeamById = (id: string) => teams.find((t) => t.id === id);
+    const displayedGroupForTeam = (teamId: string): string => {
+        for (const g of groups) {
+            if (g.teams.some((t) => t.id === teamId)) return g.key;
+        }
+        return '';
+    };
     const maxTeamsByGroup = useMemo(() => {
         const n = roster.length;
         const caps = expectedGroupSizesForTeamCount(n);
@@ -96,7 +102,7 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
     }, [groups, roster.length]);
 
     const canMoveIntoGroup = (team: Team, groupKey: string): boolean => {
-        const current = (team.competitionGroup ?? '').trim();
+        const current = (team.competitionGroup ?? '').trim() || displayedGroupForTeam(team.id);
         if (current) return false;
         if (!groupKey) return false;
         const group = groups.find((g) => g.key === groupKey);
@@ -171,7 +177,7 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
             return;
         }
 
-        const draggedGroup = (dragged.competitionGroup ?? '').trim();
+        const draggedGroup = (dragged.competitionGroup ?? '').trim() || displayedGroupForTeam(dragged.id);
         const targetGroup = (targetTeam.competitionGroup ?? '').trim() || groupKey;
 
         if (draggedGroup && targetGroup && draggedGroup !== targetGroup && onSwapTeams) {
