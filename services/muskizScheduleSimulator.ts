@@ -7,7 +7,7 @@
  * - Domingo: infantiles (♀♂), 9:35–15:35, 4 campos.
  *
  * Formato por número de equipos en la categoría (Viernes, Sábado y Domingo):
- * - 2–6 equipos : liguilla (1 grupo) → final 1º vs 2º (sin semifinales), salvo Senior Femenino (semis + final)
+ * - 2–6 equipos : liguilla (1 grupo) → final 1º vs 2º (sin semifinales), salvo Senior Femenino e Infantil Masculino (semis + final)
  * - 7 equipos   : grupos 3+4 → consolación (3ºA vs 3ºB) → semis (2 mejores/grupo) → final
  * - 8–10 equipos : 2 grupos → semis → final (9: 4+5)
  * - ≥11 equipos  : 3 grupos (11: 4+4+3) → repesca 2 peores 3º + cuartos (2×1º vs 3º, 1º vs 2º, 2º vs 2º) + semis → final
@@ -250,6 +250,16 @@ function roundRobinPairs(names: string[]): { a: string; b: string }[] {
 /** Senior Femenino: semifinales + final aunque haya pocos equipos (liguilla o 2 grupos). */
 export function seniorFemeninoRequiresSemifinals(division: Team['division']): boolean {
     return division === 'Senior Femenino';
+}
+
+/** Infantil Masculino (domingo): liguilla → semis (1º–4º / 2º–3º) → final. */
+export function infantilMasculinoRequiresSemifinals(division: Team['division']): boolean {
+    return division === 'Infantil Masculino';
+}
+
+/** Liguilla de un solo grupo con cruce 1º–4º y 2º–3º antes de la final. */
+export function liguillaUsesCrossSemifinals(division: Team['division']): boolean {
+    return seniorFemeninoRequiresSemifinals(division) || infantilMasculinoRequiresSemifinals(division);
 }
 
 export function autoGroupCount(n: number, division?: Team['division']): number {
@@ -574,7 +584,7 @@ function divisionForTeams(teams: Team[]): Team['division'] {
 
 // ─── Especificaciones de partido (sin hora ni pista) ───────────────────────
 /**
- * 2–6 equipos  → liguilla (1 grupo) + final (Senior Femenino: semis + final)
+ * 2–6 equipos  → liguilla (1 grupo) + final (Senior Femenino e Infantil Masculino: semis + final)
  * 7 equipos    → 2 grupos (3+4) + consolación 3º + semis + final
  * 8–10 equipos → 2 grupos + semis + final
  * ≥11 equipos  → 3 grupos + repesca 3º + cuartos + semis + final
@@ -726,7 +736,7 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
             appendThirdFourthPlaceMatch(out, div, code, 2);
             out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 3, roundLabel: `Final · ${code}` });
         }
-    } else if (seniorFemeninoRequiresSemifinals(div) && n >= 3) {
+    } else if (liguillaUsesCrossSemifinals(div) && n >= 3) {
         appendSeniorFemeninoSemisAndFinal(out, div, code, n, 1);
     } else {
         // 2–6 equipos, 1 grupo: liguilla → final 1º vs 2º (sin semifinales)
@@ -2522,9 +2532,28 @@ export function countSeniorFemeninoSemisInMatches(matches: Pick<Match, 'round'>[
 
 /** Semifinales previstas según plantilla de Senior Femenino. */
 export function expectedSeniorFemeninoSemiCount(paidTeamCount: number): number {
+    return expectedLiguillaCrossSemiCount(paidTeamCount);
+}
+
+/** Semifinales en liguilla con cruce 1º–4º / 2º–3º (SF, IM). */
+export function expectedLiguillaCrossSemiCount(paidTeamCount: number): number {
     if (paidTeamCount < 3) return 0;
     if (paidTeamCount === 3) return 1;
     return 2;
+}
+
+/** Partido eliminatorio de Infantil Masculino (semis o final) en el borrador. */
+export function isInfantilMasculinoEliminationMatch(m: Pick<Match, 'round'>): boolean {
+    if (divisionFromMatchRound(m.round) !== 'Infantil Masculino') return false;
+    const r = (m.round ?? '').toLowerCase();
+    return r.includes('semi') || r.includes('final');
+}
+
+export function countInfantilMasculinoSemisInMatches(matches: Pick<Match, 'round'>[]): number {
+    return matches.filter((m) => {
+        if (divisionFromMatchRound(m.round) !== 'Infantil Masculino') return false;
+        return (m.round ?? '').toLowerCase().includes('semi');
+    }).length;
 }
 
 /**
@@ -2559,6 +2588,58 @@ export function syncSeniorFemeninoSemisInSaturdayDraft(
     });
 
     return { matches: merged, changed: true };
+}
+
+/**
+ * Si el borrador del domingo no incluye las semifinales IM, las toma de una generación
+ * fresca (con horario) y sustituye solo el bloque eliminatorio IM.
+ */
+export function syncInfantilMasculinoSemisInSundayDraft(
+    teams: Team[],
+    sundayMatches: Match[],
+    options?: MuskizSimulatorOptions
+): { matches: Match[]; changed: boolean } {
+    const imTeams = teams.filter(
+        (t) => t.division === 'Infantil Masculino' && t.paymentStatus === 'PAID'
+    );
+    const expectedSemis = expectedLiguillaCrossSemiCount(imTeams.length);
+    if (expectedSemis === 0) return { matches: sundayMatches, changed: false };
+
+    const haveSemis = countInfantilMasculinoSemisInMatches(sundayMatches);
+    if (haveSemis >= expectedSemis) return { matches: sundayMatches, changed: false };
+
+    const { matches: freshSunday } = buildMuskizDayDraftMatches(teams, 'Domingo', options);
+    const freshImElim = freshSunday.filter(isInfantilMasculinoEliminationMatch);
+    const freshSemiCount = countInfantilMasculinoSemisInMatches(freshImElim);
+    if (freshSemiCount < expectedSemis) return { matches: sundayMatches, changed: false };
+
+    const withoutImElim = sundayMatches.filter((m) => !isInfantilMasculinoEliminationMatch(m));
+    const merged = [...withoutImElim, ...freshImElim].sort((a, b) => {
+        const ta = a.time === 'PENDIENTE' ? 99_999 : timeToMinutes(a.time);
+        const tb = b.time === 'PENDIENTE' ? 99_999 : timeToMinutes(b.time);
+        if (ta !== tb) return ta - tb;
+        return (a.court ?? '').localeCompare(b.court ?? '', 'es');
+    });
+
+    return { matches: merged, changed: true };
+}
+
+/** Parches del borrador del domingo (semis IM, etc.). */
+export function patchSundaySimulationDraft(
+    teams: Team[],
+    sundayMatches: Match[],
+    options?: MuskizSimulatorOptions
+): { matches: Match[]; changed: boolean; notes: string[] } {
+    let matches = sundayMatches;
+    const notes: string[] = [];
+
+    const semis = syncInfantilMasculinoSemisInSundayDraft(teams, matches, options);
+    if (semis.changed) {
+        matches = semis.matches;
+        notes.push('semifinales Infantil Masculino');
+    }
+
+    return { matches, changed: notes.length > 0, notes };
 }
 
 /** Partido de vuelta en fase de grupos (grupos de 3, ida y vuelta). */

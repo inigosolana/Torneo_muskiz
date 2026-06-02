@@ -43,6 +43,7 @@ import {
     resolveTeamForMatchSide,
     auditSaturdayGroupPhase,
     patchSaturdaySimulationDraft,
+    patchSundaySimulationDraft,
     teamsEligibleForSchedule,
     type MuskizSimulatorOptions,
     type MuskizScheduleDayLabel,
@@ -811,46 +812,79 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
-    /** Completa el borrador del sábado (semis SF, vueltas JF-A, etc.) si faltan partidos del formato. */
+    /** Completa borradores del sábado/domingo (semis SF, semis IM, vueltas JF-A, etc.) si faltan partidos. */
     useEffect(() => {
         if (!simulationsLoaded || teams.length === 0 || simDrafts.length === 0) return;
+
+        const patchDraft = (
+            draft: CalendarDraft,
+            patchFn: (
+                t: Team[],
+                m: Match[],
+                o?: MuskizSimulatorOptions
+            ) => { matches: Match[]; changed: boolean; notes: string[] }
+        ): Match[] | null => {
+            const { matches, changed, notes } = patchFn(teams, draft.matches, muskizSimulatorOptions);
+            if (!changed) return null;
+            toast.success(`Borrador ${draft.scheduleDay ?? draft.name}: ${notes.join(', ')}.`);
+            return ensureStableDraftMatchIds(matches);
+        };
+
+        let nextDrafts = simDrafts;
+        let anyChanged = false;
+
         const saturdayDraft = simDrafts.find((d) => d.scheduleDay === 'Sábado');
-        if (!saturdayDraft) return;
+        if (saturdayDraft) {
+            let workingMatches = saturdayDraft.matches;
+            const { matches, changed, notes: saturdayNotes } = patchSaturdaySimulationDraft(
+                teams,
+                workingMatches,
+                muskizSimulatorOptions
+            );
+            if (changed) workingMatches = matches;
 
-        let workingMatches = saturdayDraft.matches;
-        const { matches, changed, notes } = patchSaturdaySimulationDraft(
-            teams,
-            workingMatches,
-            muskizSimulatorOptions
-        );
-        if (changed) workingMatches = matches;
+            const groupAudit = auditSaturdayGroupPhase(teams, workingMatches, muskizSimulatorOptions);
+            if (!groupAudit.complete) {
+                const detail = groupAudit.divisions
+                    .filter((d) => !d.ok)
+                    .map((d) => {
+                        const bits = d.groups
+                            .filter((g) => !g.ok)
+                            .map(
+                                (g) =>
+                                    `${g.groupLabel}: ${g.missing.length ? `faltan ${g.missing.length}` : ''}${g.surplus.length ? ` sobran ${g.surplus.length}` : ''}`
+                            );
+                        return `${d.code} (${bits.join('; ')})`;
+                    })
+                    .join(' · ');
+                toast.warning(`Fase de grupos (sábado) incompleta: ${detail}`, { duration: 14000 });
+            }
 
-        const groupAudit = auditSaturdayGroupPhase(teams, workingMatches, muskizSimulatorOptions);
-        if (!groupAudit.complete) {
-            const detail = groupAudit.divisions
-                .filter((d) => !d.ok)
-                .map((d) => {
-                    const bits = d.groups
-                        .filter((g) => !g.ok)
-                        .map(
-                            (g) =>
-                                `${g.groupLabel}: ${g.missing.length ? `faltan ${g.missing.length}` : ''}${g.surplus.length ? ` sobran ${g.surplus.length}` : ''}`
-                        );
-                    return `${d.code} (${bits.join('; ')})`;
-                })
-                .join(' · ');
-            toast.warning(`Fase de grupos (sábado) incompleta: ${detail}`, { duration: 14000 });
+            if (changed) {
+                const normalized = ensureStableDraftMatchIds(workingMatches);
+                nextDrafts = nextDrafts.map((d) =>
+                    d.id === saturdayDraft.id ? { ...d, matches: normalized } : d
+                );
+                anyChanged = true;
+                toast.info(`Calendario del sábado actualizado: ${saturdayNotes.join(' · ')}.`, { duration: 9000 });
+            }
         }
 
-        if (!changed) return;
+        const sundayDraft = simDrafts.find((d) => d.scheduleDay === 'Domingo');
+        if (sundayDraft) {
+            const normalized = patchDraft(sundayDraft, patchSundaySimulationDraft);
+            if (normalized) {
+                nextDrafts = nextDrafts.map((d) =>
+                    d.id === sundayDraft.id ? { ...d, matches: normalized } : d
+                );
+                anyChanged = true;
+            }
+        }
 
-        const normalized = ensureStableDraftMatchIds(workingMatches);
-        const nextDrafts = simDrafts.map((d) =>
-            d.id === saturdayDraft.id ? { ...d, matches: normalized } : d
-        );
+        if (!anyChanged) return;
+
         setSimDrafts(nextDrafts);
-        void persistSimDraftsAsync(nextDrafts, activeDraftId);
-        toast.info(`Calendario del sábado actualizado: ${notes.join(' · ')}.`, { duration: 9000 });
+        void persistSimDraftsAsync(nextDrafts, activeSimDraftId);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- evita bucle al actualizar simDrafts
     }, [simulationsLoaded, teams, muskizSimulatorOptions]);
 
