@@ -673,8 +673,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         ]
     );
     const thirdPlaceRanking = useMemo(() => {
-        const groups = getGroupDistributionForDivision(teams, standingsDivision, false);
-        if (groups.length !== 3) return null;
+        const groups = getGroupDistributionForDivision(teams, standingsDivision, false).map((g) => ({
+            key: g.key,
+            names: g.teams.map((t) => t.name),
+        }));
+        if (groups.length !== 3 || groups.some((g) => !Array.isArray(g.names))) return null;
         const ranked = rankThirdPlaceCandidates(
             teams,
             compArenaMode === 'simulation' ? simulationViewMatches : matches,
