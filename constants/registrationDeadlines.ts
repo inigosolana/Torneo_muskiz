@@ -2,11 +2,20 @@
 export const TEAM_REGISTRATION_CLOSE_AT = '2026-06-02T00:00:00';
 export const TEAM_REGISTRATION_LAST_DAY = '1 de junio';
 
+/** Cierre anticipado manual (prioritario sobre la fecha). */
+export const TEAM_REGISTRATION_FORCE_CLOSED = true;
+
 export const PLAYER_LICENSE_CLOSE_AT = '2026-06-05T00:00:00';
 export const PLAYER_LICENSE_LAST_DAY = '4 de junio';
 
 export function isPastDeadline(closeAtIso: string): boolean {
   return Date.now() > new Date(closeAtIso).getTime();
+}
+
+/** Inscripción de equipos cerrada (manual o por fecha). */
+export function isTeamRegistrationClosed(now = Date.now()): boolean {
+  if (TEAM_REGISTRATION_FORCE_CLOSED) return true;
+  return now > new Date(TEAM_REGISTRATION_CLOSE_AT).getTime();
 }
 
 export interface RegistrationTimeLeft {

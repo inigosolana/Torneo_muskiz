@@ -3,6 +3,7 @@ import { supabase } from '../services/supabaseClient';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { getEdgeFunctionErrorMessage } from '../utils/invokeEdgeFunction';
+import { isTeamRegistrationClosed } from '../constants/registrationDeadlines';
 
 function isPasswordRecoveryUrl(): boolean {
     if (typeof window === 'undefined') return false;
@@ -262,14 +263,22 @@ export const ManagerLogin: React.FC = () => {
                         </button>
 
                         <div className="space-y-1">
-                            <p className="text-xs text-slate-400">¿Todavía no has inscrito a tu equipo?</p>
-                            <button
-                                type="button"
-                                onClick={() => navigate('/registration')}
-                                className="text-primary font-bold text-sm hover:underline"
-                            >
-                                Inscribir equipo ahora
-                            </button>
+                            {isTeamRegistrationClosed() ? (
+                                <p className="text-xs text-slate-400">
+                                    Las inscripciones están cerradas. No es posible apuntar nuevos equipos.
+                                </p>
+                            ) : (
+                                <>
+                                    <p className="text-xs text-slate-400">¿Todavía no has inscrito a tu equipo?</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate('/registration')}
+                                        className="text-primary font-bold text-sm hover:underline"
+                                    >
+                                        Inscribir equipo ahora
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 </form>

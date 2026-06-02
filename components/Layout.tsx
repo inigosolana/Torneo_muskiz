@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { siteContent } from '../constants/siteContent';
+import { isTeamRegistrationClosed } from '../constants/registrationDeadlines';
 import { RegistrationUrgencyBanner } from './RegistrationUrgencyBanner';
 
 interface LayoutProps {
@@ -11,6 +12,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const location = useLocation();
+  const registrationClosed = isTeamRegistrationClosed();
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -35,7 +37,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navItems = [
     { label: 'Inicio', path: '/' },
     { label: 'Información', path: '/info' },
-    { label: 'Registro', path: '/registration' },
+    { label: registrationClosed ? 'Inscripciones (cerradas)' : 'Registro', path: '/registration' },
     { label: 'Mi Equipo', path: '/team-manager' },
     { label: 'Competición', path: '/schedule' },
     { label: 'Multimedia', path: '/media' },
@@ -94,13 +96,20 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <span className="material-symbols-outlined">{theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
               </button>
 
-              <Link
-                to="/registration"
-                className="hidden sm:flex items-center gap-2 bg-primary hover:bg-primary-dark text-background-dark px-5 py-2.5 rounded-lg font-bold text-sm transition-all transform active:scale-95 shadow-[0_0_15px_rgba(13,242,242,0.3)] hover:shadow-[0_0_20px_rgba(13,242,242,0.5)]"
-              >
-                <span>Inscribirse</span>
-                <span className="material-symbols-outlined text-lg">arrow_forward</span>
-              </Link>
+              {!registrationClosed ? (
+                <Link
+                  to="/registration"
+                  className="hidden sm:flex items-center gap-2 bg-primary hover:bg-primary-dark text-background-dark px-5 py-2.5 rounded-lg font-bold text-sm transition-all transform active:scale-95 shadow-[0_0_15px_rgba(13,242,242,0.3)] hover:shadow-[0_0_20px_rgba(13,242,242,0.5)]"
+                >
+                  <span>Inscribirse</span>
+                  <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                </Link>
+              ) : (
+                <span className="hidden sm:inline-flex items-center gap-2 bg-white/10 text-slate-300 px-5 py-2.5 rounded-lg font-bold text-sm cursor-default">
+                  <span className="material-symbols-outlined text-lg">event_busy</span>
+                  Inscripciones cerradas
+                </span>
+              )}
 
               <button
                 className="lg:hidden p-2 text-slate-300 hover:text-primary"

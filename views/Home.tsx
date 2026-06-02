@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { siteContent } from '../constants/siteContent';
+import { isTeamRegistrationClosed } from '../constants/registrationDeadlines';
 import { useTournamentData } from '../context/TournamentDataContext';
 import { supabase } from '../services/supabaseClient';
 import { normalizeSponsor } from '../utils/sponsorDisplay';
@@ -37,6 +38,7 @@ export const Home: React.FC = () => {
   }, []);
 
   const topSponsors = useMemo(() => homeSponsors, [homeSponsors]);
+  const registrationClosed = isTeamRegistrationClosed();
 
   return (
     <div className="animate-in fade-in duration-500">
@@ -88,34 +90,52 @@ export const Home: React.FC = () => {
                 >
                   Ver Calendario
                 </button>
-                <button
-                  onClick={() => navigate('/registration')}
-                  className="flex items-center justify-center gap-2 bg-primary text-background-dark hover:bg-primary/90 px-8 py-3 rounded-lg font-bold text-base transition-colors min-w-[160px]"
-                >
-                  Inscribir Equipo
-                </button>
+                {!registrationClosed && (
+                  <button
+                    onClick={() => navigate('/registration')}
+                    className="flex items-center justify-center gap-2 bg-primary text-background-dark hover:bg-primary/90 px-8 py-3 rounded-lg font-bold text-base transition-colors min-w-[160px]"
+                  >
+                    Inscribir Equipo
+                  </button>
+                )}
               </div>
             </div>
 
             {/* Inscription Widget */}
             <div className="xl:col-span-5 w-full">
               <div className="bg-surface-dark/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col items-center justify-center text-center h-full min-h-[300px]">
-                <div className="size-20 rounded-full bg-primary/20 flex items-center justify-center mb-6">
-                  <span className="material-symbols-outlined text-primary text-5xl">how_to_reg</span>
+                <div className={`size-20 rounded-full flex items-center justify-center mb-6 ${registrationClosed ? 'bg-red-500/20' : 'bg-primary/20'}`}>
+                  <span className={`material-symbols-outlined text-5xl ${registrationClosed ? 'text-red-400' : 'text-primary'}`}>
+                    {registrationClosed ? 'event_busy' : 'how_to_reg'}
+                  </span>
                 </div>
                 <h3 className="text-3xl font-black text-white uppercase tracking-tight mb-2">
-                  Inscripciones Abiertas
+                  {registrationClosed ? 'Inscripciones cerradas' : 'Inscripciones abiertas'}
                 </h3>
                 <p className="text-slate-400 mb-4 max-w-sm">
-                  Asegura la plaza de tu equipo para la segunda edición del torneo antes de que se agoten.
+                  {registrationClosed
+                    ? 'El plazo de inscripción ha finalizado. No es posible apuntar nuevos equipos al torneo.'
+                    : 'Asegura la plaza de tu equipo para la segunda edición del torneo antes de que se agoten.'}
                 </p>
-                <RegistrationUrgencyBanner variant="hero" className="mb-6" />
-                <button
-                  onClick={() => navigate('/registration')}
-                  className="bg-primary hover:bg-primary-dark text-background-dark px-10 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(13,242,242,0.3)] w-full sm:w-auto"
-                >
-                  ¡Inscribirse Ahora!
-                </button>
+                {!registrationClosed && (
+                  <>
+                    <RegistrationUrgencyBanner variant="hero" className="mb-6" />
+                    <button
+                      onClick={() => navigate('/registration')}
+                      className="bg-primary hover:bg-primary-dark text-background-dark px-10 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(13,242,242,0.3)] w-full sm:w-auto"
+                    >
+                      ¡Inscribirse ahora!
+                    </button>
+                  </>
+                )}
+                {registrationClosed && (
+                  <button
+                    onClick={() => navigate('/team-manager')}
+                    className="bg-white/10 hover:bg-white/20 text-white px-10 py-4 rounded-xl font-bold text-lg transition-all w-full sm:w-auto"
+                  >
+                    Acceder a Mi Equipo
+                  </button>
+                )}
               </div>
             </div>
           </div>

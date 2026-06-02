@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getRegistrationTimeLeft,
-  isPastDeadline,
+  isTeamRegistrationClosed,
   REGISTRATION_IMMINENT_MS,
   TEAM_REGISTRATION_CLOSE_AT,
   TEAM_REGISTRATION_LAST_DAY,
@@ -61,7 +61,7 @@ export const RegistrationUrgencyBanner: React.FC<RegistrationUrgencyBannerProps>
   }, []);
 
   useEffect(() => {
-    if (isPastDeadline(TEAM_REGISTRATION_CLOSE_AT)) return;
+    if (isTeamRegistrationClosed()) return;
     const id = window.setInterval(() => setTick((n) => n + 1), 1000);
     return () => window.clearInterval(id);
   }, []);
@@ -76,7 +76,23 @@ export const RegistrationUrgencyBanner: React.FC<RegistrationUrgencyBannerProps>
     [teams, categories],
   );
 
-  if (timeLeft.isClosed || isPastDeadline(TEAM_REGISTRATION_CLOSE_AT)) {
+  if (isTeamRegistrationClosed()) {
+    if (variant === 'strip') {
+      return (
+        <div
+          className={`bg-slate-800 text-slate-200 text-xs sm:text-sm ${className}`}
+          role="status"
+        >
+          <div className="max-w-[1440px] mx-auto px-4 py-2 text-center font-medium">
+            Inscripciones cerradas — no es posible apuntar nuevos equipos
+          </div>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  if (timeLeft.isClosed) {
     return null;
   }
 

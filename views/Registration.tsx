@@ -4,9 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { useTournamentData } from '../context/TournamentDataContext';
 import {
-    isPastDeadline,
-    TEAM_REGISTRATION_CLOSE_AT,
-    TEAM_REGISTRATION_LAST_DAY,
+    isTeamRegistrationClosed,
 } from '../constants/registrationDeadlines';
 import { RegistrationUrgencyBanner } from '../components/RegistrationUrgencyBanner';
 
@@ -193,6 +191,10 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
     };
 
     const handleComplete = async () => {
+        if (isTeamRegistrationClosed()) {
+            alert('Las inscripciones están cerradas. No es posible apuntar nuevos equipos.');
+            return;
+        }
         if (!managerName || !managerSurnames || !managerEmail || !managerPhone || !password) {
             alert('Por favor, completa los datos del responsable.');
             return;
@@ -379,8 +381,10 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
         );
     }
 
+    const isRegistrationClosed = isTeamRegistrationClosed();
+
     // --- Expired state ---
-    if (expired) {
+    if (expired && !isRegistrationClosed) {
         return (
             <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 flex justify-center animate-in fade-in">
                 <div className="w-full max-w-lg">
@@ -404,16 +408,26 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
         );
     }
 
-    const isRegistrationClosed = isPastDeadline(TEAM_REGISTRATION_CLOSE_AT);
-
     if (isRegistrationClosed) {
         return (
             <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 flex justify-center items-center animate-in fade-in">
                 <div className="w-full max-w-lg text-center bg-white dark:bg-surface-dark p-12 rounded-2xl shadow-2xl border border-red-200 dark:border-red-800">
                     <span className="material-symbols-outlined text-6xl text-red-500 mb-4">event_busy</span>
-                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Inscripción de Equipos Cerrada</h2>
-                    <p className="text-slate-500 text-sm mb-6">El plazo para inscribir nuevos equipos finalizó el {TEAM_REGISTRATION_LAST_DAY}.</p>
-                    <button onClick={() => navigate('/')} className="bg-primary text-background-dark px-8 py-3 rounded-xl font-bold">Volver al Inicio</button>
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Inscripciones cerradas</h2>
+                    <p className="text-slate-500 text-sm mb-4">
+                        El plazo para inscribir nuevos equipos ha finalizado. <strong>No es posible apuntarse</strong> ni registrar equipos adicionales.
+                    </p>
+                    <p className="text-slate-400 text-xs mb-6">
+                        Si ya eres responsable de un equipo inscrito, accede con tu cuenta en «Mi Equipo».
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <button onClick={() => navigate('/team-manager')} className="bg-primary text-background-dark px-8 py-3 rounded-xl font-bold">
+                            Mi Equipo
+                        </button>
+                        <button onClick={() => navigate('/')} className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-white px-8 py-3 rounded-xl font-bold">
+                            Volver al inicio
+                        </button>
+                    </div>
                 </div>
             </div>
         );

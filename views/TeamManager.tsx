@@ -4,6 +4,7 @@ import { toast, Toaster } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { teamService } from '../services/teamService';
 import { supabase } from '../services/supabaseClient';
+import { isTeamRegistrationClosed } from '../constants/registrationDeadlines';
 import {
     MAX_COACHES_PER_TEAM,
     MAX_OFFICIALS_PER_TEAM,
@@ -84,16 +85,19 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                             Aún no tienes equipos aprobados
                         </h2>
                         <p className="text-slate-500 text-sm max-w-md mx-auto">
-                            Puedes inscribir equipos cuando quieras. Solo aparecerán en Plantilla y Horarios cuando el
-                            staff los apruebe.
+                            {isTeamRegistrationClosed()
+                                ? 'Las inscripciones están cerradas. Si ya te inscribiste, el staff revisará tu solicitud; cuando aprueben tus equipos aparecerán aquí.'
+                                : 'Puedes inscribir equipos cuando quieras. Solo aparecerán en Plantilla y Horarios cuando el staff los apruebe.'}
                         </p>
-                        <button
-                            onClick={() => navigate('/registration')}
-                            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-background-dark font-bold hover:opacity-90 transition-opacity"
-                        >
-                            <span className="material-symbols-outlined text-sm">add</span>
-                            Inscribir equipo
-                        </button>
+                        {!isTeamRegistrationClosed() && (
+                            <button
+                                onClick={() => navigate('/registration')}
+                                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-background-dark font-bold hover:opacity-90 transition-opacity"
+                            >
+                                <span className="material-symbols-outlined text-sm">add</span>
+                                Inscribir equipo
+                            </button>
+                        )}
                     </div>
                     <p className="text-center text-xs text-slate-400">
                         Pestaña Horarios: verás partidos cuando tengas equipos publicados en el calendario.
@@ -381,7 +385,9 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                         >
                             {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </select>
-                        <button onClick={() => navigate('/registration')} className="text-primary font-bold hover:underline text-sm">+ Nuevo Equipo</button>
+                        {!isTeamRegistrationClosed() && (
+                            <button onClick={() => navigate('/registration')} className="text-primary font-bold hover:underline text-sm">+ Nuevo Equipo</button>
+                        )}
                     </div>
 
                     <div className="flex flex-col items-center gap-1">
