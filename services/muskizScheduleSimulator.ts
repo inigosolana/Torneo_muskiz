@@ -12,6 +12,10 @@
  * - 8–10 equipos : 2 grupos → semis → final (9: 4+5)
  * - ≥11 equipos  : 3 grupos (11: 4+4+3) → repesca 2 peores 3º + cuartos + semis → final
  *
+ * El calendario generado usa solo equipos reales (pagados y aprobados) y solo partidos
+ * de fase de grupos con nombres reales. Los cruces eliminatorios (1º Gr.A, Gan.Semi…)
+ * no se programan hasta que existan clasificados; el formato previsto se muestra en Estructura.
+ *
  * El simulador intenta que cada equipo juegue ≥4 partidos reales; si no cabe, baja a ≥3.
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
  * Las fases de grupos/cuartos se programan antes que semis/finales.
@@ -34,6 +38,17 @@ export const MIN_TEAMS_PER_GROUP = 3;
 export const MIN_REAL_MATCHES_PER_TEAM = 3;
 /** @deprecated Usar min_matches_per_team por categoría (tabla categories). */
 export const TARGET_REAL_MATCHES_PER_TEAM = 4;
+
+/** Equipos reales que entran en el calendario: pagados y aprobados por el staff. */
+export function teamsEligibleForSchedule(allTeams: Team[]): Team[] {
+    return allTeams.filter((t) => t.paymentStatus === 'PAID' && t.status === 'approved');
+}
+
+/** Partidos programables: ambos bandos son equipos inscritos (no plantillas tipo 1º Gr.A o Gan.Semi). */
+export function filterSchedulableSpecs(specs: RawMatchSpec[], teamList: Team[]): RawMatchSpec[] {
+    const realNames = new Set(teamList.map((t) => t.name));
+    return specs.filter((s) => realNames.has(s.teamA) && realNames.has(s.teamB));
+}
 
 export type DivisionMinMatchesMap = Partial<Record<Team['division'], number>>;
 
@@ -463,7 +478,7 @@ export function countDivisionMatchBreakdown(
 
     return {
         planned: summarize(base),
-        withMinPerTeam: summarize(full),
+        withMinPerTeam: summarize(filterSchedulableSpecs(full, teamList)),
     };
 }
 
@@ -476,8 +491,9 @@ export function countMatchesPerTeamForDivision(
     const min = resolveMinMatchesForDivision(divisionForTeams(teamList), options);
     const base = specsForPaidDivision(teamList);
     const specs = ensureMinRealMatchesPerTeam(teamList, base, min);
+    const schedulable = filterSchedulableSpecs(specs, teamList);
     const realNames = new Set(teamList.map((t) => t.name));
-    const counts = countRealRealMatches(specs, realNames);
+    const counts = countRealRealMatches(schedulable, realNames);
     return teamList
         .map((t) => ({ name: t.name, matches: counts.get(t.name) ?? 0 }))
         .sort((a, b) => a.name.localeCompare(b.name, 'es'));
@@ -1859,9 +1875,9 @@ export function buildMuskizDayDraftMatches(
 ): MuskizBuildResult {
     const slotMins = options?.slotDurationMins ?? 35;
 
-    const paid = allTeams.filter((t) => t.paymentStatus === 'PAID');
+    const eligible = teamsEligibleForSchedule(allTeams);
     const byDivision = new Map<Team['division'], Team[]>();
-    for (const t of paid) {
+    for (const t of eligible) {
         if (!byDivision.has(t.division)) byDivision.set(t.division, []);
         byDivision.get(t.division)!.push(t);
     }
@@ -1895,14 +1911,26 @@ export function buildMuskizDayDraftMatches(
         }
 
         const baseSpecs = specsForPaidDivision(list);
+        const plannedElim =
+            baseSpecs.filter((s) => s.phase !== 'GRUPOS').length;
         const realNames = new Set(list.map((t) => t.name));
         const divMin = resolveMinMatchesForDivision(div, options);
 
         let divSpecs = ensureMinRealMatchesPerTeam(list, [...baseSpecs], divMin);
+        divSpecs = filterSchedulableSpecs(divSpecs, list);
         let effectiveMin = divMin;
         if (allDivSpecs.length + divSpecs.length > cap && divMin > 2) {
             effectiveMin = Math.max(2, divMin - 1);
-            divSpecs = ensureMinRealMatchesPerTeam(list, [...baseSpecs], effectiveMin);
+            divSpecs = filterSchedulableSpecs(
+                ensureMinRealMatchesPerTeam(list, [...baseSpecs], effectiveMin),
+                list
+            );
+        }
+
+        if (plannedElim > 0) {
+            warnings.push(
+                `«${div}»: ${plannedElim} partido(s) eliminatorios del formato quedan fuera del borrador hasta conocer clasificados.`
+            );
         }
 
         const m = countRealRealMatches(divSpecs, realNames);
@@ -1921,7 +1949,7 @@ export function buildMuskizDayDraftMatches(
     }
 
     // ── Segunda pasada: mezclar categorías e intentar programar ────────────
-    const interleaved = interleaveSpecsByDivision(allDivSpecs, paid);
+    const interleaved = interleaveSpecsByDivision(allDivSpecs, eligible);
 
     if (targetDay === 'Sábado') {
         configs.Sábado = {
@@ -1930,9 +1958,9 @@ export function buildMuskizDayDraftMatches(
         };
     }
 
-    const { placed, unplaced } = scheduleGreedy(targetDay, interleaved, configs, slotMins, paid);
+    const { placed, unplaced } = scheduleGreedy(targetDay, interleaved, configs, slotMins, eligible);
 
-    const backToBack = countBackToBackTeamSlots(placed, slotMins, paid);
+    const backToBack = countBackToBackTeamSlots(placed, slotMins, eligible);
     if (backToBack > 0) {
         const pendingNote = unplaced.length > 0 ? ' Algunos siguen sin hueco (PENDIENTE).' : '';
         warnings.push(

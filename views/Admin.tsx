@@ -32,6 +32,7 @@ import {
     MUSKIZ_AI_SLOT_ASSIST_MAX,
     resolveMatchDivision,
     resolveMinMatchesForDivision,
+    teamsEligibleForSchedule,
     type MuskizSimulatorOptions,
 } from '../services/muskizScheduleSimulator';
 import {
@@ -884,7 +885,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                 return;
             }
             if (newMatches.length === 0) {
-                toast.error(`No se generaron partidos para ${day}: hace falta al menos 2 equipos pagados en una categoría de ese día.`);
+                toast.error(`No se generaron partidos para ${day}: hace falta al menos 2 equipos pagados y aprobados en una categoría de ese día.`);
                 return;
             }
             const normalized = ensureStableDraftMatchIds(newMatches);
@@ -926,7 +927,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             }
             const total = WEEKEND_SCHEDULE_DAYS.reduce((n, day) => n + byDay[day].length, 0);
             if (total === 0) {
-                toast.error('No se generaron partidos: hace falta al menos 2 equipos pagados en una misma categoría.');
+                toast.error('No se generaron partidos: hace falta al menos 2 equipos pagados y aprobados en una misma categoría.');
                 return;
             }
             const nextDrafts = simDrafts.map((d) => {
@@ -2581,13 +2582,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 </div>
                                             </div>
                                             {(() => {
-                                                const paidInDiv = teams.filter(
-                                                    (t) => t.division === structureDivision && t.paymentStatus === 'PAID'
+                                                const paidInDiv = teamsEligibleForSchedule(teams).filter(
+                                                    (t) => t.division === structureDivision
                                                 );
                                                 if (paidInDiv.length < 2) {
                                                     return (
                                                         <p className="text-sm text-slate-400">
-                                                            Hacen falta al menos 2 equipos pagados en esta categoría.
+                                                            Hacen falta al menos 2 equipos pagados y aprobados en esta categoría.
                                                         </p>
                                                     );
                                                 }
@@ -2640,8 +2641,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </div>
                                                         {totals.total !== breakdown.planned.total && (
                                                             <p className="text-[11px] text-slate-500 mb-3">
-                                                                Formato base: {breakdown.planned.grupos} grupos + {breakdown.planned.eliminatoria} eliminatoria ={' '}
-                                                                {breakdown.planned.total} partidos. Con mínimo {minForDiv}/equipo: {totals.total} partidos.
+                                                                Formato previsto: {breakdown.planned.grupos} grupos + {breakdown.planned.eliminatoria} eliminatoria ={' '}
+                                                                {breakdown.planned.total} partidos. En el calendario se programan solo {totals.total} partidos reales de grupos (mín. {minForDiv}/equipo).
                                                             </p>
                                                         )}
                                                         <table className="w-full text-sm">
@@ -2974,8 +2975,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             />
                                                             <span>
                                                                 <strong>Ayuda Google AI (mix)</strong> — Primero el simulador{' '}
-                                                                <strong>determinístico</strong> (grupos, cuartos, semis, finales, comida sábado, mínimos por
-                                                                categoría). Luego la IA coloca <strong>PENDIENTE</strong> en lotes de {MUSKIZ_AI_SLOT_ASSIST_MAX}{' '}
+                                                                <strong>determinístico</strong> (solo equipos pagados y aprobados; fase de grupos con nombres reales; la eliminatoria se programa cuando haya clasificados). Luego la IA coloca <strong>PENDIENTE</strong> en lotes de {MUSKIZ_AI_SLOT_ASSIST_MAX}{' '}
                                                                 (máx. {MUSKIZ_AI_MAX_CALLS_PER_DAY} consultas/día). Usa el campo{' '}
                                                                 <strong>«Formato del torneo»</strong> del borrador como instrucciones. Al final, optimización
                                                                 local de descansos <strong>sin API</strong>. Si Gemini falla, se conserva el borrador
