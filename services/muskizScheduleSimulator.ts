@@ -2887,6 +2887,49 @@ export function auditSaturdayDraftAgainstFormat(
     };
 }
 
+/** Plantillas antiguas (≥11 equipos) que el borrador no debe conservar si ya hay formato nuevo. */
+function usesLegacyElevenPlusKnockoutPlaceholders(teamA: string, teamB: string): boolean {
+    for (const n of [teamA, teamB]) {
+        if (/^3º\s+peor\s+\d/i.test(n)) return true;
+        if (/^3º\s+mejor\s+\d/i.test(n)) return true;
+    }
+    return false;
+}
+
+function isLegacyElevenPlusKnockoutMatch(m: Pick<Match, 'teamA' | 'teamB' | 'round'>, div: Team['division']): boolean {
+    const r = (m.round ?? '').toLowerCase();
+    if (!/repesca|cuartos/i.test(r)) return false;
+    const code = DIVISION_CODE[div];
+    if (!r.includes(code.toLowerCase()) && !r.includes(code)) return false;
+    return usesLegacyElevenPlusKnockoutPlaceholders(m.teamA, m.teamB);
+}
+
+/** Quita repesca/cuartos duplicados con nombres viejos (3º peor 1/2, 3º mejor 1) en categorías ≥11. */
+export function removeObsoleteElevenPlusKnockoutFromSaturdayDraft(
+    teams: Team[],
+    saturdayMatches: Match[]
+): { matches: Match[]; changed: boolean; removed: number } {
+    const toDrop = new Set<string>();
+    for (const div of SATURDAY_DIVISIONS) {
+        const paid = teams.filter((t) => t.division === div && t.paymentStatus === 'PAID');
+        if (!usesQuarterFinalFormat(paid.length)) continue;
+        const groups = computeGroups(paid);
+        if (!groups || groups.length !== 3) continue;
+
+        for (const m of saturdayMatches) {
+            const mDiv = divisionFromMatchRound(m.round);
+            if (mDiv !== div) continue;
+            if (isLegacyElevenPlusKnockoutMatch(m, div)) toDrop.add(m.id);
+        }
+    }
+    if (toDrop.size === 0) return { matches: saturdayMatches, changed: false, removed: 0 };
+    return {
+        matches: saturdayMatches.filter((m) => !toDrop.has(m.id)),
+        changed: true,
+        removed: toDrop.size,
+    };
+}
+
 /** Añade al borrador cualquier partido del sábado que falte respecto al formato actual. */
 export function syncMissingSaturdayMatchesFromFresh(
     teams: Team[],
@@ -2924,6 +2967,16 @@ export function patchSaturdaySimulationDraft(
             cleaned.removed === 1
                 ? 'eliminado 1 partido extra obsoleto'
                 : `eliminados ${cleaned.removed} partidos extra obsoletos`
+        );
+    }
+
+    const legacyKnock = removeObsoleteElevenPlusKnockoutFromSaturdayDraft(teams, matches);
+    if (legacyKnock.changed) {
+        matches = legacyKnock.matches;
+        notes.push(
+            legacyKnock.removed === 1
+                ? 'eliminada 1 repesca/cuartos duplicada (formato antiguo)'
+                : `eliminadas ${legacyKnock.removed} repesca/cuartos duplicadas (formato antiguo)`
         );
     }
 
