@@ -219,7 +219,14 @@ export function remapMatchesAfterGroupChange(
     division: Team['division']
 ): Match[] {
     const newKey = newGroup.trim();
-    if (!newKey) return matchList;
+    if (!newKey) {
+        // Si un equipo queda sin grupo, elimina sus partidos de grupos de esa categoría.
+        return matchList.filter((m) => {
+            if (resolveMatchDivision(m, teams) !== division) return true;
+            if (!isGroupPhaseMatch(m)) return true;
+            return !matchInvolvesTeam(m, teamName, division, teams);
+        });
+    }
 
     const code = divisionCode(division);
     const newGroupNames = namesInGroup(teams, division, newKey);
@@ -335,8 +342,10 @@ export function getGroupDistributionForDivision(
     const roster = rosterForDivision(teams, division, onlyPaid);
     if (roster.length === 0) return [];
 
-    const anyAssigned = roster.some((t) => (t.competitionGroup ?? '').trim());
-    if (anyAssigned) {
+    // Solo respetamos reparto manual cuando TODOS los equipos de la categoría
+    // tienen grupo asignado; si no, usamos auto-distribución completa.
+    const allAssigned = roster.every((t) => (t.competitionGroup ?? '').trim().length > 0);
+    if (allAssigned) {
         return explicitGroupDistribution(roster);
     }
 

@@ -1400,21 +1400,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const handleMoveTeamToGroup = async (team: Team, newGroup: string) => {
         const oldGroup = (team.competitionGroup ?? '').trim() || null;
         const nextGroup = newGroup.trim();
-        if (!nextGroup) {
-            await handleChangeTeamGroup(team, '');
-            return;
-        }
         if (oldGroup === nextGroup) return;
 
         try {
-            await onUpdateTeam({ ...team, competitionGroup: nextGroup });
+            await onUpdateTeam({ ...team, competitionGroup: nextGroup || null });
         } catch {
             toast.error('No se pudo guardar el grupo del equipo.');
             return;
         }
 
         const updatedTeams = teams.map((t) =>
-            t.id === team.id ? { ...t, competitionGroup: nextGroup } : t
+            t.id === team.id ? { ...t, competitionGroup: nextGroup || null } : t
         );
 
         await applyGroupMatchUpdates(
@@ -1428,7 +1424,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                     nextGroup,
                     team.division
                 ),
-            `${team.name} → Grupo ${nextGroup}. Partidos de grupos actualizados.`
+            nextGroup
+                ? `${team.name} → Grupo ${nextGroup}. Partidos de grupos actualizados.`
+                : `${team.name} sin grupo. Partidos de grupos actualizados.`
         );
 
         await offerRegenerateSimulationIfNeeded(updatedTeams, team.division);
