@@ -564,18 +564,19 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
 
     // ── Fases eliminatorias ─────────────────────────────────────────────────
     if (numGroups === 3 && usesQuarterFinalFormat(n)) {
-        // ≥11: 3×1º + 3×2º + 3º mejor 1 (coef.) + gan. repesca → 4 cuartos: 2×1º vs 3º, 1º vs 2º, 2º vs 2º
+        // ≥11: 3×1º + 3×2º + mejor 3º directo + gan. repesca (peor 3º vs 2º peor 3º)
+        // → 4 cuartos: 2×1º vs 3º, 1º vs 2º, 2º vs 2º
         const [ga, gb, gc] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B', gkeys[2] ?? 'C'];
         out.push({
-            teamA: '3º peor 1',
-            teamB: '3º peor 2',
+            teamA: 'Peor 3º',
+            teamB: '2º peor 3º',
             division: div,
             phase: 'REPESCA',
             phaseOrder: 1,
-            roundLabel: `Repesca 3º · ${code}`,
+            roundLabel: `Repesca 3º · ${code} · Peor 3º vs 2º peor 3º`,
         });
         out.push(
-            { teamA: `1º Gr.${ga}`, teamB: '3º mejor 1', division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 1 · 1º${ga} vs 3º mejor` },
+            { teamA: `1º Gr.${ga}`, teamB: 'Mejor 3º (directo)', division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 1 · 1º${ga} vs Mejor 3º (directo)` },
             { teamA: `1º Gr.${gb}`, teamB: 'Gan. repesca 3º', division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 2 · 1º${gb} vs Gan.repesca` },
             { teamA: `1º Gr.${gc}`, teamB: `2º Gr.${gb}`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 3 · 1º${gc} vs 2º${gb}` },
             { teamA: `2º Gr.${ga}`, teamB: `2º Gr.${gc}`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 4 · 2º${ga} vs 2º${gc}` },

@@ -22,6 +22,10 @@ import {
 } from '../services/tournamentScheduleService';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 import {
+    rankThirdPlaceCandidates,
+    splitThirdPlaceQualification,
+} from '../utils/thirdPlaceQualification';
+import {
     autoGroupCount,
     buildDivisionMinMatchesFromCategories,
     countDivisionMatchBreakdown,
@@ -668,6 +672,21 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             standingsRoster,
         ]
     );
+    const thirdPlaceRanking = useMemo(() => {
+        const groups = getGroupDistributionForDivision(teams, standingsDivision, false);
+        if (groups.length !== 3) return null;
+        const ranked = rankThirdPlaceCandidates(
+            teams,
+            compArenaMode === 'simulation' ? simulationViewMatches : matches,
+            groups,
+            standingsDivision,
+            false
+        );
+        if (!ranked) return null;
+        const slots = splitThirdPlaceQualification(ranked);
+        if (!slots) return null;
+        return { ranked, slots };
+    }, [teams, standingsDivision, compArenaMode, simulationViewMatches, matches]);
 
     const allCompSubTabs: { id: AdminCompSubTab; label: string; icon: string }[] = [
         { id: 'structure', label: 'Estructura', icon: 'account_tree' },
@@ -4090,6 +4109,54 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     onRequestRegenerateSimulation={() => void handleGenerateMuskizAllDays()}
                                                     onlyPaid={false}
                                                 />
+                                            </div>
+                                        )}
+
+                                        {thirdPlaceRanking && (
+                                            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <span className="text-[10px] font-black uppercase text-emerald-800">
+                                                        Ranking de terceros por coeficiente
+                                                    </span>
+                                                    <span className="text-[10px] text-emerald-700">
+                                                        Coeficiente = puntos / partidos jugados
+                                                    </span>
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-xs">
+                                                        <thead className="text-slate-500 uppercase">
+                                                            <tr>
+                                                                <th className="text-left py-1 pr-2">Orden</th>
+                                                                <th className="text-left py-1 pr-2">Equipo</th>
+                                                                <th className="text-left py-1 pr-2">Grupo</th>
+                                                                <th className="text-right py-1 pr-2">Coef.</th>
+                                                                <th className="text-right py-1 pr-2">Pts</th>
+                                                                <th className="text-right py-1 pr-2">PJ</th>
+                                                                <th className="text-right py-1 pr-2">DG</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-emerald-100 text-slate-700">
+                                                            {thirdPlaceRanking.ranked.map((row, idx) => (
+                                                                <tr key={row.name}>
+                                                                    <td className="py-1 pr-2 font-black">{idx + 1}º</td>
+                                                                    <td className="py-1 pr-2 font-semibold">{row.name}</td>
+                                                                    <td className="py-1 pr-2">Gr. {row.groupKey}</td>
+                                                                    <td className="py-1 pr-2 text-right font-black">
+                                                                        {row.coefficient.toFixed(3)}
+                                                                    </td>
+                                                                    <td className="py-1 pr-2 text-right">{row.points}</td>
+                                                                    <td className="py-1 pr-2 text-right">{row.played}</td>
+                                                                    <td className="py-1 pr-2 text-right">{row.goalDiff}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <p className="text-[11px] text-emerald-900">
+                                                    <strong>Mejor 3º (directo):</strong> {thirdPlaceRanking.slots.bestDirect.name} ·{' '}
+                                                    <strong>Repesca:</strong> {thirdPlaceRanking.slots.repesca[0].name} vs{' '}
+                                                    {thirdPlaceRanking.slots.repesca[1].name}
+                                                </p>
                                             </div>
                                         )}
 
