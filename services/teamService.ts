@@ -39,6 +39,8 @@ export const teamService = {
         }
 
         const registrationPhone = (t: any): string | undefined => {
+            const teamPhone = String(t.manager_phone ?? '').trim();
+            if (teamPhone) return teamPhone;
             const regId = String(t.registration_id ?? '').trim();
             if (regId && byRegistrationId.has(regId)) return byRegistrationId.get(regId);
             const email = String(t.manager_email ?? '').trim().toLowerCase();
