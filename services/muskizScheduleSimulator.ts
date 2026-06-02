@@ -968,6 +968,8 @@ function scheduleSpecBatch(
         forbiddenSlotStarts?: number[];
         /** Ningún partido de este lote antes de este minuto (fin de la fase anterior). */
         minSlotStartMin?: number;
+        /** Igual que minSlotStartMin, pero por división/categoría. */
+        minSlotStartMinByDivision?: Partial<Record<Team['division'], number>>;
         /** Solo considera huecos aunque el equipo juegue la franja anterior (sin descanso). */
         allowBackToBackOnly?: boolean;
         /** Ignora franjas prohibidas/reservadas para intentar colocar partidos sin hueco. */
@@ -1118,7 +1120,8 @@ function scheduleSpecBatch(
         teamsPair: [string, string],
         teamKeys: [string, string],
         allowBackToBack: boolean,
-        slotTimePolicy: SlotTimePolicy
+        slotTimePolicy: SlotTimePolicy,
+        minSlotStartMinOverride?: number
     ): { ts: number; ci: number } | null => {
         let best: { ts: number; ci: number } | null = null;
         let bestScore = Infinity;
@@ -1127,7 +1130,8 @@ function scheduleSpecBatch(
             slotTimePolicy === 'earliest' ? slotStartsMin : [...slotStartsMin].reverse();
 
         for (const ts of slotOrder) {
-            if (!options.relaxPhaseMinStart && options.minSlotStartMin != null && ts < options.minSlotStartMin) continue;
+            const minSlotStartMin = minSlotStartMinOverride ?? options.minSlotStartMin;
+            if (!options.relaxPhaseMinStart && minSlotStartMin != null && ts < minSlotStartMin) continue;
             if (allowedSet && !allowedSet.has(ts)) continue;
             if (forbiddenSet?.has(ts)) continue;
 
@@ -1183,11 +1187,12 @@ function scheduleSpecBatch(
         const teamsPair: [string, string] = [spec.teamA, spec.teamB];
         const div = spec.division;
         const keys = pairTeamKeys(div, teamsPair, scheduleTeams);
+        const minOverride = options.minSlotStartMinByDivision?.[div];
         let best = options.allowBackToBackOnly
-            ? findBestSlot(div, teamsPair, keys, true, options.slotTimePolicy)
-            : findBestSlot(div, teamsPair, keys, false, options.slotTimePolicy);
+            ? findBestSlot(div, teamsPair, keys, true, options.slotTimePolicy, minOverride)
+            : findBestSlot(div, teamsPair, keys, false, options.slotTimePolicy, minOverride);
         if (!best && !options.allowBackToBackOnly) {
-            best = findBestSlot(div, teamsPair, keys, true, options.slotTimePolicy);
+            best = findBestSlot(div, teamsPair, keys, true, options.slotTimePolicy, minOverride);
         }
 
         if (best) {
@@ -1222,6 +1227,20 @@ function maxAssignedEndForPhase(state: ScheduleGreedyState, phase: Phase): numbe
     let max = -Infinity;
     for (const p of state.placed) {
         if (p.spec.phase !== phase) continue;
+        max = Math.max(max, p.timeMin + state.slotMins);
+    }
+    return max;
+}
+
+function maxAssignedEndForPhaseAndDivision(
+    state: ScheduleGreedyState,
+    phase: Phase,
+    division: Team['division']
+): number {
+    let max = -Infinity;
+    for (const p of state.placed) {
+        if (p.spec.phase !== phase) continue;
+        if (p.spec.division !== division) continue;
         max = Math.max(max, p.timeMin + state.slotMins);
     }
     return max;
@@ -1267,32 +1286,72 @@ function specsByPhase(specs: RawMatchSpec[]) {
 }
 
 /** Reintento por fase sin saltar el orden grupos → cuartos → semis → final. */
-function scheduleUnplacedRecovery(state: ScheduleGreedyState, slotStartsMin: number[]): void {
+function scheduleUnplacedRecovery(
+    state: ScheduleGreedyState,
+    slotStartsMin: number[],
+    options?: {
+        /** Forzar que eliminatorias (REPESCA/CUARTOS/SEMIS/FINAL) no empiecen antes de este minuto. */
+        minKnockoutStartMin?: number;
+    }
+): void {
     if (!state.unplaced.length) return;
 
     const pool = [...state.unplaced];
     state.unplaced = [];
 
     const phaseOrder: Phase[] = ['GRUPOS', 'REPESCA', 'CUARTOS', 'SEMIS', 'FINAL'];
-    let phaseEndSnapshot = maxAssignedEndMin(state);
+    const divisionsInPool = Array.from(new Set(pool.map((s) => s.division)));
 
     for (const phase of phaseOrder) {
         const batch = pool.filter((s) => s.phase === phase);
         if (!batch.length) continue;
 
-        const minAfterPrevious =
-            phase === 'GRUPOS'
-                ? undefined
-                : minSlotStartFromPhaseEnd(slotStartsMin, phaseEndSnapshot);
+        // Regla "no pisar fases" también en recuperación, pero por división.
+        const minByDivision: Partial<Record<Team['division'], number>> = {};
+
+        for (const div of divisionsInPool) {
+            if (batch.every((s) => s.division !== div)) continue;
+
+            const endGrupos = maxAssignedEndForPhaseAndDivision(state, 'GRUPOS', div);
+            const endRepesca = maxAssignedEndForPhaseAndDivision(state, 'REPESCA', div);
+            const endCuartos = maxAssignedEndForPhaseAndDivision(state, 'CUARTOS', div);
+            const endSemis = maxAssignedEndForPhaseAndDivision(state, 'SEMIS', div);
+
+            let effectiveEnd: number | undefined;
+            if (phase === 'GRUPOS') {
+                effectiveEnd = undefined;
+            } else if (phase === 'REPESCA') {
+                effectiveEnd = endGrupos;
+            } else if (phase === 'CUARTOS') {
+                effectiveEnd = Math.max(endRepesca, endGrupos);
+            } else if (phase === 'SEMIS') {
+                effectiveEnd = Math.max(endCuartos, Math.max(endRepesca, endGrupos));
+            } else if (phase === 'FINAL') {
+                effectiveEnd = Math.max(endSemis, Math.max(endCuartos, Math.max(endRepesca, endGrupos)));
+            }
+
+            const rawMin =
+                effectiveEnd == null || !Number.isFinite(effectiveEnd)
+                    ? undefined
+                    : minSlotStartFromPhaseEnd(slotStartsMin, effectiveEnd);
+
+            // Parón del sábado: sólo para CUARTOS/SEMIS/FINAL, NO para REPESCA.
+            const shouldClamp =
+                options?.minKnockoutStartMin != null &&
+                (phase === 'CUARTOS' || phase === 'SEMIS' || phase === 'FINAL');
+
+            const finalMin = rawMin == null ? (shouldClamp ? options!.minKnockoutStartMin : undefined) : rawMin;
+            if (finalMin != null) minByDivision[div] = shouldClamp
+                ? Math.max(finalMin, options!.minKnockoutStartMin!)
+                : finalMin;
+        }
 
         scheduleSpecBatch(state, batch, {
             slotTimePolicy: phase === 'FINAL' ? 'latest' : 'earliest',
             allowBackToBackOnly: true,
             relaxSlotRestrictions: phase === 'GRUPOS',
-            minSlotStartMin: minAfterPrevious,
+            minSlotStartMinByDivision: phase === 'GRUPOS' ? undefined : minByDivision,
         });
-
-        phaseEndSnapshot = maxAssignedEndMin(state);
     }
 }
 
@@ -1339,6 +1398,7 @@ function scheduleGreedy(
     const cfg = configs[day];
     const slotStartsMin = generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch);
     const courts = cfg.courts;
+    const lunchEndMin = day === 'Sábado' && cfg.lunch ? timeToMinutes(cfg.lunch.end) : undefined;
 
     const { grupos, repesca, cuartos, semis, finals } = specsByPhase(specs);
     const reservedFinalSlots = reservedFinalSlotStarts(slotStartsMin, finals.length, courts.length);
@@ -1359,59 +1419,83 @@ function scheduleGreedy(
 
     finishGruposPhase(state, slotStartsMin, groupsForbidden);
 
-    const endAfterGrupos = Math.max(
-        maxAssignedEndForPhase(state, 'GRUPOS'),
-        maxAssignedEndMin(state)
-    );
-    const minAfterGrupos = minSlotStartFromPhaseEnd(slotStartsMin, endAfterGrupos);
+    // Regla "no pisar fases" estricta por división/categoría:
+    // cada eliminación (Repesca/Cuartos/Semis/Final) sólo puede empezar cuando
+    // esa división terminó su fase anterior.
+    const divisionsInDay = Array.from(new Set(specs.map((s) => s.division)));
 
-    const knockoutSlotsAfterGrupos = (slots: number[]) =>
-        slots.filter((ts) => minAfterGrupos == null || ts >= minAfterGrupos);
+    const endAfterGruposByDiv: Partial<Record<Team['division'], number>> = {};
+    for (const div of divisionsInDay) {
+        endAfterGruposByDiv[div] = maxAssignedEndForPhaseAndDivision(state, 'GRUPOS', div);
+    }
+
+    const minAfterGruposByDiv: Partial<Record<Team['division'], number>> = {};
+    for (const div of divisionsInDay) {
+        const end = endAfterGruposByDiv[div];
+        const min = minSlotStartFromPhaseEnd(slotStartsMin, end ?? -Infinity);
+        // REPESCA (terceros) puede jugar antes del parón del sábado.
+        if (min != null) minAfterGruposByDiv[div] = min;
+    }
 
     scheduleSpecBatch(state, repesca, {
         slotTimePolicy: 'earliest',
-        allowedSlotStarts: repesca.length > 0 ? knockoutSlotsAfterGrupos(reservedKnockoutSlots) : undefined,
+        allowedSlotStarts: repesca.length > 0 ? reservedKnockoutSlots : undefined,
         forbiddenSlotStarts: reservedFinalSlots,
-        minSlotStartMin: minAfterGrupos,
+        minSlotStartMinByDivision: minAfterGruposByDiv,
     });
-    const endAfterRepesca = Math.max(maxAssignedEndForPhase(state, 'REPESCA'), endAfterGrupos);
-    const minAfterRepesca = minSlotStartFromPhaseEnd(slotStartsMin, endAfterRepesca);
+
+    const endAfterRepescaOrGroupsByDiv: Partial<Record<Team['division'], number>> = {};
+    const minAfterRepescaByDiv: Partial<Record<Team['division'], number>> = {};
+    for (const div of divisionsInDay) {
+        const repEnd = maxAssignedEndForPhaseAndDivision(state, 'REPESCA', div);
+        const gruposEnd = endAfterGruposByDiv[div] ?? -Infinity;
+        const effectiveEnd = Math.max(repEnd, gruposEnd);
+        endAfterRepescaOrGroupsByDiv[div] = effectiveEnd;
+        const min = minSlotStartFromPhaseEnd(slotStartsMin, effectiveEnd);
+        // CUARTOS/SEMIS/FINAL sí deben respetar el parón del sábado.
+        if (min != null) minAfterRepescaByDiv[div] = lunchEndMin != null ? Math.max(min, lunchEndMin) : min;
+    }
 
     scheduleSpecBatch(state, cuartos, {
         slotTimePolicy: 'earliest',
-        allowedSlotStarts:
-            cuartos.length > 0
-                ? knockoutSlotsAfterGrupos(reservedKnockoutSlots)
-                : undefined,
+        allowedSlotStarts: cuartos.length > 0 ? reservedKnockoutSlots : undefined,
         forbiddenSlotStarts: reservedFinalSlots,
-        minSlotStartMin: minAfterRepesca,
+        minSlotStartMinByDivision: minAfterRepescaByDiv,
     });
-    const endAfterCuartos = Math.max(
-        maxAssignedEndForPhase(state, 'CUARTOS'),
-        endAfterRepesca
-    );
-    const minAfterCuartos = minSlotStartFromPhaseEnd(slotStartsMin, endAfterCuartos);
+
+    const endAfterCuartosOrRepescaByDiv: Partial<Record<Team['division'], number>> = {};
+    const minAfterCuartosByDiv: Partial<Record<Team['division'], number>> = {};
+    for (const div of divisionsInDay) {
+        const cuEnd = maxAssignedEndForPhaseAndDivision(state, 'CUARTOS', div);
+        const repOrGroupsEnd = endAfterRepescaOrGroupsByDiv[div] ?? -Infinity;
+        const effectiveEnd = Math.max(cuEnd, repOrGroupsEnd);
+        endAfterCuartosOrRepescaByDiv[div] = effectiveEnd;
+        const min = minSlotStartFromPhaseEnd(slotStartsMin, effectiveEnd);
+        if (min != null) minAfterCuartosByDiv[div] = lunchEndMin != null ? Math.max(min, lunchEndMin) : min;
+    }
 
     scheduleSpecBatch(state, semis, {
         slotTimePolicy: 'earliest',
-        allowedSlotStarts:
-            semis.length > 0
-                ? knockoutSlotsAfterGrupos(reservedKnockoutSlots)
-                : undefined,
+        allowedSlotStarts: semis.length > 0 ? reservedKnockoutSlots : undefined,
         forbiddenSlotStarts: reservedFinalSlots,
-        minSlotStartMin: minAfterCuartos,
+        minSlotStartMinByDivision: minAfterCuartosByDiv,
     });
-    const endAfterSemis = maxAssignedEndMin(state);
 
-    const minAfterKnockout = minSlotStartFromPhaseEnd(slotStartsMin, endAfterSemis);
-    const finalSlots = reservedFinalSlots.filter(
-        (ts) => minAfterKnockout == null || ts >= minAfterKnockout
-    );
+    const endAfterFinalPredecessorByDiv: Partial<Record<Team['division'], number>> = {};
+    const minAfterKnockoutByDiv: Partial<Record<Team['division'], number>> = {};
+    for (const div of divisionsInDay) {
+        const semisEnd = maxAssignedEndForPhaseAndDivision(state, 'SEMIS', div);
+        const preEnd = endAfterCuartosOrRepescaByDiv[div] ?? -Infinity;
+        const effectiveEnd = Math.max(semisEnd, preEnd);
+        endAfterFinalPredecessorByDiv[div] = effectiveEnd;
+        const min = minSlotStartFromPhaseEnd(slotStartsMin, effectiveEnd);
+        if (min != null) minAfterKnockoutByDiv[div] = lunchEndMin != null ? Math.max(min, lunchEndMin) : min;
+    }
 
     scheduleSpecBatch(state, finals, {
         slotTimePolicy: 'latest',
-        allowedSlotStarts: finalSlots.length > 0 ? finalSlots : slotStartsMin,
-        minSlotStartMin: minAfterKnockout,
+        allowedSlotStarts: finals.length > 0 ? reservedFinalSlots : undefined,
+        minSlotStartMinByDivision: minAfterKnockoutByDiv,
     });
 
     const unplacedFinals = state.unplaced.filter((s) => s.phase === 'FINAL');
@@ -1419,14 +1503,14 @@ function scheduleGreedy(
         state.unplaced = state.unplaced.filter((s) => s.phase !== 'FINAL');
         scheduleSpecBatch(state, unplacedFinals, {
             slotTimePolicy: 'latest',
-            minSlotStartMin: minAfterKnockout,
+            minSlotStartMinByDivision: minAfterKnockoutByDiv,
         });
     }
 
-    scheduleUnplacedRecovery(state, slotStartsMin);
+    scheduleUnplacedRecovery(state, slotStartsMin, { minKnockoutStartMin: lunchEndMin });
     exhaustivePlaceUnplacedPhased(state);
 
-    enforcePhaseTimeOrder(state, slotStartsMin, slotMins);
+    enforcePhaseTimeOrder(state, slotStartsMin, slotMins, lunchEndMin);
 
     return { placed: state.placed, unplaced: state.unplaced };
 }
@@ -1435,27 +1519,46 @@ function scheduleGreedy(
 function enforcePhaseTimeOrder(
     state: ScheduleGreedyState,
     slotStartsMin: number[],
-    _slotMins: number
+    _slotMins: number,
+    minKnockoutStartMin?: number
 ): void {
-    const lastGrupoEnd = maxAssignedEndForPhase(state, 'GRUPOS');
-    const earliestAfterGrupos = minSlotStartFromPhaseEnd(slotStartsMin, lastGrupoEnd);
-    if (earliestAfterGrupos == null) return;
+    const divisions = Array.from(new Set(state.placed.map((p) => p.spec.division)));
 
-    const lastRepescaEnd = maxAssignedEndForPhase(state, 'REPESCA');
-    const earliestCuartos =
-        Number.isFinite(lastRepescaEnd) && lastRepescaEnd !== -Infinity
-            ? minSlotStartFromPhaseEnd(slotStartsMin, lastRepescaEnd)
-            : earliestAfterGrupos;
+    const earliestAfterGruposByDiv: Partial<Record<Team['division'], number>> = {};
+    const earliestCuartosByDiv: Partial<Record<Team['division'], number>> = {};
+
+    for (const div of divisions) {
+        const lastGrupoEnd = maxAssignedEndForPhaseAndDivision(state, 'GRUPOS', div);
+        const earliestAfterGrupos = minSlotStartFromPhaseEnd(slotStartsMin, lastGrupoEnd);
+        if (earliestAfterGrupos != null) {
+            // REPESCA (terceros) puede jugar antes del parón del sábado.
+            earliestAfterGruposByDiv[div] = earliestAfterGrupos;
+        }
+
+        const lastRepescaEnd = maxAssignedEndForPhaseAndDivision(state, 'REPESCA', div);
+        const earliestCuartos =
+            Number.isFinite(lastRepescaEnd) && lastRepescaEnd !== -Infinity
+                ? minSlotStartFromPhaseEnd(slotStartsMin, lastRepescaEnd)
+                : earliestAfterGrupos;
+        if (earliestCuartos != null) {
+            earliestCuartosByDiv[div] =
+                minKnockoutStartMin != null ? Math.max(earliestCuartos, minKnockoutStartMin) : earliestCuartos;
+        }
+    }
 
     const toRequeue: ScheduledCell[] = [];
     for (const cell of state.placed) {
         if (cell.spec.phase === 'GRUPOS') continue;
+        const div = cell.spec.division;
+
         if (cell.spec.phase === 'REPESCA') {
-            if (cell.timeMin < earliestAfterGrupos) toRequeue.push(cell);
+            const minStart = earliestAfterGruposByDiv[div];
+            if (minStart != null && cell.timeMin < minStart) toRequeue.push(cell);
             continue;
         }
-        const minStart = earliestCuartos ?? earliestAfterGrupos;
-        if (cell.timeMin < minStart) toRequeue.push(cell);
+
+        const minStart = earliestCuartosByDiv[div] ?? earliestAfterGruposByDiv[div];
+        if (minStart != null && cell.timeMin < minStart) toRequeue.push(cell);
     }
 
     for (const cell of toRequeue) {
@@ -1478,7 +1581,7 @@ function enforcePhaseTimeOrder(
     if (!toRequeue.length) return;
 
     exhaustivePlaceUnplacedPhased(state);
-    scheduleUnplacedRecovery(state, slotStartsMin);
+    scheduleUnplacedRecovery(state, slotStartsMin, { minKnockoutStartMin });
 }
 
 type ExhaustivePhaseOptions = {
