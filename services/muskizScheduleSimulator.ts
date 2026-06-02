@@ -1090,7 +1090,9 @@ function scheduleSpecBatch(
         const gapB = restGapBefore(division, teamKeys[1], ts);
         const minGap = Math.min(gapA, gapB);
 
-        if (!allowBackToBack && hasBackToBack(division, teamKeys, ts)) return null;
+        // Regla de calendario: se permiten 2 partidos seguidos, pero nunca 3.
+        // Por eso aquí NO bloqueamos back-to-back; solo lo penalizamos en score
+        // y mantenemos el veto duro de triple consecutivo arriba.
 
         const PENALTY_BACK_TO_BACK = 50_000_000;
         const PENALTY_ONE_SLOT_REST = 8_000_000;
