@@ -3,33 +3,47 @@ import { Team, Player, Match } from '../types';
 
 export const teamService = {
     async getTeams(): Promise<Team[]> {
-        let data: unknown[] | null = null;
-        const withPhone = await supabase
-            .from('teams')
-            .select(`
-        *,
-        players (*),
-        registrations (manager_phone)
-      `);
+        const base = await supabase.from('teams').select(`*, players (*)`);
+        if (base.error) {
+            console.error('Error fetching teams:', base.error);
+            return [];
+        }
+        const data = base.data ?? [];
 
-        if (withPhone.error) {
-            console.warn('teams+registrations join failed, falling back:', withPhone.error.message);
-            const fallback = await supabase.from('teams').select(`*, players (*)`);
-            if (fallback.error) {
-                console.error('Error fetching teams:', fallback.error);
-                return [];
+        const byRegistrationId = new Map<string, string>();
+        const byManagerEmail = new Map<string, string>();
+
+        const registrationIds = [...new Set(
+            data
+                .map((t: any) => String(t.registration_id ?? '').trim())
+                .filter(Boolean)
+        )];
+
+        if (registrationIds.length > 0) {
+            const regs = await supabase
+                .from('registrations')
+                .select('id, manager_phone, manager_email')
+                .in('id', registrationIds);
+
+            if (regs.error) {
+                console.warn('Could not read registrations for manager phone:', regs.error.message);
+            } else {
+                for (const r of regs.data ?? []) {
+                    const phone = String(r.manager_phone ?? '').trim();
+                    if (!phone) continue;
+                    if (r.id) byRegistrationId.set(String(r.id), phone);
+                    const email = String(r.manager_email ?? '').trim().toLowerCase();
+                    if (email) byManagerEmail.set(email, phone);
+                }
             }
-            data = fallback.data;
-        } else {
-            data = withPhone.data;
         }
 
-        const registrationPhone = (t: { registrations?: { manager_phone?: string | null } | { manager_phone?: string | null }[] | null }) => {
-            const reg = t.registrations;
-            if (!reg) return undefined;
-            const row = Array.isArray(reg) ? reg[0] : reg;
-            const phone = row?.manager_phone?.trim();
-            return phone || undefined;
+        const registrationPhone = (t: any): string | undefined => {
+            const regId = String(t.registration_id ?? '').trim();
+            if (regId && byRegistrationId.has(regId)) return byRegistrationId.get(regId);
+            const email = String(t.manager_email ?? '').trim().toLowerCase();
+            if (email && byManagerEmail.has(email)) return byManagerEmail.get(email);
+            return undefined;
         };
 
         // Map snake_case from DB to camelCase in app

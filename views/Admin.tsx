@@ -107,9 +107,18 @@ function phoneDigits(phone: string | undefined): string {
     return phone.replace(/\D/g, '');
 }
 
-function managerWhatsAppLine(team: Team): string {
-    const phone = team.managerPhone?.trim() || 'Sin teléfono';
-    return `${team.managerName.trim()} — ${phone} — ${team.name} (${team.division})`;
+type ManagerEntry = {
+    key: string;
+    name: string;
+    email: string;
+    phone?: string;
+    teams: Pick<Team, 'id' | 'name' | 'division' | 'status'>[];
+};
+
+function managerWhatsAppLine(entry: ManagerEntry): string {
+    const phone = entry.phone?.trim() || 'Sin teléfono';
+    const teams = entry.teams.map((t) => `${t.name} (${t.division})`).join(', ');
+    return `${entry.name} — ${phone} — Equipos: ${teams}`;
 }
 
 function AdminNavButton({
@@ -464,27 +473,55 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const [managersDivision, setManagersDivision] = useState<Team['division'] | 'all'>('all');
     const [managersOnlyApproved, setManagersOnlyApproved] = useState(false);
 
-    const managerEntries = useMemo(() => {
+    const managerEntries = useMemo<ManagerEntry[]>(() => {
+        const grouped = new Map<string, ManagerEntry>();
+
+        for (const t of teams) {
+            if (managersDivision !== 'all' && t.division !== managersDivision) continue;
+            if (managersOnlyApproved && t.status !== 'approved') continue;
+
+            const name = t.managerName?.trim() || 'Responsable';
+            const email = t.managerEmail?.trim().toLowerCase() || '';
+            const phone = t.managerPhone?.trim() || undefined;
+            const key = email || `${name.toLowerCase()}|${phoneDigits(phone)}`;
+
+            if (!grouped.has(key)) {
+                grouped.set(key, { key, name, email, phone, teams: [] });
+            }
+            const entry = grouped.get(key)!;
+            if (!entry.phone && phone) entry.phone = phone;
+            entry.teams.push({
+                id: t.id,
+                name: t.name,
+                division: t.division,
+                status: t.status,
+            });
+        }
+
         const q = managersSearch.trim().toLowerCase();
-        return teams
-            .filter((t) => {
-                if (managersOnlyApproved && t.status !== 'approved') return false;
-                if (managersDivision !== 'all' && t.division !== managersDivision) return false;
+        return [...grouped.values()]
+            .map((entry) => ({
+                ...entry,
+                teams: [...entry.teams].sort(
+                    (a, b) =>
+                        a.division.localeCompare(b.division, 'es') ||
+                        a.name.localeCompare(b.name, 'es')
+                ),
+            }))
+            .filter((entry) => {
                 if (!q) return true;
                 return (
-                    t.managerName?.toLowerCase().includes(q) ||
-                    t.managerEmail?.toLowerCase().includes(q) ||
-                    t.managerPhone?.toLowerCase().includes(q) ||
-                    t.name.toLowerCase().includes(q) ||
-                    t.division.toLowerCase().includes(q)
+                    entry.name.toLowerCase().includes(q) ||
+                    entry.email.toLowerCase().includes(q) ||
+                    (entry.phone ?? '').toLowerCase().includes(q) ||
+                    entry.teams.some(
+                        (team) =>
+                            team.name.toLowerCase().includes(q) ||
+                            team.division.toLowerCase().includes(q)
+                    )
                 );
             })
-            .sort(
-                (a, b) =>
-                    a.division.localeCompare(b.division, 'es') ||
-                    a.name.localeCompare(b.name, 'es') ||
-                    a.managerName.localeCompare(b.managerName, 'es')
-            );
+            .sort((a, b) => a.name.localeCompare(b.name, 'es'));
     }, [teams, managersSearch, managersDivision, managersOnlyApproved]);
 
     const copyManagersText = async (mode: 'full' | 'phones') => {
@@ -495,9 +532,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         const text =
             mode === 'phones'
                 ? managerEntries
-                      .map((t) => {
-                          const digits = phoneDigits(t.managerPhone);
-                          return digits || `${t.managerName} (sin tel.)`;
+                      .map((entry) => {
+                          const digits = phoneDigits(entry.phone);
+                          return digits || `${entry.name} (sin tel.)`;
                       })
                       .join('\n')
                 : managerEntries.map(managerWhatsAppLine).join('\n');
@@ -2373,7 +2410,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 <div>
                                     <h3 className="font-bold text-lg text-slate-800">Responsables de equipo</h3>
                                     <p className="text-xs text-slate-500 mt-1">
-                                        Nombre, teléfono y equipo que entrenan. Un registro por equipo (si alguien lleva varios, aparece varias veces).
+                                        Un registro por responsable (sin duplicados). Si lleva varios equipos, se listan todos.
                                         Ideal para crear grupos de WhatsApp.
                                     </p>
                                 </div>
@@ -2427,13 +2464,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                         Copiar solo teléfonos
                                     </button>
                                     <span className="text-xs text-slate-500 self-center">
-                                        {managerEntries.length} registro(s)
-                                        {managerEntries.filter((t) => !t.managerPhone?.trim()).length > 0 && (
+                                        {managerEntries.length} responsable(s)
+                                        {managerEntries.filter((entry) => !entry.phone?.trim()).length > 0 && (
                                             <>
                                                 {' '}
                                                 ·{' '}
                                                 <span className="text-amber-700 font-bold">
-                                                    {managerEntries.filter((t) => !t.managerPhone?.trim()).length} sin teléfono
+                                                    {managerEntries.filter((entry) => !entry.phone?.trim()).length} sin teléfono
                                                 </span>
                                             </>
                                         )}
@@ -2443,22 +2480,22 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
                             {/* Móvil: tarjetas */}
                             <div className="lg:hidden divide-y divide-slate-100">
-                                {managerEntries.map((team) => {
-                                    const digits = phoneDigits(team.managerPhone);
+                                {managerEntries.map((entry) => {
+                                    const digits = phoneDigits(entry.phone);
                                     const waHref = digits
                                         ? `https://wa.me/${digits.startsWith('34') ? digits : `34${digits}`}`
                                         : undefined;
                                     return (
-                                        <div key={team.id} className="p-4 space-y-2">
-                                            <p className="font-bold text-slate-900">{team.managerName}</p>
+                                        <div key={entry.key} className="p-4 space-y-2">
+                                            <p className="font-bold text-slate-900">{entry.name}</p>
                                             <div className="flex flex-wrap items-center gap-2">
-                                                {team.managerPhone?.trim() ? (
+                                                {entry.phone?.trim() ? (
                                                     <>
                                                         <a
                                                             href={`tel:${digits}`}
                                                             className="text-sm font-mono text-teal-800 font-bold"
                                                         >
-                                                            {team.managerPhone}
+                                                            {entry.phone}
                                                         </a>
                                                         {waHref && (
                                                             <a
@@ -2475,12 +2512,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     <span className="text-xs text-amber-700 font-bold">Sin teléfono en inscripción</span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-slate-700">
-                                                <span className="text-slate-400 font-bold text-[10px] uppercase">Equipo · </span>
-                                                {team.name}
-                                            </p>
-                                            <p className="text-xs text-slate-500">{team.division}</p>
-                                            <p className="text-[10px] text-slate-400 truncate">{team.managerEmail}</p>
+                                            <div className="text-sm text-slate-700">
+                                                <span className="text-slate-400 font-bold text-[10px] uppercase">Equipos · </span>
+                                                {entry.teams.map((t) => `${t.name} (${t.division})`).join(' · ')}
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 truncate">{entry.email || 'Sin email'}</p>
                                         </div>
                                     );
                                 })}
@@ -2498,32 +2534,32 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                         <tr>
                                             <th>Responsable</th>
                                             <th>Teléfono</th>
-                                            <th>Equipo</th>
-                                            <th>Categoría</th>
+                                            <th>Equipos</th>
                                             <th>Correo</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {managerEntries.map((team) => {
-                                            const digits = phoneDigits(team.managerPhone);
+                                        {managerEntries.map((entry) => {
+                                            const digits = phoneDigits(entry.phone);
                                             return (
-                                                <tr key={team.id} className="hover:bg-slate-50/80">
-                                                    <td className="font-bold text-slate-800">{team.managerName}</td>
+                                                <tr key={entry.key} className="hover:bg-slate-50/80">
+                                                    <td className="font-bold text-slate-800">{entry.name}</td>
                                                     <td>
-                                                        {team.managerPhone?.trim() ? (
+                                                        {entry.phone?.trim() ? (
                                                             <a
                                                                 href={`tel:${digits}`}
                                                                 className="font-mono text-teal-800 hover:underline"
                                                             >
-                                                                {team.managerPhone}
+                                                                {entry.phone}
                                                             </a>
                                                         ) : (
                                                             <span className="text-amber-700 text-xs font-bold">Sin teléfono</span>
                                                         )}
                                                     </td>
-                                                    <td className="font-medium text-slate-800">{team.name}</td>
-                                                    <td className="text-slate-600">{team.division}</td>
-                                                    <td className="text-slate-500 text-xs">{team.managerEmail}</td>
+                                                    <td className="text-slate-700 text-xs">
+                                                        {entry.teams.map((t) => `${t.name} (${t.division})`).join(' · ')}
+                                                    </td>
+                                                    <td className="text-slate-500 text-xs">{entry.email || 'Sin email'}</td>
                                                 </tr>
                                             );
                                         })}

@@ -26,6 +26,7 @@ import {
 async function refinePendingWithAi(
     day: MuskizScheduleDayLabel,
     matches: Match[],
+    scheduleTeams: Team[],
     options?: MuskizSimulatorOptions
 ): Promise<{ matches: Match[]; aiNote?: string }> {
     let current = matches;
@@ -80,8 +81,8 @@ async function refinePendingWithAi(
         }
     }
 
-    const improved = improveScheduleRestGaps(current, day, options, allTeams);
-    const beforeBb = countBackToBack(improved, options?.slotDurationMins ?? 35, allTeams);
+    const improved = improveScheduleRestGaps(current, day, options, scheduleTeams);
+    const beforeBb = countBackToBack(improved, options?.slotDurationMins ?? 35, scheduleTeams);
     const afterNote =
         beforeBb > 0
             ? `; ${beforeBb} equipo(s) aún con partidos seguidos (revisa cuadrícula)`
@@ -132,7 +133,7 @@ export async function buildMuskizDayDraftMatchesHybrid(
     const base = buildMuskizDayDraftMatches(allTeams, targetDay, options);
     if (!base.matches.length) return base;
 
-    const { matches, aiNote } = await refinePendingWithAi(targetDay, base.matches, options);
+    const { matches, aiNote } = await refinePendingWithAi(targetDay, base.matches, allTeams, options);
     return {
         ...base,
         matches,
