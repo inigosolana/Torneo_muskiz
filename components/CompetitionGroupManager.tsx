@@ -76,6 +76,7 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
             return !namesInDisplayedGroups.has(t.id);
         });
     }, [teams, division, onlyPaid, namesInDisplayedGroups]);
+    const unassignedIds = useMemo(() => new Set(unassigned.map((t) => t.id)), [unassigned]);
 
     const findTeamById = (id: string) => teams.find((t) => t.id === id);
     const displayedGroupForTeam = (teamId: string): string => {
@@ -102,6 +103,8 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
     }, [groups, roster.length]);
 
     const canMoveIntoGroup = (team: Team, groupKey: string): boolean => {
+        // Solo permitimos mover "sueltos" a una columna cuando están realmente en la zona sin grupo.
+        if (!unassignedIds.has(team.id)) return false;
         const current = (team.competitionGroup ?? '').trim() || displayedGroupForTeam(team.id);
         if (current) return false;
         if (!groupKey) return false;
@@ -178,7 +181,7 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
         }
 
         const draggedGroup = (dragged.competitionGroup ?? '').trim() || displayedGroupForTeam(dragged.id);
-        const targetGroup = (targetTeam.competitionGroup ?? '').trim() || groupKey;
+        const targetGroup = (targetTeam.competitionGroup ?? '').trim() || displayedGroupForTeam(targetTeam.id) || groupKey;
 
         if (draggedGroup && targetGroup && draggedGroup !== targetGroup && onSwapTeams) {
             onSwapTeams(dragged, targetTeam);
