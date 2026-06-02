@@ -3,6 +3,7 @@ import { searchRules } from '../services/geminiService';
 import { Team } from '../types';
 import { useTournamentData } from '../context/TournamentDataContext';
 import { resolveTeamForMatchSide } from '../services/muskizScheduleSimulator';
+import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 
 export const Schedule: React.FC = () => {
     const { matches, teams, categoryLimits, publicMatchesVisible } = useTournamentData();
