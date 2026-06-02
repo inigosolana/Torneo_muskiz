@@ -193,13 +193,13 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                             {times.map((t) => (
                                 <React.Fragment key={t}>
                                     {lunch && t === lunch.end && (
-                                        <tr className="bg-red-100">
-                                            <td className="border border-red-300 bg-red-200 text-red-900 font-black text-center px-1 py-1 whitespace-nowrap">
+                                        <tr className="bg-lime-200">
+                                            <td className="border border-lime-500 bg-lime-400 text-lime-950 font-black text-center px-1 py-1 whitespace-nowrap">
                                                 PAUSA
                                             </td>
                                             <td
                                                 colSpan={courts.length}
-                                                className="border border-red-300 text-red-900 px-2 py-1 text-[10px] font-bold uppercase tracking-wide"
+                                                className="border border-lime-500 bg-lime-300 text-lime-950 px-2 py-1 text-[10px] font-black uppercase tracking-wide"
                                             >
                                                 Pausa comida: {lunch.start} - {lunch.end}
                                             </td>

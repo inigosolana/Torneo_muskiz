@@ -1497,7 +1497,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             !window.confirm(
                 'Se aplicará sobre la simulación actual:\n' +
                     '- Sábado y domingo +35 min\n' +
-                    '- Sábado: todo lo de 13:40 pasa después de comer\n\n' +
+                    '- Sábado: los partidos que caigan en la comida (14:15–15:45) pasan después de comer\n\n' +
                     'No regenera partidos, solo mueve horas. ¿Continuar?'
             )
         ) {
@@ -1505,7 +1505,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
 
         const SLOT = 35;
-        const SAT_LUNCH_START = 13 * 60 + 40; // 13:40
+        const SAT_LUNCH_START = 14 * 60 + 15; // 14:15
         const SAT_LUNCH_END = 15 * 60 + 45; // 15:45
 
         const retimeDayMatches = (day: 'Sábado' | 'Domingo', matches: Match[]): Match[] => {
@@ -1526,9 +1526,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
                 // Sábado
                 const shifted = mins + SLOT;
-                const from1340 = mins === SAT_LUNCH_START;
+                const fromLunchStart = mins === SAT_LUNCH_START;
                 const landsInLunch = shifted >= SAT_LUNCH_START && shifted < SAT_LUNCH_END;
-                if (from1340 || landsInLunch) {
+                if (fromLunchStart || landsInLunch) {
                     queued.push(m);
                 } else {
                     const next = toTime(shifted);
@@ -1576,7 +1576,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
         setSimDrafts(nextDrafts);
         await persistSimDraftsAsync(nextDrafts, activeDraftId);
-        toast.success('Simulación actual actualizada: sábado/domingo retrasados y 13:40 del sábado movido tras comida.');
+        toast.success('Simulación actual actualizada: sábado/domingo retrasados y franja de comida del sábado respetada.');
     };
 
     const applyGroupMatchUpdates = async (
@@ -3666,9 +3666,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             </span>
                                                         </label>
                                                         <p className="text-xs text-teal-800 mt-2 leading-relaxed max-w-3xl">
-                                                            <strong>Viernes:</strong> cadetes 17:00–21:00, 6 campos.{' '}
-                                                            <strong>Sábado:</strong> juvenil/senior 9:35–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida fija 13:40–15:45, 6 campos.{' '}
-                                                            <strong>Domingo:</strong> infantiles 9:35–15:00, 4 campos.{' '}
+                                                            <strong>Viernes:</strong> cadetes 17:20–21:00, 6 campos.{' '}
+                                                            <strong>Sábado:</strong> juvenil/senior 9:35–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida fija 14:15–15:45, 6 campos.{' '}
+                                                            <strong>Domingo:</strong> infantiles 9:35–15:35, 4 campos.{' '}
                                                             Huecos <strong>35 min</strong>. Mínimo de partidos por equipo configurable en cada categoría (por defecto {MIN_REAL_MATCHES_PER_TEAM}).{' '}
                                                             ≤6 → liguilla + final · 7 → 3+4 + consolación + semis + final · 8–10 → 2 grupos + semis + final (9: 4+5) · ≥11 → 3 grupos + repesca + cuartos + semis + final (11: 4+4+3).{' '}
                                                             Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo cuando hay varios grupos.{' '}
@@ -3704,7 +3704,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             </p>
                                                         </div>
                                                         <p className="mt-2 text-[11px] text-teal-800">
-                                                            La comida del sábado es fija de 13:40 a 15:45 para todas las categorías; la tarde arranca justo al terminar.
+                                                            La comida del sábado es fija de 14:15 a 15:45 para todas las categorías; la tarde arranca justo al terminar.
                                                             Semifinales, cuartos y finales solo después de terminar todos los partidos de grupos.
                                                             Orden: grupos → consolación/repesca (si aplica) → cuartos (≥11 equipos) → semis → finales. ≥11: mejor 3º directo + repesca entre los 2 peores terceros; cuartos: 1º vs 3º mejor, 1º vs gan. repesca, 1º vs 2º y 2º vs 2º.
                                                             La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).

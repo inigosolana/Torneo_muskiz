@@ -2,9 +2,9 @@
  * Simulador determinístico de calendario fin de semana Muskiz (balonmano playa).
  *
  * Reglas por defecto:
- * - Viernes: solo cadetes (♀♂), 17:00–22:00, 6 campos.
- * - Sábado: juvenil + senior (♀♂), 9:35–22:00 (cuadrícula hasta ~21:00), comida fija 13:40–15:45, 6 campos.
- * - Domingo: infantiles (♀♂), 9:35–15:00, 4 campos.
+ * - Viernes: solo cadetes (♀♂), 17:20–22:00, 6 campos.
+ * - Sábado: juvenil + senior (♀♂), 9:35–22:00 (cuadrícula hasta ~21:00), comida fija 14:15–15:45, 6 campos.
+ * - Domingo: infantiles (♀♂), 9:35–15:35, 4 campos.
  *
  * Formato por número de equipos en la categoría (Viernes, Sábado y Domingo):
  * - 2–6 equipos : liguilla (1 grupo) → final 1º vs 2º (sin semifinales)
@@ -52,7 +52,7 @@ export function filterSchedulableSpecs(specs: RawMatchSpec[], teamList: Team[]):
 export type DivisionMinMatchesMap = Partial<Record<Team['division'], number>>;
 
 /** Comida sábado fija para todas las categorías. */
-const SATURDAY_LUNCH_START = '13:40';
+const SATURDAY_LUNCH_START = '14:15';
 const SATURDAY_LUNCH_DEFAULT_END = '15:45';
 
 export interface MuskizBuildResult {
@@ -61,16 +61,16 @@ export interface MuskizBuildResult {
     error?: string;
     /** Aviso: borrador generado pero revisar huecos o mínimos. */
     warning?: string;
-    /** Comida fija del sábado (13:40–15:45). */
+    /** Comida fija del sábado (14:15–15:45). */
     lunchUsed?: { start: string; end: string };
 }
 
 export interface MuskizSimulatorOptions {
     /** Minutos por bloque partido+cambio (Excel referencia ~35). */
     slotDurationMins?: number;
-    /** @deprecated La comida del sábado es fija (13:40–15:45); se ignora. */
+    /** @deprecated La comida del sábado es fija (14:15–15:45); se ignora. */
     lunchStart?: string;
-    /** @deprecated La comida del sábado es fija (13:40–15:45); se ignora. */
+    /** @deprecated La comida del sábado es fija (14:15–15:45); se ignora. */
     lunchEnd?: string;
     /** Mínimo (y objetivo) de partidos reales por equipo, por categoría. */
     divisionMinMatches?: DivisionMinMatchesMap;
@@ -90,7 +90,7 @@ export const MUSKIZ_AI_MAX_CALLS_PER_DAY = 3;
 
 /** Reglas Muskiz resumidas para el prompt de IA (el calendario base ya las cumple). */
 export const MUSKIZ_RULES_SUMMARY = [
-    'Viernes: cadetes. Sábado: juvenil/senior, comida 13:40–15:45. Domingo: infantiles.',
+    'Viernes: cadetes. Sábado: juvenil/senior, comida 14:15–15:45. Domingo: infantiles.',
     '2–6: liguilla + final. 7: 3+4 + consolación + semis + final. 8–10: 2 grupos + semis + final. ≥11: 3 grupos + repesca 3º + cuartos + semis + final.',
     'Orden: grupos → consolación/repesca (si aplica) → cuartos (≥11) → semis → finales.',
     'Cuartos ≥11: 1º vs 3º mejor, 1º vs gan. repesca, 1º vs 2º, 2º vs 2º (solo pasan 2 terceros: mejor 3º y ganador repesca).',
@@ -814,9 +814,9 @@ const DEFAULT_COURTS_4 = ['Campo 1', 'Campo 2', 'Campo 3', 'Campo 4'];
 
 export function defaultConfigs(): Record<MuskizScheduleDayLabel, DayConfig> {
     return {
-        Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:00', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6 },
+        Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:20', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6 },
         Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:35', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6, lunch: { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END } },
-        Domingo: { label: 'Domingo', dayShort: 'Dom', playStart: '09:35', playEndExclusive: '15:00', courts: DEFAULT_COURTS_4 },
+        Domingo: { label: 'Domingo', dayShort: 'Dom', playStart: '09:35', playEndExclusive: '15:35', courts: DEFAULT_COURTS_4 },
     };
 }
 
@@ -1460,6 +1460,7 @@ function scheduleGreedy(
     const slotStartsMin = generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch);
     const courts = cfg.courts;
     const lunchEndMin = day === 'Sábado' && cfg.lunch ? timeToMinutes(cfg.lunch.end) : undefined;
+    const postGroupsBreakMin = day === 'Viernes' ? 15 : 0;
 
     const { grupos, repesca, cuartos, semis, finals } = specsByPhase(specs);
     const reservedFinalSlots = reservedFinalSlotStarts(slotStartsMin, finals.length, courts.length);
@@ -1493,7 +1494,7 @@ function scheduleGreedy(
     const minAfterGruposByDiv: Partial<Record<Team['division'], number>> = {};
     for (const div of divisionsInDay) {
         const end = endAfterGruposByDiv[div];
-        const min = minSlotStartFromPhaseEnd(slotStartsMin, end ?? -Infinity);
+        const min = minSlotStartFromPhaseEnd(slotStartsMin, (end ?? -Infinity) + postGroupsBreakMin);
         // REPESCA (terceros) puede jugar antes del parón del sábado.
         if (min != null) minAfterGruposByDiv[div] = min;
     }
@@ -1571,7 +1572,7 @@ function scheduleGreedy(
     scheduleUnplacedRecovery(state, slotStartsMin, { minKnockoutStartMin: lunchEndMin });
     exhaustivePlaceUnplacedPhased(state);
 
-    enforcePhaseTimeOrder(state, slotStartsMin, slotMins, lunchEndMin);
+    enforcePhaseTimeOrder(state, slotStartsMin, slotMins, lunchEndMin, postGroupsBreakMin);
 
     return { placed: state.placed, unplaced: state.unplaced };
 }
@@ -1581,7 +1582,8 @@ function enforcePhaseTimeOrder(
     state: ScheduleGreedyState,
     slotStartsMin: number[],
     _slotMins: number,
-    minKnockoutStartMin?: number
+    minKnockoutStartMin?: number,
+    postGroupsBreakMin = 0
 ): void {
     const divisions = Array.from(new Set(state.placed.map((p) => p.spec.division)));
 
@@ -1590,7 +1592,10 @@ function enforcePhaseTimeOrder(
 
     for (const div of divisions) {
         const lastGrupoEnd = maxAssignedEndForPhaseAndDivision(state, 'GRUPOS', div);
-        const earliestAfterGrupos = minSlotStartFromPhaseEnd(slotStartsMin, lastGrupoEnd);
+        const earliestAfterGrupos = minSlotStartFromPhaseEnd(
+            slotStartsMin,
+            lastGrupoEnd + postGroupsBreakMin
+        );
         if (earliestAfterGrupos != null) {
             // REPESCA (terceros) puede jugar antes del parón del sábado.
             earliestAfterGruposByDiv[div] = earliestAfterGrupos;
