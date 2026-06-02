@@ -12,6 +12,7 @@ import {
     getDivisionBaseColors,
     getMatchGridColors,
 } from '../utils/matchGridColors';
+import { downloadManagerScheduleExcel, printManagerSchedulePdf } from '../utils/managerScheduleExport';
 
 type ViewMode = 'day' | 'category';
 
@@ -24,7 +25,17 @@ interface CompetitionCalendarViewsProps {
     /** Descarga ZIP de actas DOCX de todos los partidos de una categoría. */
     onDownloadCategoryActas?: (division: Team['division'], matches: Match[]) => void;
     actasExporting?: boolean;
+    /** Excel / PDF por día (simulación). */
+    showDayExport?: boolean;
+    exportFileNamePrefix?: string;
     emptyMessage?: string;
+}
+
+function daySlug(day: MuskizScheduleDayLabel): string {
+    return day
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .toLowerCase();
 }
 
 function groupByDay(matches: Match[]): Record<MuskizScheduleDayLabel, Match[]> {
@@ -68,6 +79,8 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
     onUpdateMatch,
     onDownloadCategoryActas,
     actasExporting,
+    showDayExport = false,
+    exportFileNamePrefix = 'calendario_simulacion',
     emptyMessage = 'No hay partidos para mostrar.',
 }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('day');
@@ -118,14 +131,51 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                         const dayMatches = byDay[day];
                         return (
                             <section key={day} className="rounded-xl border border-slate-200 overflow-hidden">
-                                <div className="flex items-center justify-between px-4 py-3 bg-slate-800 text-white">
+                                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-slate-800 text-white">
                                     <h5 className="font-black text-sm uppercase tracking-wide flex items-center gap-2">
                                         <span className="material-symbols-outlined text-base">event</span>
                                         {day}
                                     </h5>
-                                    <span className="text-[11px] font-bold bg-white/15 px-2 py-0.5 rounded-full">
-                                        {dayMatches.length} partido{dayMatches.length !== 1 ? 's' : ''}
-                                    </span>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {showDayExport && dayMatches.length > 0 && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        downloadManagerScheduleExcel(
+                                                            dayMatches,
+                                                            teams,
+                                                            `${exportFileNamePrefix}_${daySlug(day)}`
+                                                        )
+                                                    }
+                                                    className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1"
+                                                    title={`Descargar Excel del ${day}`}
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">table</span>
+                                                    Excel
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        printManagerSchedulePdf(
+                                                            dayMatches,
+                                                            teams,
+                                                            title ? `${title} — ${day}` : `Calendario — ${day}`,
+                                                            'Guardar como PDF en el diálogo de impresión'
+                                                        )
+                                                    }
+                                                    className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-white/20 hover:bg-white/30 text-white flex items-center gap-1"
+                                                    title={`Imprimir / PDF del ${day}`}
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                                                    PDF
+                                                </button>
+                                            </>
+                                        )}
+                                        <span className="text-[11px] font-bold bg-white/15 px-2 py-0.5 rounded-full">
+                                            {dayMatches.length} partido{dayMatches.length !== 1 ? 's' : ''}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="p-3">
                                     <SimulationScheduleGridTabs
