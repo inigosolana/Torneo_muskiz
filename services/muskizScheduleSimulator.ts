@@ -1620,6 +1620,8 @@ function enforceFridayKnockoutSpacing(state: ScheduleGreedyState, slotMins: numb
         }
     };
 
+    const fixedSemiStart = timeToMinutes('20:25');
+    const fixedFinalStart = timeToMinutes('21:10');
     for (const div of divisions) {
         const gruposEnd = maxAssignedEndForPhaseAndDivision(state, 'GRUPOS', div);
         if (!Number.isFinite(gruposEnd) || gruposEnd === -Infinity) continue;
@@ -1633,12 +1635,13 @@ function enforceFridayKnockoutSpacing(state: ScheduleGreedyState, slotMins: numb
 
         if (semis.length === 0) continue;
 
-        // Viernes: 10 min de margen tras grupos y otros 10 min antes de la final.
-        const semiStart = gruposEnd + 10;
+        // Viernes: semis y final en horario fijo con 10 min entre fases.
+        // Si por una categoría concreta no cabe, se mantiene como mínimo 10 min tras grupos.
+        const semiStart = Math.max(fixedSemiStart, gruposEnd + 10);
         for (const semi of semis) updateCellAndAssignment(semi, semiStart);
 
         if (finals.length > 0) {
-            const finalStart = semiStart + slotMins + 10;
+            const finalStart = Math.max(fixedFinalStart, semiStart + slotMins + 10);
             for (const f of finals) updateCellAndAssignment(f, finalStart);
         }
     }

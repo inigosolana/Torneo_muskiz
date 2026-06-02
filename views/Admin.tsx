@@ -3624,7 +3624,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </div>
                                                         <p className="mt-2 text-[11px] text-teal-800">
                                                             La comida del sábado es fija de 14:15 a 15:45 para todas las categorías; la tarde arranca justo al terminar.
-                                                            En viernes, al cerrar grupos hay 10 min de margen antes de semis y otros 10 min antes de la final.
+                                                            En viernes, al cerrar grupos hay 10 min de margen antes de semis (20:25) y otros 10 min antes de la final (21:10).
                                                             Semifinales, cuartos y finales solo después de terminar todos los partidos de grupos.
                                                             Orden: grupos → consolación/repesca (si aplica) → cuartos (≥11 equipos) → semis → finales. ≥11: mejor 3º directo + repesca entre los 2 peores terceros; cuartos: 1º vs 3º mejor, 1º vs gan. repesca, 1º vs 2º y 2º vs 2º.
                                                             La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).
