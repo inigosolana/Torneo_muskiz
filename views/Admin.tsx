@@ -3959,24 +3959,26 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             )}
                                         </div>
 
-                                        <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span className="text-[10px] font-black uppercase text-indigo-800">
-                                                    Gestión de grupos (solo admin)
-                                                </span>
-                                                <span className="text-[10px] text-indigo-600">
-                                                    La web pública solo muestra clasificación en lectura.
-                                                </span>
+                                        {compArenaMode === 'simulation' && (
+                                            <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="text-[10px] font-black uppercase text-indigo-800">
+                                                        Gestión de grupos (solo admin)
+                                                    </span>
+                                                    <span className="text-[10px] text-indigo-600">
+                                                        La web pública solo muestra clasificación en lectura.
+                                                    </span>
+                                                </div>
+                                                <CompetitionGroupManager
+                                                    division={standingsDivision}
+                                                    teams={teams}
+                                                    onMoveTeam={(t, g) => void handleMoveTeamToGroup(t, g)}
+                                                    onSwapTeams={(a, b) => void handleSwapTeamsInGroups(a, b)}
+                                                    onRequestRegenerateSimulation={() => void handleGenerateMuskizAllDays()}
+                                                    onlyPaid={false}
+                                                />
                                             </div>
-                                            <CompetitionGroupManager
-                                                division={standingsDivision}
-                                                teams={teams}
-                                                onMoveTeam={(t, g) => void handleMoveTeamToGroup(t, g)}
-                                                onSwapTeams={(a, b) => void handleSwapTeamsInGroups(a, b)}
-                                                onRequestRegenerateSimulation={() => void handleGenerateMuskizAllDays()}
-                                                onlyPaid={false}
-                                            />
-                                        </div>
+                                        )}
 
                                         {compDisplayMatches.length === 0 && (
                                             <p className="text-sm text-slate-500 text-center py-4 border border-dashed rounded-lg">
