@@ -2641,8 +2641,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </div>
                                                         {totals.total !== breakdown.planned.total && (
                                                             <p className="text-[11px] text-slate-500 mb-3">
-                                                                Formato previsto: {breakdown.planned.grupos} grupos + {breakdown.planned.eliminatoria} eliminatoria ={' '}
-                                                                {breakdown.planned.total} partidos. En el calendario se programan solo {totals.total} partidos reales de grupos (mín. {minForDiv}/equipo).
+                                                                Borrador: {totals.grupos} grupos + {totals.eliminatoria} eliminatoria (cuartos, semis y final) = {totals.total} partidos.
+                                                                Formato base sin extras de mínimo: {breakdown.planned.total} partidos.
                                                             </p>
                                                         )}
                                                         <table className="w-full text-sm">
@@ -2975,7 +2975,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             />
                                                             <span>
                                                                 <strong>Ayuda Google AI (mix)</strong> — Primero el simulador{' '}
-                                                                <strong>determinístico</strong> (solo equipos pagados y aprobados; fase de grupos con nombres reales; la eliminatoria se programa cuando haya clasificados). Luego la IA coloca <strong>PENDIENTE</strong> en lotes de {MUSKIZ_AI_SLOT_ASSIST_MAX}{' '}
+                                                                <strong>determinístico</strong> (equipos pagados y aprobados; grupos con nombres reales; cuartos 1º vs 3º, semis y final en plantilla hasta clasificar). Luego la IA coloca <strong>PENDIENTE</strong> en lotes de {MUSKIZ_AI_SLOT_ASSIST_MAX}{' '}
                                                                 (máx. {MUSKIZ_AI_MAX_CALLS_PER_DAY} consultas/día). Usa el campo{' '}
                                                                 <strong>«Formato del torneo»</strong> del borrador como instrucciones. Al final, optimización
                                                                 local de descansos <strong>sin API</strong>. Si Gemini falla, se conserva el borrador

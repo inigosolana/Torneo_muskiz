@@ -12,10 +12,10 @@
  * - 8–10 equipos : 2 grupos → semis → final (9: 4+5)
  * - ≥11 equipos  : 3 grupos (11: 4+4+3) → repesca 2 peores 3º + cuartos + semis → final
  *
- * El calendario generado usa solo equipos reales (pagados y aprobados) y solo partidos
- * de fase de grupos con nombres reales. Los cruces eliminatorios (1º Gr.A, Gan.Semi…)
- * no se programan hasta que existan clasificados; el formato previsto se muestra en Estructura.
- *
+ * El calendario usa equipos reales (pagados y aprobados). La fase de grupos lleva nombres
+ * de club; cuartos, semis y final usan plantillas de clasificación (1º Gr.A, Gan.Semi…)
+ * que se sustituyen por equipos reales al cerrar grupos. La final siempre se programa
+ * en calendario, horarios y resultados.
  * El simulador intenta que cada equipo juegue ≥4 partidos reales; si no cabe, baja a ≥3.
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
  * Las fases de grupos/cuartos se programan antes que semis/finales.
@@ -44,7 +44,7 @@ export function teamsEligibleForSchedule(allTeams: Team[]): Team[] {
     return allTeams.filter((t) => t.paymentStatus === 'PAID' && t.status === 'approved');
 }
 
-/** Partidos programables: ambos bandos son equipos inscritos (no plantillas tipo 1º Gr.A o Gan.Semi). */
+/** Partidos de grupos con ambos bandos = equipos inscritos (para conteo de mínimos por equipo). */
 export function filterSchedulableSpecs(specs: RawMatchSpec[], teamList: Team[]): RawMatchSpec[] {
     const realNames = new Set(teamList.map((t) => t.name));
     return specs.filter((s) => realNames.has(s.teamA) && realNames.has(s.teamB));
@@ -478,7 +478,7 @@ export function countDivisionMatchBreakdown(
 
     return {
         planned: summarize(base),
-        withMinPerTeam: summarize(filterSchedulableSpecs(full, teamList)),
+        withMinPerTeam: summarize(full),
     };
 }
 
@@ -544,10 +544,10 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
             roundLabel: `Repesca 3º · ${code}`,
         });
         out.push(
-            { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 1` },
-            { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 2` },
-            { teamA: `1º Gr.${gc}`, teamB: `3º mejor 2`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 3` },
-            { teamA: `2º Gr.${gc}`, teamB: `3º mejor 1`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 4` },
+            { teamA: `1º Gr.${ga}`, teamB: `3º Gr.${gb}`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 1 · 1º${ga} vs 3º${gb}` },
+            { teamA: `1º Gr.${gb}`, teamB: `3º Gr.${gc}`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 2 · 1º${gb} vs 3º${gc}` },
+            { teamA: `1º Gr.${gc}`, teamB: `3º Gr.${ga}`, division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 3 · 1º${gc} vs 3º${ga}` },
+            { teamA: `2º Gr.${ga}`, teamB: 'Gan. repesca 3º', division: div, phase: 'CUARTOS', phaseOrder: 2, roundLabel: `Cuartos · ${code} 4 · 2º${ga} vs Gan.repesca` },
         );
         out.push(
             { teamA: `Gan.Ctos ${code} 1`, teamB: `Gan.Ctos ${code} 2`, division: div, phase: 'SEMIS', phaseOrder: 3, roundLabel: `Semi · ${code} 1` },
@@ -567,21 +567,21 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
                 roundLabel: `Consolación 3º · ${code}`,
             });
             out.push(
-                { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 1` },
-                { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 2` },
+                { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 1 · 1º${ga} vs 2º${gb}` },
+                { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 2 · 1º${gb} vs 2º${ga}` },
             );
             out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 3, roundLabel: `Final · ${code}` });
         } else {
             // 8–10 equipos (9 → 4+5; 8 → 4+4; 10 → 5+5): semis + final
             out.push(
-                { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 1` },
-                { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 2` },
+                { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 1 · 1º${ga} vs 2º${gb}` },
+                { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 2 · 1º${gb} vs 2º${ga}` },
             );
             out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 2, roundLabel: `Final · ${code}` });
         }
     } else {
         // 2–6 equipos, 1 grupo: liguilla → final 1º vs 2º (sin semifinales)
-        out.push({ teamA: '1º Clasificado', teamB: '2º Clasificado', division: div, phase: 'FINAL', phaseOrder: 1, roundLabel: `Final · ${code}` });
+        out.push({ teamA: '1º Clasificado', teamB: '2º Clasificado', division: div, phase: 'FINAL', phaseOrder: 1, roundLabel: `Final · ${code} · 1º vs 2º` });
     }
 
     return out;
@@ -1911,26 +1911,14 @@ export function buildMuskizDayDraftMatches(
         }
 
         const baseSpecs = specsForPaidDivision(list);
-        const plannedElim =
-            baseSpecs.filter((s) => s.phase !== 'GRUPOS').length;
         const realNames = new Set(list.map((t) => t.name));
         const divMin = resolveMinMatchesForDivision(div, options);
 
         let divSpecs = ensureMinRealMatchesPerTeam(list, [...baseSpecs], divMin);
-        divSpecs = filterSchedulableSpecs(divSpecs, list);
         let effectiveMin = divMin;
         if (allDivSpecs.length + divSpecs.length > cap && divMin > 2) {
             effectiveMin = Math.max(2, divMin - 1);
-            divSpecs = filterSchedulableSpecs(
-                ensureMinRealMatchesPerTeam(list, [...baseSpecs], effectiveMin),
-                list
-            );
-        }
-
-        if (plannedElim > 0) {
-            warnings.push(
-                `«${div}»: ${plannedElim} partido(s) eliminatorios del formato quedan fuera del borrador hasta conocer clasificados.`
-            );
+            divSpecs = ensureMinRealMatchesPerTeam(list, [...baseSpecs], effectiveMin);
         }
 
         const m = countRealRealMatches(divSpecs, realNames);
