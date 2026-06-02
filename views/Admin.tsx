@@ -656,13 +656,22 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         ]
     );
 
-    const compSubTabs: { id: AdminCompSubTab; label: string; icon: string }[] = [
+    const allCompSubTabs: { id: AdminCompSubTab; label: string; icon: string }[] = [
         { id: 'structure', label: 'Estructura', icon: 'account_tree' },
         { id: 'simulations', label: 'Simulaciones', icon: 'science' },
         { id: 'calendar', label: 'Calendario', icon: 'calendar_view_month' },
         { id: 'results', label: 'Resultados', icon: 'scoreboard' },
         { id: 'standings', label: 'Clasificación', icon: 'leaderboard' },
     ];
+    const compSubTabs = useMemo(
+        () =>
+            compArenaMode === 'official'
+                ? allCompSubTabs.filter(
+                      (tab) => tab.id === 'calendar' || tab.id === 'results' || tab.id === 'standings'
+                  )
+                : allCompSubTabs,
+        [compArenaMode]
+    );
 
     const officialCalendarStatus = useMemo(() => {
         if (matches.length === 0) {
@@ -732,6 +741,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             cancelled = true;
         };
     }, [activeTab, isAuthenticated, sessionReady]);
+
+    useEffect(() => {
+        if (compArenaMode !== 'official') return;
+        if (compSubTab === 'structure' || compSubTab === 'simulations') {
+            setCompSubTab('calendar');
+        }
+    }, [compArenaMode, compSubTab]);
 
     const persistSimDraftsAsync = async (next: CalendarDraft[], nextActiveId: string | null) => {
         setSimulationsSaving(true);
@@ -1394,6 +1410,18 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
+    const ensureStrictGroupDistribution = (
+        candidateTeams: Team[],
+        division: Team['division']
+    ): boolean => {
+        const validation = validateGroupDistribution(candidateTeams, division, false);
+        if (!validation.needsRegenerate) return true;
+        toast.error(
+            `Cambio no permitido: el reparto debe respetar el formato (${validation.issues.join(' · ')})`
+        );
+        return false;
+    };
+
     const handleSwapTeamsInGroups = async (teamA: Team, teamB: Team) => {
         const resolveEffectiveGroup = (team: Team): string => {
             const explicit = (team.competitionGroup ?? '').trim();
@@ -1448,6 +1476,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             return t;
         });
 
+        if (!ensureStrictGroupDistribution(updatedTeams, teamA.division)) return;
+
         await applyGroupMatchUpdates(
             updatedTeams,
             (list) => {
@@ -1481,6 +1511,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         const nextGroup = newGroup.trim();
         if (oldGroup === nextGroup) return;
 
+        const candidateTeams = teams.map((t) =>
+            t.id === team.id ? { ...t, competitionGroup: nextGroup || null } : t
+        );
+        if (!ensureStrictGroupDistribution(candidateTeams, team.division)) return;
+
         try {
             await onUpdateTeam({ ...team, competitionGroup: nextGroup || null });
         } catch {
@@ -1488,9 +1523,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             return;
         }
 
-        const updatedTeams = teams.map((t) =>
-            t.id === team.id ? { ...t, competitionGroup: nextGroup || null } : t
-        );
+        const updatedTeams = candidateTeams;
 
         await applyGroupMatchUpdates(
             updatedTeams,
