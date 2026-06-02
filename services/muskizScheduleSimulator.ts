@@ -265,6 +265,16 @@ export function isKolosauriosAffinity(team: Pick<Team, 'name' | 'city'>): boolea
     return /kolosaur/.test(blob);
 }
 
+function isLateArrivalAffinity(team: Pick<Team, 'name' | 'city'>): boolean {
+    const blob = `${team.name} ${team.city ?? ''}`.toLowerCase();
+    return (
+        /(santander|cantabria|camargo|astillero|bezana|torrelavega|liencres|soto de la marina)/i.test(
+            blob
+        ) ||
+        /(logroño|logrono|la rioja|rioja)/i.test(blob)
+    );
+}
+
 function groupCapacitiesForCount(n: number, groupCount: number): number[] {
     const fixed = expectedGroupSizesForTeamCount(n);
     if (fixed && fixed.length === groupCount) return fixed;
@@ -1091,6 +1101,21 @@ function scheduleSpecBatch(
         return false;
     };
 
+    const pairNeedsSecondSlotMin = (
+        division: Team['division'],
+        teamsPair: [string, string]
+    ): boolean => {
+        for (const name of teamsPair) {
+            if (isPlaceholderTeamName(name)) continue;
+            const label = normalizeTeamLabel(name);
+            const roster = scheduleTeams.find(
+                (t) => t.division === division && normalizeTeamLabel(t.name) === label
+            );
+            if (roster && isLateArrivalAffinity(roster)) return true;
+        }
+        return false;
+    };
+
     const scoreSlot = (
         phase: Phase,
         division: Team['division'],
@@ -1103,6 +1128,8 @@ function scheduleSpecBatch(
         slotTimePolicy: SlotTimePolicy
     ): number | null => {
         const te = ts + slotMins;
+        const firstSlot = slotStartsMin[0] ?? ts;
+        if (pairNeedsSecondSlotMin(division, teamsPair) && ts <= firstSlot) return null;
         if (courtBusy(ci, ts, te) || teamsBusyInDivision(assigned, division, teamKeys, ts, te)) {
             return null;
         }

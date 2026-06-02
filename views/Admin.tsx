@@ -22,6 +22,7 @@ import {
 } from '../services/tournamentScheduleService';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 import {
+    autoGroupCount,
     buildDivisionMinMatchesFromCategories,
     countDivisionMatchBreakdown,
     countMatchesPerTeamForDivision,
@@ -30,6 +31,7 @@ import {
     MIN_TEAMS_PER_GROUP,
     MUSKIZ_AI_MAX_CALLS_PER_DAY,
     MUSKIZ_AI_SLOT_ASSIST_MAX,
+    expectedGroupSizesForTeamCount,
     resolveMatchDivision,
     resolveMinMatchesForDivision,
     resolveTeamForMatchSide,
@@ -672,6 +674,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                 : allCompSubTabs,
         [compArenaMode]
     );
+    const groupSetupStatus = useMemo(() => {
+        const entries = DIVISIONS_LIST.map((division) => {
+            const teamCount = teams.filter((t) => t.division === division).length;
+            const validation = validateGroupDistribution(teams, division, false);
+            return { division, teamCount, needsGroups: teamCount >= 2, validation };
+        });
+        const blocking = entries.filter((e) => e.needsGroups && e.validation.needsRegenerate);
+        return { entries, blocking, ready: blocking.length === 0 };
+    }, [teams]);
 
     const officialCalendarStatus = useMemo(() => {
         if (matches.length === 0) {
@@ -1046,6 +1057,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     // --- Generator Logic ---
     const handleGenerateMuskizActiveDay = async () => {
+        if (!groupSetupStatus.ready) {
+            const blocked = groupSetupStatus.blocking
+                .map((e) => `${e.division}: ${e.validation.issues.join(', ')}`)
+                .join(' | ');
+            toast.error(`Primero crea/revisa grupos antes de generar calendario. ${blocked}`, {
+                duration: 10000,
+            });
+            return;
+        }
         if (!activeDraftId || !activeDraft) {
             toast.error('Selecciona o crea una simulación primero.');
             return;
@@ -1091,6 +1111,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     };
 
     const handleGenerateMuskizAllDays = async () => {
+        if (!groupSetupStatus.ready) {
+            const blocked = groupSetupStatus.blocking
+                .map((e) => `${e.division}: ${e.validation.issues.join(', ')}`)
+                .join(' | ');
+            toast.error(`Primero crea/revisa grupos antes de generar calendario. ${blocked}`, {
+                duration: 10000,
+            });
+            return;
+        }
         if (weekendDrafts.length < 3) {
             toast.error('Faltan borradores de Viernes, Sábado o Domingo.');
             return;
@@ -1371,6 +1400,78 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             toast.success('Grupo guardado.');
         } catch {
             /* toast + reportOps en App.tsx (updateTeam) */
+        }
+    };
+
+    const handleCreateRandomGroups = async () => {
+        if (
+            !window.confirm(
+                'Se asignarán grupos automáticamente (aleatorio) en todas las categorías con 2+ equipos.\n\n' +
+                    'Después podrás revisar/intercambiar y luego generar calendario.\n\n¿Continuar?'
+            )
+        ) {
+            return;
+        }
+
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+        const shuffle = <T,>(items: T[]): T[] => {
+            const out = [...items];
+            for (let i = out.length - 1; i > 0; i -= 1) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [out[i], out[j]] = [out[j], out[i]];
+            }
+            return out;
+        };
+
+        const nextById = new Map<string, string | null>();
+        for (const division of DIVISIONS_LIST) {
+            const roster = teams.filter((t) => t.division === division);
+            const n = roster.length;
+            if (n < 2) {
+                for (const t of roster) nextById.set(t.id, null);
+                continue;
+            }
+
+            const groupCount = Math.max(1, autoGroupCount(n));
+            const fixedSizes = expectedGroupSizesForTeamCount(n);
+            const capacities = fixedSizes?.length
+                ? fixedSizes
+                : Array.from(
+                      { length: groupCount },
+                      (_, i) => Math.floor(n / groupCount) + (i < n % groupCount ? 1 : 0)
+                  );
+
+            const randomized = shuffle(roster);
+            let idx = 0;
+            for (let g = 0; g < capacities.length; g += 1) {
+                const key = letters[g] ?? String(g + 1);
+                const size = capacities[g] ?? 0;
+                for (let k = 0; k < size && idx < randomized.length; k += 1, idx += 1) {
+                    nextById.set(randomized[idx]!.id, key);
+                }
+            }
+        }
+
+        const updates = teams
+            .map((t) => {
+                if (!nextById.has(t.id)) return null;
+                const nextGroup = nextById.get(t.id) ?? null;
+                const current = (t.competitionGroup ?? '').trim() || null;
+                if (current === nextGroup) return null;
+                return { ...t, competitionGroup: nextGroup };
+            })
+            .filter((t): t is Team => Boolean(t));
+
+        if (updates.length === 0) {
+            toast.info('Los grupos ya estaban creados con ese formato.');
+            return;
+        }
+
+        try {
+            await Promise.all(updates.map((t) => onUpdateTeam(t)));
+            toast.success('Grupos creados aleatoriamente. Revisa y luego genera el calendario.');
+        } catch {
+            toast.error('No se pudieron guardar los grupos automáticos.');
         }
     };
 
@@ -3505,6 +3606,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).
                                                             Ajusta partidos a mano en la lista de abajo o en Calendario (tabla / cuadrícula).
                                                         </p>
+                                                        <div className="mt-3 rounded-lg border border-teal-300 bg-teal-100/60 px-3 py-2 text-[11px] text-teal-950">
+                                                            <p className="font-black mb-1">Flujo recomendado</p>
+                                                            <p>
+                                                                1) Pulsa <strong>Crear grupos aleatorios</strong> → 2) Ve a <strong>Clasificación</strong> y revisa/intercambia equipos →
+                                                                3) Vuelve a <strong>Simulaciones</strong> y pulsa <strong>Generar horarios</strong>.
+                                                            </p>
+                                                        </div>
                                                         </div>
                                                         <div className="flex flex-col gap-2 shrink-0">
                                                             <input type="file" id="excel-upload" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleExcelImport} />
@@ -3520,8 +3628,16 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     <div className="flex flex-wrap gap-2">
                                                         <button
                                                             type="button"
+                                                            onClick={() => void handleCreateRandomGroups()}
+                                                            className="flex-1 min-w-[220px] bg-emerald-700 hover:bg-emerald-800 text-white py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors"
+                                                        >
+                                                            <span className="material-symbols-outlined">groups</span>
+                                                            1) Crear grupos aleatorios
+                                                        </button>
+                                                        <button
+                                                            type="button"
                                                             onClick={() => void handleGenerateMuskizActiveDay()}
-                                                            disabled={generatingMuskiz || !activeDraft?.scheduleDay}
+                                                            disabled={generatingMuskiz || !activeDraft?.scheduleDay || !groupSetupStatus.ready}
                                                             className="flex-1 min-w-[200px] bg-teal-700 hover:bg-teal-800 text-white py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                                                         >
                                                             {generatingMuskiz ? (
@@ -3532,13 +3648,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             {generatingMuskiz
                                                                 ? 'Generando…'
                                                                 : activeDraft?.scheduleDay
-                                                                  ? `Generar ${activeDraft.scheduleDay}`
-                                                                  : 'Generar día activo'}
+                                                                  ? `2) Generar horarios ${activeDraft.scheduleDay}`
+                                                                  : '2) Generar horarios día activo'}
                                                         </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => void handleGenerateMuskizAllDays()}
-                                                            disabled={generatingMuskiz || weekendDrafts.length < 3}
+                                                            disabled={generatingMuskiz || weekendDrafts.length < 3 || !groupSetupStatus.ready}
                                                             className="flex-1 min-w-[200px] bg-indigo-700 hover:bg-indigo-800 text-white py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                                                         >
                                                             {generatingMuskiz ? (
@@ -3546,9 +3662,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             ) : (
                                                                 <span className="material-symbols-outlined">calendar_month</span>
                                                             )}
-                                                            {generatingMuskiz ? 'Generando…' : 'Generar los 3 días'}
+                                                            {generatingMuskiz ? 'Generando…' : '2) Generar horarios (3 días)'}
                                                         </button>
                                                     </div>
+                                                    {!groupSetupStatus.ready && (
+                                                        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                                                            <p className="font-black mb-1">Paso pendiente antes de generar calendario</p>
+                                                            <p>Revisa grupos en categorías con aviso y deja el formato correcto (ej. 11 equipos = 4+4+3).</p>
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 px-4 py-3 text-xs text-indigo-950">
