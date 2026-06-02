@@ -45,6 +45,10 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
         () => filteredMatches.filter((m) => inferMatchScheduleDay(m) === calendarDay),
         [filteredMatches, calendarDay]
     );
+    const fridayPublishedCount = useMemo(
+        () => filteredMatches.filter((m) => inferMatchScheduleDay(m) === 'Viernes').length,
+        [filteredMatches]
+    );
 
     const scheduleReady = hasPublishedScheduleForManager(matches, managerTeams);
     const filterLabel =
@@ -130,6 +134,11 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
                         PDF
                     </button>
                 </div>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 font-semibold">
+                {fridayPublishedCount > 0
+                    ? `Tus equipos tienen ${fridayPublishedCount} partido(s) publicado(s) el viernes.`
+                    : 'Tus equipos todavía no tienen partidos publicados para el viernes.'}
             </div>
 
             <div className="flex gap-1 bg-white dark:bg-surface-dark rounded-lg border border-slate-200 dark:border-white/10 p-1 w-fit">

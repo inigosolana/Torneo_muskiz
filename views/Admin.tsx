@@ -14,6 +14,7 @@ import {
     ensureStableDraftMatchIds,
     fetchCalendarSimulations,
     finalizeMatchesForDatabase,
+    inferMatchScheduleDay,
     saveCalendarSimulations,
     duplicateDraft,
     normalizeCalendarSimulations,
@@ -1184,19 +1185,32 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     const handlePublishActiveDraft = async () => {
         if (!activeDraft) return;
+        const targetDay = activeDraft.scheduleDay;
+        if (!targetDay) {
+            toast.error('El borrador activo no está asociado a Viernes / Sábado / Domingo.');
+            return;
+        }
         if (
             !window.confirm(
-                '¿Volcar esta simulación al calendario oficial en la base de datos? Sustituirá todos los partidos actuales.\n\n' +
+                `¿Publicar solo ${targetDay} en el calendario oficial? Sustituirá únicamente los partidos de ${targetDay} y mantendrá el resto de días.\n\n` +
                     (publishDraftAsPublic
                         ? 'Has elegido PUBLICAR ahora: los partidos serán visibles en Competición para visitantes (si además el interruptor global de visibilidad está activo).'
                         : 'Has elegido NO publicar ahora: los partidos se guardarán como PRIVADOS hasta que uses «Hacer público el calendario actual».')
             )
         )
             return;
-        const finalized = finalizeMatchesForDatabase(activeDraft.matches, { isPublic: publishDraftAsPublic });
-        await onUpdateMatches(finalized);
+        const finalizedDay = finalizeMatchesForDatabase(activeDraft.matches, { isPublic: publishDraftAsPublic }).map((m) => ({
+            ...m,
+            scheduleDay: targetDay,
+        }));
+        const preservedOtherDays = matches.filter((m) => inferMatchScheduleDay(m) !== targetDay);
+        const mergedOfficial = [...preservedOtherDays, ...finalizedDay];
+        await onUpdateMatches(mergedOfficial);
+        if (publishDraftAsPublic && !publicMatchesVisible) {
+            await persistPublicMatchesVisible(true);
+        }
         toast.success(
-            `Calendario oficial actualizado (${finalized.length} partidos). ${publishDraftAsPublic ? 'Visibilidad: público.' : 'Visibilidad: privado (borrador en sombra).'}`,
+            `${targetDay} publicado en oficial (${finalizedDay.length} partidos). ${publishDraftAsPublic ? 'Visible en web/público.' : 'Guardado como privado (borrador en sombra).'}`,
         );
     };
 
@@ -1219,6 +1233,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         const finalized = finalizeMatchesForDatabase(merged, { isPublic: publishDraftAsPublic });
         await onUpdateMatches(finalized);
+        if (publishDraftAsPublic && !publicMatchesVisible) {
+            await persistPublicMatchesVisible(true);
+        }
         toast.success(
             `Calendario oficial: ${finalized.length} partidos de los 3 días. ${publishDraftAsPublic ? 'Visibilidad: público.' : 'Visibilidad: privado.'}`
         );
