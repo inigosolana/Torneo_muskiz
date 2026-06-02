@@ -1497,110 +1497,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
-    const handleApplyWeekendRetimeToCurrentSimulation = async () => {
-        const toMinutes = (time: string): number | null => {
-            if (!/^\d{2}:\d{2}$/.test(time)) return null;
-            const [h, m] = time.split(':').map(Number);
-            return h * 60 + m;
-        };
-        const toTime = (mins: number): string => {
-            const h = Math.floor(mins / 60);
-            const m = mins % 60;
-            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        };
-        const updateRoundTime = (round: string | undefined, oldTime: string, nextTime: string): string | undefined => {
-            if (!round) return round;
-            if (oldTime === nextTime) return round;
-            if (!/\d{2}:\d{2}/.test(round)) return round;
-            return round.replace(/\d{2}:\d{2}/, nextTime);
-        };
-
-        if (
-            !window.confirm(
-                'Se aplicará sobre la simulación actual:\n' +
-                    '- Sábado y domingo +35 min\n' +
-                    '- Sábado: los partidos que caigan en la comida (14:15–15:45) pasan después de comer\n\n' +
-                    'No regenera partidos, solo mueve horas. ¿Continuar?'
-            )
-        ) {
-            return;
-        }
-
-        const SLOT = 35;
-        const SAT_LUNCH_START = 14 * 60 + 15; // 14:15
-        const SAT_LUNCH_END = 15 * 60 + 45; // 15:45
-
-        const retimeDayMatches = (day: 'Sábado' | 'Domingo', matches: Match[]): Match[] => {
-            const queued: Match[] = [];
-            const fixed: Match[] = [];
-
-            for (const m of matches) {
-                const mins = toMinutes(m.time);
-                if (mins == null) {
-                    fixed.push(m);
-                    continue;
-                }
-                if (day === 'Domingo') {
-                    const next = toTime(mins + SLOT);
-                    fixed.push({ ...m, time: next, round: updateRoundTime(m.round, m.time, next) });
-                    continue;
-                }
-
-                // Sábado
-                const shifted = mins + SLOT;
-                const fromLunchStart = mins === SAT_LUNCH_START;
-                const landsInLunch = shifted >= SAT_LUNCH_START && shifted < SAT_LUNCH_END;
-                if (fromLunchStart || landsInLunch) {
-                    queued.push(m);
-                } else {
-                    const next = toTime(shifted);
-                    fixed.push({ ...m, time: next, round: updateRoundTime(m.round, m.time, next) });
-                }
-            }
-
-            if (day !== 'Sábado' || queued.length === 0) return fixed;
-
-            const usedByCourt = new Map<string, Set<number>>();
-            for (const m of fixed) {
-                const mins = toMinutes(m.time);
-                if (mins == null) continue;
-                if (!usedByCourt.has(m.court)) usedByCourt.set(m.court, new Set());
-                usedByCourt.get(m.court)!.add(mins);
-            }
-
-            const queueSorted = [...queued].sort((a, b) => {
-                const ta = toMinutes(a.time) ?? 0;
-                const tb = toMinutes(b.time) ?? 0;
-                if (ta !== tb) return ta - tb;
-                return a.court.localeCompare(b.court, 'es');
-            });
-
-            const moved: Match[] = queueSorted.map((m) => {
-                if (!usedByCourt.has(m.court)) usedByCourt.set(m.court, new Set());
-                const used = usedByCourt.get(m.court)!;
-                let slot = SAT_LUNCH_END;
-                while (used.has(slot)) slot += SLOT;
-                used.add(slot);
-                const next = toTime(slot);
-                return { ...m, time: next, round: updateRoundTime(m.round, m.time, next) };
-            });
-
-            return [...fixed, ...moved];
-        };
-
-        const nextDrafts = simDrafts.map((d) => {
-            if (d.scheduleDay !== 'Sábado' && d.scheduleDay !== 'Domingo') return d;
-            return {
-                ...d,
-                matches: retimeDayMatches(d.scheduleDay, d.matches),
-            };
-        });
-
-        setSimDrafts(nextDrafts);
-        await persistSimDraftsAsync(nextDrafts, activeDraftId);
-        toast.success('Simulación actual actualizada: sábado/domingo retrasados y franja de comida del sábado respetada.');
-    };
-
     const applyGroupMatchUpdates = async (
         updatedTeams: Team[],
         updater: (matches: Match[]) => Match[],
@@ -3752,15 +3648,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </div>
                                                     </div>
                                                     <div className="flex flex-wrap gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => void handleApplyWeekendRetimeToCurrentSimulation()}
-                                                            disabled={generatingMuskiz || weekendDrafts.length < 2}
-                                                            className="flex-1 min-w-[250px] bg-orange-600 hover:bg-orange-700 text-white py-3 px-6 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                                                        >
-                                                            <span className="material-symbols-outlined">schedule</span>
-                                                            Aplicar nuevo horario a simulación actual
-                                                        </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => void handleCreateRandomGroups()}

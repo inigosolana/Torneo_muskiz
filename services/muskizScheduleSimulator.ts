@@ -2403,9 +2403,22 @@ export function groupMatchesForDayGrid(
             grid['PENDIENTE'] = Object.fromEntries(courts.map((c) => [c, null]));
             if (!times.includes('PENDIENTE')) times.push('PENDIENTE');
         }
-        if (!grid[m.time]) grid[m.time] = Object.fromEntries(courts.map((c) => [c, null]));
-        if (!courts.includes(m.court) && m.court !== 'Sin asignar') courts.push(m.court);
+        if (!grid[m.time]) {
+            grid[m.time] = Object.fromEntries(courts.map((c) => [c, null]));
+            if (!times.includes(m.time)) times.push(m.time);
+        }
+        if (!courts.includes(m.court) && m.court !== 'Sin asignar') {
+            courts.push(m.court);
+            for (const t of Object.keys(grid)) {
+                if (!(m.court in grid[t]!)) grid[t]![m.court] = null;
+            }
+        }
         grid[m.time]![m.court] = m;
     }
+    times = [...new Set(times)].sort((a, b) => {
+        if (a === 'PENDIENTE') return 1;
+        if (b === 'PENDIENTE') return -1;
+        return timeToMinutes(a) - timeToMinutes(b);
+    });
     return { courts, times, grid };
 }
