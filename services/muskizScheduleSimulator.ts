@@ -557,8 +557,28 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     // ── Fase de grupos ──────────────────────────────────────────────────────
     for (const g of groups) {
         const label = `${code}-${g.key}`;
-        for (const { a, b } of roundRobinPairs(g.names)) {
-            out.push({ teamA: a, teamB: b, division: div, phase: 'GRUPOS', phaseOrder: 0, roundLabel: `Grupos · ${label}` });
+        const pairs = roundRobinPairs(g.names);
+        const isSeniorMasculinoGroupCReturnLegs =
+            div === 'Senior Masculino' && g.key === 'C' && g.names.length === 3;
+        for (const { a, b } of pairs) {
+            out.push({
+                teamA: a,
+                teamB: b,
+                division: div,
+                phase: 'GRUPOS',
+                phaseOrder: 0,
+                roundLabel: `Grupos · ${label}`,
+            });
+            if (isSeniorMasculinoGroupCReturnLegs) {
+                out.push({
+                    teamA: b,
+                    teamB: a,
+                    division: div,
+                    phase: 'GRUPOS',
+                    phaseOrder: 0,
+                    roundLabel: `Grupos · ${label} · vuelta`,
+                });
+            }
         }
     }
 
@@ -1575,7 +1595,53 @@ function scheduleGreedy(
 
     enforcePhaseTimeOrder(state, slotStartsMin, slotMins, lunchEndMin, postGroupsBreakMin);
 
+    if (day === 'Viernes') {
+        enforceFridayKnockoutSpacing(state, slotMins);
+    }
+
     return { placed: state.placed, unplaced: state.unplaced };
+}
+
+function enforceFridayKnockoutSpacing(state: ScheduleGreedyState, slotMins: number): void {
+    const divisions = Array.from(new Set(state.placed.map((p) => p.spec.division)));
+    const updateCellAndAssignment = (cell: ScheduledCell, nextStart: number) => {
+        const assign = state.assigned.find(
+            (a) =>
+                a.division === cell.spec.division &&
+                a.courtIdx === cell.courtIdx &&
+                a.tStart === cell.timeMin &&
+                normalizeTeamLabel(a.teams[0]) === normalizeTeamLabel(cell.spec.teamA) &&
+                normalizeTeamLabel(a.teams[1]) === normalizeTeamLabel(cell.spec.teamB)
+        );
+        cell.timeMin = nextStart;
+        if (assign) {
+            assign.tStart = nextStart;
+            assign.tEnd = nextStart + slotMins;
+        }
+    };
+
+    for (const div of divisions) {
+        const gruposEnd = maxAssignedEndForPhaseAndDivision(state, 'GRUPOS', div);
+        if (!Number.isFinite(gruposEnd) || gruposEnd === -Infinity) continue;
+
+        const semis = state.placed
+            .filter((p) => p.spec.division === div && p.spec.phase === 'SEMIS')
+            .sort((a, b) => a.timeMin - b.timeMin || a.courtIdx - b.courtIdx);
+        const finals = state.placed
+            .filter((p) => p.spec.division === div && p.spec.phase === 'FINAL')
+            .sort((a, b) => a.timeMin - b.timeMin || a.courtIdx - b.courtIdx);
+
+        if (semis.length === 0) continue;
+
+        // Viernes: 10 min de margen tras grupos y otros 10 min antes de la final.
+        const semiStart = gruposEnd + 10;
+        for (const semi of semis) updateCellAndAssignment(semi, semiStart);
+
+        if (finals.length > 0) {
+            const finalStart = semiStart + slotMins + 10;
+            for (const f of finals) updateCellAndAssignment(f, finalStart);
+        }
+    }
 }
 
 /** Si una eliminatoria empieza antes de que acabe el último partido de grupos, se reintenta. */
