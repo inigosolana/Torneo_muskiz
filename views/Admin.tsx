@@ -1407,17 +1407,42 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         const groupB = resolveEffectiveGroup(teamB);
         if (!groupA || !groupB || groupA === groupB) return;
 
+        const baseDist = getGroupDistributionForDivision(teams, teamA.division, false);
+        const baseGroupByTeamId = new Map<string, string>();
+        for (const g of baseDist) {
+            for (const t of g.teams) baseGroupByTeamId.set(t.id, g.key);
+        }
+
+        const normalizedDivisionTeams = teams.map((t) => {
+            if (t.division !== teamA.division) return t;
+            const effective = (t.competitionGroup ?? '').trim() || baseGroupByTeamId.get(t.id) || '';
+            return { ...t, competitionGroup: effective || null };
+        });
+
+        const persistedA = normalizedDivisionTeams.find((t) => t.id === teamA.id) ?? teamA;
+        const persistedB = normalizedDivisionTeams.find((t) => t.id === teamB.id) ?? teamB;
+
         try {
+            const seeds = normalizedDivisionTeams.filter(
+                (t) =>
+                    t.division === teamA.division &&
+                    t.id !== teamA.id &&
+                    t.id !== teamB.id &&
+                    Boolean((t.competitionGroup ?? '').trim())
+            );
+            await Promise.all(
+                seeds.map((t) => onUpdateTeam({ ...t, competitionGroup: (t.competitionGroup ?? '').trim() || null }))
+            );
             await Promise.all([
-                onUpdateTeam({ ...teamA, competitionGroup: groupB }),
-                onUpdateTeam({ ...teamB, competitionGroup: groupA }),
+                onUpdateTeam({ ...persistedA, competitionGroup: groupB }),
+                onUpdateTeam({ ...persistedB, competitionGroup: groupA }),
             ]);
         } catch {
             toast.error('No se pudo intercambiar los grupos.');
             return;
         }
 
-        const updatedTeams = teams.map((t) => {
+        const updatedTeams = normalizedDivisionTeams.map((t) => {
             if (t.id === teamA.id) return { ...t, competitionGroup: groupB };
             if (t.id === teamB.id) return { ...t, competitionGroup: groupA };
             return t;
