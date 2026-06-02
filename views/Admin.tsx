@@ -3700,44 +3700,31 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             </p>
                                         )}
 
-                                        <div className="flex flex-col gap-2">
-                                            <span className="text-[10px] font-black uppercase text-slate-400">Categoría</span>
-                                            <div className="flex overflow-x-auto gap-2 pb-1">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setResultsDivisionFilter('all')}
-                                                    className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shrink-0 ${
-                                                        resultsDivisionFilter === 'all'
-                                                            ? compArenaMode === 'simulation'
-                                                                ? 'bg-purple-600 text-white shadow'
-                                                                : 'bg-teal-700 text-white shadow'
-                                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                                    }`}
-                                                >
-                                                    Todas ({compDisplayMatches.length})
-                                                </button>
+                                        <div className="flex flex-col gap-2 max-w-sm">
+                                            <label
+                                                htmlFor="results-division-filter"
+                                                className="text-[10px] font-black uppercase text-slate-400"
+                                            >
+                                                Categoría
+                                            </label>
+                                            <select
+                                                id="results-division-filter"
+                                                value={resultsDivisionFilter}
+                                                onChange={(e) =>
+                                                    setResultsDivisionFilter(e.target.value as Team['division'] | 'all')
+                                                }
+                                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                                            >
+                                                <option value="all">Todas ({compDisplayMatches.length})</option>
                                                 {DIVISIONS_LIST.map((cat) => {
                                                     const n = resultsMatchCountByDivision.get(cat) ?? 0;
                                                     return (
-                                                        <button
-                                                            key={cat}
-                                                            type="button"
-                                                            onClick={() => setResultsDivisionFilter(cat)}
-                                                            className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shrink-0 ${
-                                                                resultsDivisionFilter === cat
-                                                                    ? compArenaMode === 'simulation'
-                                                                        ? 'bg-purple-600 text-white shadow'
-                                                                        : 'bg-teal-700 text-white shadow'
-                                                                    : n === 0
-                                                                      ? 'bg-slate-50 text-slate-400'
-                                                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                                            }`}
-                                                        >
+                                                        <option key={cat} value={cat}>
                                                             {cat} ({n})
-                                                        </button>
+                                                        </option>
                                                     );
                                                 })}
-                                            </div>
+                                            </select>
                                         </div>
 
                                         <div className="flex flex-wrap items-center gap-3">
