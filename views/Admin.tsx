@@ -41,6 +41,7 @@ import {
     resolveMatchDivision,
     resolveMinMatchesForDivision,
     resolveTeamForMatchSide,
+    auditSaturdayGroupPhase,
     patchSaturdaySimulationDraft,
     teamsEligibleForSchedule,
     type MuskizSimulatorOptions,
@@ -814,14 +815,34 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         const saturdayDraft = simDrafts.find((d) => d.scheduleDay === 'Sábado');
         if (!saturdayDraft) return;
 
+        let workingMatches = saturdayDraft.matches;
         const { matches, changed, notes } = patchSaturdaySimulationDraft(
             teams,
-            saturdayDraft.matches,
+            workingMatches,
             muskizSimulatorOptions
         );
+        if (changed) workingMatches = matches;
+
+        const groupAudit = auditSaturdayGroupPhase(teams, workingMatches, muskizSimulatorOptions);
+        if (!groupAudit.complete) {
+            const detail = groupAudit.divisions
+                .filter((d) => !d.ok)
+                .map((d) => {
+                    const bits = d.groups
+                        .filter((g) => !g.ok)
+                        .map(
+                            (g) =>
+                                `${g.groupLabel}: ${g.missing.length ? `faltan ${g.missing.length}` : ''}${g.surplus.length ? ` sobran ${g.surplus.length}` : ''}`
+                        );
+                    return `${d.code} (${bits.join('; ')})`;
+                })
+                .join(' · ');
+            toast.warning(`Fase de grupos (sábado) incompleta: ${detail}`, { duration: 14000 });
+        }
+
         if (!changed) return;
 
-        const normalized = ensureStableDraftMatchIds(matches);
+        const normalized = ensureStableDraftMatchIds(workingMatches);
         const nextDrafts = simDrafts.map((d) =>
             d.id === saturdayDraft.id ? { ...d, matches: normalized } : d
         );

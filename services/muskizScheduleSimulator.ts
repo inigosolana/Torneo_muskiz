@@ -2685,6 +2685,189 @@ export interface SaturdayDraftAudit {
     missing: string[];
 }
 
+const SATURDAY_DIVISIONS: Team['division'][] = [
+    'Juvenil Femenino',
+    'Juvenil Masculino',
+    'Senior Femenino',
+    'Senior Masculino',
+];
+
+export function isGroupPhaseMatch(m: Pick<Match, 'round'>): boolean {
+    return /^Grupos\b/i.test(extractStructuralRoundLabel(m.round ?? ''));
+}
+
+function specToMatchPlanKey(spec: RawMatchSpec): string {
+    return matchPlanKey({
+        teamA: spec.teamA,
+        teamB: spec.teamB,
+        round: spec.roundLabel,
+    });
+}
+
+/** Partidos de grupos previstos (sin extras de mínimo ni eliminatorias). */
+export function expectedSaturdayGroupSpecs(
+    teams: Team[],
+    options?: MuskizSimulatorOptions
+): RawMatchSpec[] {
+    const paid = teams.filter(
+        (t) => t.paymentStatus === 'PAID' && SATURDAY_DIVISIONS.includes(t.division)
+    );
+    const byDiv = new Map<Team['division'], Team[]>();
+    for (const t of paid) {
+        if (!byDiv.has(t.division)) byDiv.set(t.division, []);
+        byDiv.get(t.division)!.push(t);
+    }
+    const out: RawMatchSpec[] = [];
+    for (const div of SATURDAY_DIVISIONS) {
+        const list = byDiv.get(div);
+        if (!list || list.length < 2) continue;
+        out.push(...specsForPaidDivision(list).filter((s) => s.phase === 'GRUPOS'));
+    }
+    return out;
+}
+
+export interface SaturdayGroupPhaseGroupAudit {
+    groupLabel: string;
+    teamCount: number;
+    teams: string[];
+    expected: number;
+    inDraft: number;
+    missing: string[];
+    surplus: string[];
+    ok: boolean;
+}
+
+export interface SaturdayGroupPhaseDivisionAudit {
+    division: Team['division'];
+    code: string;
+    paidTeams: number;
+    groups: SaturdayGroupPhaseGroupAudit[];
+    expectedTotal: number;
+    draftTotal: number;
+    missingTotal: number;
+    surplusTotal: number;
+    ok: boolean;
+}
+
+export interface SaturdayGroupPhaseAudit {
+    complete: boolean;
+    divisions: SaturdayGroupPhaseDivisionAudit[];
+    summary: string;
+}
+
+/** Audita solo fase de grupos del sábado (JF, JM, SF, SM) según equipos pagados y grupos configurados. */
+export function auditSaturdayGroupPhase(
+    teams: Team[],
+    saturdayMatches: Match[],
+    options?: MuskizSimulatorOptions
+): SaturdayGroupPhaseAudit {
+    const expected = expectedSaturdayGroupSpecs(teams, options);
+    const draftGroup = saturdayMatches.filter(isGroupPhaseMatch);
+
+    const expectedByDiv = new Map<Team['division'], Map<string, RawMatchSpec[]>>();
+    for (const s of expected) {
+        const label = parseGroupLabelFromRoundOrLabel(s.roundLabel) ?? s.roundLabel;
+        if (!expectedByDiv.has(s.division)) expectedByDiv.set(s.division, new Map());
+        const dm = expectedByDiv.get(s.division)!;
+        if (!dm.has(label)) dm.set(label, []);
+        dm.get(label)!.push(s);
+    }
+
+    const draftByDiv = new Map<Team['division'], Map<string, Match[]>>();
+    for (const m of draftGroup) {
+        const div = divisionFromMatchRound(m.round);
+        if (!div || !SATURDAY_DIVISIONS.includes(div)) continue;
+        const label = parseGroupLabelFromRoundOrLabel(m.round ?? '') ?? '';
+        if (!draftByDiv.has(div)) draftByDiv.set(div, new Map());
+        const dm = draftByDiv.get(div)!;
+        if (!dm.has(label)) dm.set(label, []);
+        dm.get(label)!.push(m);
+    }
+
+    const divisions: SaturdayGroupPhaseDivisionAudit[] = [];
+
+    for (const div of SATURDAY_DIVISIONS) {
+        const paid = teams.filter((t) => t.division === div && t.paymentStatus === 'PAID');
+        if (paid.length < 2) continue;
+
+        const groups = computeGroups(paid) ?? [];
+        const code = DIVISION_CODE[div];
+        const groupAudits: SaturdayGroupPhaseGroupAudit[] = [];
+
+        const labels = new Set<string>([
+            ...groups.map((g) => `${code}-${g.key}`),
+            ...[...(expectedByDiv.get(div)?.keys() ?? [])],
+            ...[...(draftByDiv.get(div)?.keys() ?? [])],
+        ]);
+
+        for (const groupLabel of [...labels].sort((a, b) => a.localeCompare(b, 'es'))) {
+            const g = groups.find((x) => `${code}-${x.key}` === groupLabel);
+            const expSpecs = expectedByDiv.get(div)?.get(groupLabel) ?? [];
+            const drf = draftByDiv.get(div)?.get(groupLabel) ?? [];
+
+            const expKeys = new Set(expSpecs.map(specToMatchPlanKey));
+            const drfKeys = new Map(drf.map((m) => [matchPlanKey(m), m]));
+
+            const missing: string[] = [];
+            for (const s of expSpecs) {
+                const k = specToMatchPlanKey(s);
+                if (!drfKeys.has(k)) {
+                    const leg = /vuelta/i.test(s.roundLabel) ? ' (vuelta)' : '';
+                    missing.push(`${s.teamA} vs ${s.teamB}${leg}`);
+                }
+            }
+
+            const surplus: string[] = [];
+            for (const m of drf) {
+                const k = matchPlanKey(m);
+                if (!expKeys.has(k)) {
+                    const leg = /extra/i.test(m.round ?? '') ? ' [EXTRA]' : /vuelta/i.test(m.round ?? '') ? ' (vuelta)' : '';
+                    surplus.push(`${m.teamA} vs ${m.teamB}${leg}`);
+                }
+            }
+
+            groupAudits.push({
+                groupLabel,
+                teamCount: g?.names.length ?? 0,
+                teams: g?.names ?? [],
+                expected: expSpecs.length,
+                inDraft: drf.length,
+                missing,
+                surplus,
+                ok: missing.length === 0 && surplus.length === 0,
+            });
+        }
+
+        const expectedTotal = groupAudits.reduce((n, x) => n + x.expected, 0);
+        const draftTotal = groupAudits.reduce((n, x) => n + x.inDraft, 0);
+        const missingTotal = groupAudits.reduce((n, x) => n + x.missing.length, 0);
+        const surplusTotal = groupAudits.reduce((n, x) => n + x.surplus.length, 0);
+
+        divisions.push({
+            division: div,
+            code,
+            paidTeams: paid.length,
+            groups: groupAudits,
+            expectedTotal,
+            draftTotal,
+            missingTotal,
+            surplusTotal,
+            ok: missingTotal === 0 && surplusTotal === 0,
+        });
+    }
+
+    const complete = divisions.every((d) => d.ok);
+    const parts = divisions.map((d) => {
+        if (d.ok) return `${d.code}: OK (${d.draftTotal}/${d.expectedTotal} grupos)`;
+        return `${d.code}: faltan ${d.missingTotal}, sobran ${d.surplusTotal}`;
+    });
+    return {
+        complete,
+        divisions,
+        summary: parts.join(' · ') || 'Sin categorías de sábado con ≥2 equipos pagados',
+    };
+}
+
 /** Compara el borrador del sábado con el calendario que generaría el simulador ahora. */
 export function auditSaturdayDraftAgainstFormat(
     teams: Team[],
