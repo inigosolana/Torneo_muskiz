@@ -45,6 +45,7 @@ import {
     patchSaturdaySimulationDraft,
     teamsEligibleForSchedule,
     type MuskizSimulatorOptions,
+    type MuskizScheduleDayLabel,
 } from '../services/muskizScheduleSimulator';
 import {
     buildMuskizDayDraftMatchesHybrid,
@@ -54,7 +55,7 @@ import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews
 import { CompetitionResultsTable } from '../components/CompetitionResultsTable';
 import { CompetitionDraftPicker } from '../components/CompetitionDraftPicker';
 import { saveBulkActasPayload } from '../utils/bulkActasSession';
-import { downloadManagerScheduleExcel, printManagerSchedulePdf } from '../utils/managerScheduleExport';
+import { downloadTournamentGridExcel, printTournamentGridPdf } from '../utils/tournamentGridExport';
 import {
     isPlayerRole,
     isPlayerEligibleForMatch,
@@ -3603,13 +3604,14 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             <>
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() =>
-                                                                        downloadManagerScheduleExcel(
+                                                                    onClick={() => {
+                                                                        const day = (activeDraft.scheduleDay ?? 'Sábado') as MuskizScheduleDayLabel;
+                                                                        downloadTournamentGridExcel(
+                                                                            day,
                                                                             activeDraft.matches,
-                                                                            teams,
-                                                                            `calendario_simulacion_${(activeDraft.scheduleDay ?? activeDraft.name).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()}`
-                                                                        )
-                                                                    }
+                                                                            `calendario_simulacion_${day.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()}`
+                                                                        );
+                                                                    }}
                                                                     className="border border-teal-300 bg-white text-teal-900 px-4 py-2.5 rounded-lg text-xs font-bold uppercase flex items-center gap-2 hover:bg-teal-50"
                                                                 >
                                                                     <span className="material-symbols-outlined text-sm">table</span>
@@ -3617,14 +3619,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                                 </button>
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() =>
-                                                                        printManagerSchedulePdf(
+                                                                    onClick={() => {
+                                                                        const day = (activeDraft.scheduleDay ?? 'Sábado') as MuskizScheduleDayLabel;
+                                                                        printTournamentGridPdf(
+                                                                            day,
                                                                             activeDraft.matches,
-                                                                            teams,
                                                                             `Simulación — ${activeDraft.scheduleDay ?? activeDraft.name}`,
                                                                             'Guardar como PDF en el diálogo de impresión'
-                                                                        )
-                                                                    }
+                                                                        );
+                                                                    }}
                                                                     className="border border-teal-300 bg-white text-teal-900 px-4 py-2.5 rounded-lg text-xs font-bold uppercase flex items-center gap-2 hover:bg-teal-50"
                                                                 >
                                                                     <span className="material-symbols-outlined text-sm">picture_as_pdf</span>

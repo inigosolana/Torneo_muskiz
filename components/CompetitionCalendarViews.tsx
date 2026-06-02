@@ -12,7 +12,7 @@ import {
     getDivisionBaseColors,
     getMatchGridColors,
 } from '../utils/matchGridColors';
-import { downloadManagerScheduleExcel, printManagerSchedulePdf } from '../utils/managerScheduleExport';
+import { downloadTournamentGridExcel, printTournamentGridPdf } from '../utils/tournamentGridExport';
 
 type ViewMode = 'day' | 'category';
 
@@ -142,14 +142,14 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                                 <button
                                                     type="button"
                                                     onClick={() =>
-                                                        downloadManagerScheduleExcel(
+                                                        downloadTournamentGridExcel(
+                                                            day,
                                                             dayMatches,
-                                                            teams,
                                                             `${exportFileNamePrefix}_${daySlug(day)}`
                                                         )
                                                     }
                                                     className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1"
-                                                    title={`Descargar Excel del ${day}`}
+                                                    title={`Descargar Excel cuadrícula del ${day}`}
                                                 >
                                                     <span className="material-symbols-outlined text-sm">table</span>
                                                     Excel
@@ -157,9 +157,9 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                                 <button
                                                     type="button"
                                                     onClick={() =>
-                                                        printManagerSchedulePdf(
+                                                        printTournamentGridPdf(
+                                                            day,
                                                             dayMatches,
-                                                            teams,
                                                             title ? `${title} — ${day}` : `Calendario — ${day}`,
                                                             'Guardar como PDF en el diálogo de impresión'
                                                         )
