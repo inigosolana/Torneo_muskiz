@@ -1071,6 +1071,7 @@ function scheduleSpecBatch(
     };
 
     const scoreSlot = (
+        phase: Phase,
         division: Team['division'],
         teamsPair: [string, string],
         teamKeys: [string, string],
@@ -1103,6 +1104,14 @@ function scheduleSpecBatch(
                 ? ts * 100 + usage[ci]! * 10
                 : (lastSlot - ts) * 100 + usage[ci]! * 10;
 
+        if (phase !== 'GRUPOS') {
+            const courtPreferencePenalty =
+                ci === 0 ? 0 : ci === 1 ? 600 : 1_200 + ci * 120;
+            if (phase === 'FINAL') score += courtPreferencePenalty * 10;
+            else if (phase === 'SEMIS') score += courtPreferencePenalty * 4;
+            else score += courtPreferencePenalty * 2;
+        }
+
         if (minGap < slotMins) score += PENALTY_BACK_TO_BACK;
         else if (minGap < 2 * slotMins) score += PENALTY_ONE_SLOT_REST;
         else score -= Math.min(minGap, 6 * slotMins);
@@ -1118,6 +1127,7 @@ function scheduleSpecBatch(
     };
 
     const findBestSlot = (
+        phase: Phase,
         division: Team['division'],
         teamsPair: [string, string],
         teamKeys: [string, string],
@@ -1141,6 +1151,7 @@ function scheduleSpecBatch(
             const courtOrder = courts.map((_, ci) => ci).sort((a, b) => usage[a]! - usage[b]!);
             for (const ci of courtOrder) {
                 const score = scoreSlot(
+                    phase,
                     division,
                     teamsPair,
                     teamKeys,
@@ -1191,10 +1202,10 @@ function scheduleSpecBatch(
         const keys = pairTeamKeys(div, teamsPair, scheduleTeams);
         const minOverride = options.minSlotStartMinByDivision?.[div];
         let best = options.allowBackToBackOnly
-            ? findBestSlot(div, teamsPair, keys, true, options.slotTimePolicy, minOverride)
-            : findBestSlot(div, teamsPair, keys, false, options.slotTimePolicy, minOverride);
+            ? findBestSlot(spec.phase, div, teamsPair, keys, true, options.slotTimePolicy, minOverride)
+            : findBestSlot(spec.phase, div, teamsPair, keys, false, options.slotTimePolicy, minOverride);
         if (!best && !options.allowBackToBackOnly) {
-            best = findBestSlot(div, teamsPair, keys, true, options.slotTimePolicy, minOverride);
+            best = findBestSlot(spec.phase, div, teamsPair, keys, true, options.slotTimePolicy, minOverride);
         }
 
         if (best) {
@@ -2267,6 +2278,13 @@ export function isSameScheduledTeam(
     matchB: Match,
     teams: Team[]
 ): boolean {
+    const target = normalizeTeamLabel(teamName);
+    const matchAHasTeam =
+        normalizeTeamLabel(matchA.teamA) === target || normalizeTeamLabel(matchA.teamB) === target;
+    const matchBHasTeam =
+        normalizeTeamLabel(matchB.teamA) === target || normalizeTeamLabel(matchB.teamB) === target;
+    if (!matchAHasTeam || !matchBHasTeam) return false;
+
     const divA = resolveMatchDivision(matchA, teams);
     const divB = resolveMatchDivision(matchB, teams);
     if (!divA || !divB || divA !== divB) return false;
