@@ -5,6 +5,7 @@ import {
     validateGroupDistribution,
     type GroupDistributionValidation,
 } from '../utils/groupMatchSync';
+import { autoGroupCount, expectedGroupSizesForTeamCount } from '../services/muskizScheduleSimulator';
 
 const GROUP_COLORS = [
     'border-blue-200 bg-blue-50/80',
@@ -18,8 +19,7 @@ const DRAG_MIME = 'application/x-torneo-team-id';
 interface CompetitionGroupManagerProps {
     division: Team['division'];
     teams: Team[];
-    groupLetterOptions: string[];
-    onMoveTeam: (team: Team, newGroup: string) => void;
+    onMoveTeam?: (team: Team, newGroup: string) => void;
     onSwapTeams?: (dragged: Team, target: Team) => void;
     onRequestRegenerateSimulation?: () => void;
     onlyPaid?: boolean;
@@ -32,7 +32,6 @@ interface CompetitionGroupManagerProps {
 export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = ({
     division,
     teams,
-    groupLetterOptions,
     onMoveTeam,
     onSwapTeams,
     onRequestRegenerateSimulation,
@@ -47,6 +46,15 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
 
     const groups = useMemo(
         () => getGroupDistributionForDivision(teams, division, onlyPaid),
+        [teams, division, onlyPaid]
+    );
+    const roster = useMemo(
+        () =>
+            teams.filter((t) => {
+                if (t.division !== division) return false;
+                if (onlyPaid && t.paymentStatus !== 'PAID') return false;
+                return true;
+            }),
         [teams, division, onlyPaid]
     );
 
@@ -69,13 +77,34 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
         });
     }, [teams, division, onlyPaid, namesInDisplayedGroups]);
 
-    const allGroupKeys = useMemo(() => {
-        const keys = new Set(groupLetterOptions.filter(Boolean));
-        groups.forEach((g) => keys.add(g.key));
-        return [...keys].sort((a, b) => a.localeCompare(b, 'es'));
-    }, [groupLetterOptions, groups]);
-
     const findTeamById = (id: string) => teams.find((t) => t.id === id);
+    const maxTeamsByGroup = useMemo(() => {
+        const n = roster.length;
+        const caps = expectedGroupSizesForTeamCount(n);
+        const keys = groups.map((g) => g.key).sort((a, b) => a.localeCompare(b, 'es'));
+        const map = new Map<string, number>();
+        if (caps && caps.length > 0) {
+            for (let i = 0; i < keys.length; i += 1) {
+                map.set(keys[i], caps[i] ?? caps[caps.length - 1]);
+            }
+            return map;
+        }
+        const expectedGroups = Math.max(1, autoGroupCount(n));
+        const fallbackMax = Math.max(1, Math.ceil(n / expectedGroups));
+        keys.forEach((k) => map.set(k, fallbackMax));
+        return map;
+    }, [groups, roster.length]);
+
+    const canMoveIntoGroup = (team: Team, groupKey: string): boolean => {
+        const current = (team.competitionGroup ?? '').trim();
+        if (current) return false;
+        if (!groupKey) return false;
+        const group = groups.find((g) => g.key === groupKey);
+        if (!group) return false;
+        const max = maxTeamsByGroup.get(groupKey);
+        if (typeof max !== 'number') return false;
+        return group.teams.length < max;
+    };
 
     const isDragLeaveEvent = (current: EventTarget, related: EventTarget | null): boolean => {
         if (!related || !(related instanceof Node)) return true;
@@ -125,12 +154,9 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
     const handleDropOnGroup = (e: React.DragEvent, groupKey: string) => {
         if (!editable) return;
         e.preventDefault();
-        const team = resolveDraggedTeam(e);
-        if (team && groupKey) {
-            const current = (team.competitionGroup ?? '').trim();
-            if (current !== groupKey) {
-                onMoveTeam(team, groupKey);
-            }
+        const dragged = resolveDraggedTeam(e);
+        if (dragged && onMoveTeam && canMoveIntoGroup(dragged, groupKey)) {
+            onMoveTeam(dragged, groupKey);
         }
         handleDragEnd();
     };
@@ -150,8 +176,8 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
 
         if (draggedGroup && targetGroup && draggedGroup !== targetGroup && onSwapTeams) {
             onSwapTeams(dragged, targetTeam);
-        } else if (groupKey && draggedGroup !== groupKey) {
-            onMoveTeam(dragged, groupKey);
+        } else if (!draggedGroup && targetGroup && onMoveTeam && canMoveIntoGroup(dragged, targetGroup)) {
+            onMoveTeam(dragged, targetGroup);
         }
         handleDragEnd();
     };
@@ -196,24 +222,7 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
                 <span className="text-xs font-semibold text-slate-800 truncate flex-1" title={team.name}>
                     {team.name}
                 </span>
-                {editable && (
-                    <select
-                        value={team.competitionGroup ?? groupKey}
-                        onChange={(e) => {
-                            const v = e.target.value;
-                            if (v) onMoveTeam(team, v);
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 bg-slate-50 max-w-[3.5rem] shrink-0"
-                        title="O cambiar con el desplegable"
-                    >
-                        {allGroupKeys.map((k) => (
-                            <option key={k} value={k}>
-                                {k}
-                            </option>
-                        ))}
-                    </select>
-                )}
+                <span className="text-[10px] font-black text-slate-500 shrink-0">G.{groupKey || '—'}</span>
             </li>
         );
     };
@@ -223,7 +232,7 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
             {editable && (
                 <p className="text-xs text-slate-600 flex items-center gap-2">
                     <span className="material-symbols-outlined text-base text-teal-700">touch_app</span>
-                    Arrastra a otra columna para mover, o suelta encima de otro equipo para intercambiarlos. Los partidos de grupos se actualizan al soltar.
+                    Arrastra un no-asignado a un grupo con hueco (hasta su máximo), o suelta sobre otro equipo para intercambiar.
                 </p>
             )}
 
@@ -279,7 +288,7 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
                             <ul className="space-y-2 min-h-[2rem]">{g.teams.map((team) => renderTeamCard(team, g.key))}</ul>
                             {editable && g.teams.length === 0 && (
                                 <p className="text-[10px] text-slate-500 text-center py-4 border border-dashed border-slate-300/80 rounded-lg">
-                                    Suelta aquí
+                                    Grupo vacío
                                 </p>
                             )}
                         </div>
@@ -307,12 +316,12 @@ export const CompetitionGroupManager: React.FC<CompetitionGroupManagerProps> = (
                     onDrop={(e) => {
                         if (!editable) return;
                         e.preventDefault();
-                        const team = resolveDraggedTeam(e);
-                        if (team) onMoveTeam(team, '');
                         handleDragEnd();
                     }}
                 >
-                    <p className="text-xs font-bold text-amber-900 mb-2">Sin grupo asignado — arrastra a una columna</p>
+                    <p className="text-xs font-bold text-amber-900 mb-2">
+                        Sin grupo asignado — puedes arrastrar a un grupo si no supera el máximo permitido
+                    </p>
                     <ul className="flex flex-wrap gap-2">
                         {unassigned.map((team) => (
                             <li key={team.id}>{renderTeamCard(team, '')}</li>

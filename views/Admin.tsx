@@ -819,8 +819,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         [weekendDrafts]
     );
 
-    const groupLetterOptions = ['', 'A', 'B', 'C', 'D', 'E', 'F'];
-
     // --- Auth Logic ---
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1397,6 +1395,36 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
+    const handleSwapTeamsInGroups = async (teamA: Team, teamB: Team) => {
+        const groupA = (teamA.competitionGroup ?? '').trim();
+        const groupB = (teamB.competitionGroup ?? '').trim();
+        if (!groupA || !groupB || groupA === groupB) return;
+
+        try {
+            await Promise.all([
+                onUpdateTeam({ ...teamA, competitionGroup: groupB }),
+                onUpdateTeam({ ...teamB, competitionGroup: groupA }),
+            ]);
+        } catch {
+            toast.error('No se pudo intercambiar los grupos.');
+            return;
+        }
+
+        const updatedTeams = teams.map((t) => {
+            if (t.id === teamA.id) return { ...t, competitionGroup: groupB };
+            if (t.id === teamB.id) return { ...t, competitionGroup: groupA };
+            return t;
+        });
+
+        await applyGroupMatchUpdates(
+            updatedTeams,
+            (list) => remapMatchesAfterGroupSwap(list, updatedTeams, teamA, teamB),
+            `${teamA.name} ↔ ${teamB.name} (Grupo ${groupA} ↔ ${groupB}). Partidos actualizados.`
+        );
+
+        await offerRegenerateSimulationIfNeeded(updatedTeams, teamA.division);
+    };
+
     const handleMoveTeamToGroup = async (team: Team, newGroup: string) => {
         const oldGroup = (team.competitionGroup ?? '').trim() || null;
         const nextGroup = newGroup.trim();
@@ -1430,36 +1458,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         );
 
         await offerRegenerateSimulationIfNeeded(updatedTeams, team.division);
-    };
-
-    const handleSwapTeamsInGroups = async (teamA: Team, teamB: Team) => {
-        const groupA = (teamA.competitionGroup ?? '').trim();
-        const groupB = (teamB.competitionGroup ?? '').trim();
-        if (!groupA || !groupB || groupA === groupB) return;
-
-        try {
-            await Promise.all([
-                onUpdateTeam({ ...teamA, competitionGroup: groupB }),
-                onUpdateTeam({ ...teamB, competitionGroup: groupA }),
-            ]);
-        } catch {
-            toast.error('No se pudo intercambiar los grupos.');
-            return;
-        }
-
-        const updatedTeams = teams.map((t) => {
-            if (t.id === teamA.id) return { ...t, competitionGroup: groupB };
-            if (t.id === teamB.id) return { ...t, competitionGroup: groupA };
-            return t;
-        });
-
-        await applyGroupMatchUpdates(
-            updatedTeams,
-            (list) => remapMatchesAfterGroupSwap(list, updatedTeams, teamA, teamB),
-            `${teamA.name} ↔ ${teamB.name} (Grupo ${groupA} ↔ ${groupB}). Partidos actualizados.`
-        );
-
-        await offerRegenerateSimulationIfNeeded(updatedTeams, teamA.division);
     };
 
     const updateMatchSetScores = (matchId: string, setScores: BeachSetScores) => {
@@ -3780,7 +3778,6 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             <CompetitionGroupManager
                                                 division={standingsDivision}
                                                 teams={teams}
-                                                groupLetterOptions={groupLetterOptions}
                                                 onMoveTeam={(t, g) => void handleMoveTeamToGroup(t, g)}
                                                 onSwapTeams={(a, b) => void handleSwapTeamsInGroups(a, b)}
                                                 onRequestRegenerateSimulation={() => void handleGenerateMuskizAllDays()}

@@ -408,7 +408,28 @@ export function computeGroups(teamList: Team[]): { key: string; names: string[] 
         const raw = [...map.entries()]
             .sort(([a], [b]) => a.localeCompare(b, 'es'))
             .map(([key, names]) => ({ key, names: names.sort((x, y) => x.localeCompare(y, 'es')) }));
-        return raw;
+
+        // Si los grupos manuales no respetan las normas del formato,
+        // priorizamos SIEMPRE la distribución reglamentaria al generar calendario.
+        const expectedCount = autoGroupCount(n);
+        const expectedSizes = groupCapacitiesForCount(n, expectedCount)
+            .filter((s) => s > 0)
+            .sort((a, b) => a - b);
+        const actualSizes = raw
+            .map((g) => g.names.length)
+            .filter((s) => s > 0)
+            .sort((a, b) => a - b);
+
+        const matchesExpectedCount = raw.length === expectedCount;
+        const meetsMinPerGroup =
+            expectedCount <= 1 || raw.every((g) => g.names.length >= MIN_TEAMS_PER_GROUP);
+        const matchesExpectedSizes =
+            expectedSizes.length === actualSizes.length &&
+            expectedSizes.every((s, i) => s === actualSizes[i]);
+
+        if (matchesExpectedCount && meetsMinPerGroup && matchesExpectedSizes) {
+            return raw;
+        }
     }
 
     let groupCount = autoGroupCount(n);
