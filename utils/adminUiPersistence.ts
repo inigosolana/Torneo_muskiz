@@ -1,6 +1,13 @@
 const STORAGE_KEY = 'torneo_admin_ui_v1';
 
-export type AdminMainTab = 'verification' | 'teamRoster' | 'competition' | 'teams' | 'sponsors' | 'categories';
+export type AdminMainTab =
+    | 'verification'
+    | 'teamRoster'
+    | 'managers'
+    | 'competition'
+    | 'teams'
+    | 'sponsors'
+    | 'categories';
 export type AdminCompSubTab = 'structure' | 'simulations' | 'calendar' | 'results' | 'standings';
 export type AdminPreviewMode = 'official' | 'simulation';
 

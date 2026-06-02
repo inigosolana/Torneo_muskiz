@@ -1,9 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { sendChatMessage } from '../services/geminiService';
 import { ChatMessage } from '../types';
 import { useTournamentData } from '../context/TournamentDataContext';
 
 export const ChatBot: React.FC = () => {
+  const location = useLocation();
+  const isAdminRoute =
+    location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const { matches } = useTournamentData();
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -59,8 +63,10 @@ export const ChatBot: React.FC = () => {
     setLoading(false);
   };
 
+  if (isAdminRoute) return null;
+
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end pointer-events-none">
+    <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end pointer-events-none">
       {/* Chat Window */}
       {isOpen && (
         <div className="mb-4 w-80 sm:w-96 bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col pointer-events-auto transition-all animate-in slide-in-from-bottom-5 fade-in duration-300">

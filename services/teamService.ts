@@ -3,17 +3,34 @@ import { Team, Player, Match } from '../types';
 
 export const teamService = {
     async getTeams(): Promise<Team[]> {
-        const { data, error } = await supabase
+        let data: unknown[] | null = null;
+        const withPhone = await supabase
             .from('teams')
             .select(`
         *,
-        players (*)
+        players (*),
+        registrations (manager_phone)
       `);
 
-        if (error) {
-            console.error('Error fetching teams:', error);
-            return [];
+        if (withPhone.error) {
+            console.warn('teams+registrations join failed, falling back:', withPhone.error.message);
+            const fallback = await supabase.from('teams').select(`*, players (*)`);
+            if (fallback.error) {
+                console.error('Error fetching teams:', fallback.error);
+                return [];
+            }
+            data = fallback.data;
+        } else {
+            data = withPhone.data;
         }
+
+        const registrationPhone = (t: { registrations?: { manager_phone?: string | null } | { manager_phone?: string | null }[] | null }) => {
+            const reg = t.registrations;
+            if (!reg) return undefined;
+            const row = Array.isArray(reg) ? reg[0] : reg;
+            const phone = row?.manager_phone?.trim();
+            return phone || undefined;
+        };
 
         // Map snake_case from DB to camelCase in app
         return data.map((t: any) => ({
@@ -28,6 +45,7 @@ export const teamService = {
             receiptUrl: t.receipt_url,
             managerName: t.manager_name,
             managerEmail: t.manager_email,
+            managerPhone: registrationPhone(t),
             status: t.status || 'pending',
             competitionGroup: t.competition_group ?? null,
             players: t.players.map((p: any) => ({

@@ -81,6 +81,64 @@ interface AdminProps {
     onUpdateLimits: (limits: CategoryLimits) => void;
 }
 
+const ADMIN_MAIN_NAV: { id: AdminMainTab; label: string; shortLabel: string; icon: string }[] = [
+    { id: 'verification', label: 'Verificación', shortLabel: 'Docs', icon: 'fact_check' },
+    { id: 'teamRoster', label: 'Equipos', shortLabel: 'Equipos', icon: 'shield_person' },
+    { id: 'managers', label: 'Responsables', shortLabel: 'Resp.', icon: 'contact_phone' },
+    { id: 'teams', label: 'Pagos e inscripciones', shortLabel: 'Pagos', icon: 'payments' },
+    { id: 'competition', label: 'Competición', shortLabel: 'Comp', icon: 'trophy' },
+    { id: 'sponsors', label: 'Patrocinadores', shortLabel: 'Patroc', icon: 'handshake' },
+    { id: 'categories', label: 'Configuración', shortLabel: 'Config', icon: 'settings_suggest' },
+];
+
+const DIVISION_OPTIONS: Team['division'][] = [
+    'Infantil Femenino',
+    'Infantil Masculino',
+    'Cadete Femenino',
+    'Cadete Masculino',
+    'Juvenil Femenino',
+    'Juvenil Masculino',
+    'Senior Femenino',
+    'Senior Masculino',
+];
+
+function phoneDigits(phone: string | undefined): string {
+    if (!phone) return '';
+    return phone.replace(/\D/g, '');
+}
+
+function managerWhatsAppLine(team: Team): string {
+    const phone = team.managerPhone?.trim() || 'Sin teléfono';
+    return `${team.managerName.trim()} — ${phone} — ${team.name} (${team.division})`;
+}
+
+function AdminNavButton({
+    item,
+    active,
+    onClick,
+    className = '',
+}: {
+    item: (typeof ADMIN_MAIN_NAV)[number];
+    active: boolean;
+    onClick: () => void;
+    className?: string;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${
+                active
+                    ? 'bg-primary/10 text-primary-dark border border-primary/20'
+                    : 'text-slate-500 hover:bg-white border border-transparent'
+            } ${className}`}
+        >
+            <span className="material-symbols-outlined text-lg">{item.icon}</span>
+            {item.label}
+        </button>
+    );
+}
+
 export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onUpdateLimits }) => {
     const navigate = useNavigate();
     const { teams, matches, categoryLimits, publicMatchesVisible, persistPublicMatchesVisible } = useTournamentData();
@@ -145,9 +203,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const [editingTeam, setEditingTeam] = useState<Team | null>(null);
     const [editForm, setEditForm] = useState<{
         name: string; city: string; division: string;
-        managerName: string; managerEmail: string;
+        managerName: string; managerEmail: string; managerPhone: string;
         paymentStatus: string; status: string; fee: number;
-    }>({ name: '', city: '', division: '', managerName: '', managerEmail: '', paymentStatus: '', status: '', fee: 0 });
+    }>({ name: '', city: '', division: '', managerName: '', managerEmail: '', managerPhone: '', paymentStatus: '', status: '', fee: 0 });
 
     // Sponsors Management
     const [sponsors, setSponsors] = useState<any[]>([]);
@@ -349,6 +407,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     // Main Navigation Tabs (persistidos en sessionStorage al cambiar de pestaña/minimizar)
     const [activeTab, setActiveTab] = useState<AdminMainTab>(savedAdminUi.activeTab ?? 'verification');
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [rosterSelectedTeamId, setRosterSelectedTeamId] = useState<string | null>(null);
     const [rosterSearch, setRosterSearch] = useState('');
     const [editingPlayerContext, setEditingPlayerContext] = useState<{ team: Team; player: Player } | null>(null);
@@ -358,6 +417,26 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             setRosterSelectedTeamId(null);
         }
     }, [activeTab]);
+
+    const selectAdminTab = (tab: AdminMainTab) => {
+        setActiveTab(tab);
+        setMobileNavOpen(false);
+    };
+
+    useEffect(() => {
+        if (!mobileNavOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setMobileNavOpen(false);
+        };
+        document.body.style.overflow = 'hidden';
+        window.addEventListener('keydown', onKey);
+        return () => {
+            document.body.style.overflow = '';
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [mobileNavOpen]);
+
+    const activeNavItem = ADMIN_MAIN_NAV.find((n) => n.id === activeTab);
 
     // Competition Sub-tabs
     const [compSubTab, setCompSubTab] = useState<AdminCompSubTab>(savedAdminUi.compSubTab ?? 'structure');
@@ -380,6 +459,59 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [filterTeam, setFilterTeam] = useState<string>('');
     const [filterVerificationRole, setFilterVerificationRole] = useState<'all' | Player['role']>('all');
+
+    const [managersSearch, setManagersSearch] = useState('');
+    const [managersDivision, setManagersDivision] = useState<Team['division'] | 'all'>('all');
+    const [managersOnlyApproved, setManagersOnlyApproved] = useState(false);
+
+    const managerEntries = useMemo(() => {
+        const q = managersSearch.trim().toLowerCase();
+        return teams
+            .filter((t) => {
+                if (managersOnlyApproved && t.status !== 'approved') return false;
+                if (managersDivision !== 'all' && t.division !== managersDivision) return false;
+                if (!q) return true;
+                return (
+                    t.managerName?.toLowerCase().includes(q) ||
+                    t.managerEmail?.toLowerCase().includes(q) ||
+                    t.managerPhone?.toLowerCase().includes(q) ||
+                    t.name.toLowerCase().includes(q) ||
+                    t.division.toLowerCase().includes(q)
+                );
+            })
+            .sort(
+                (a, b) =>
+                    a.division.localeCompare(b.division, 'es') ||
+                    a.name.localeCompare(b.name, 'es') ||
+                    a.managerName.localeCompare(b.managerName, 'es')
+            );
+    }, [teams, managersSearch, managersDivision, managersOnlyApproved]);
+
+    const copyManagersText = async (mode: 'full' | 'phones') => {
+        if (managerEntries.length === 0) {
+            toast.error('No hay responsables que copiar con los filtros actuales.');
+            return;
+        }
+        const text =
+            mode === 'phones'
+                ? managerEntries
+                      .map((t) => {
+                          const digits = phoneDigits(t.managerPhone);
+                          return digits || `${t.managerName} (sin tel.)`;
+                      })
+                      .join('\n')
+                : managerEntries.map(managerWhatsAppLine).join('\n');
+        try {
+            await navigator.clipboard.writeText(text);
+            toast.success(
+                mode === 'phones'
+                    ? `${managerEntries.length} teléfono(s) copiados al portapapeles.`
+                    : `Listado de ${managerEntries.length} responsable(s) copiado.`
+            );
+        } catch {
+            toast.error('No se pudo copiar. Prueba a seleccionar el texto manualmente.');
+        }
+    };
 
     const filteredTeams = useMemo(() => {
         return teams.filter(team => {
@@ -1569,9 +1701,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-background-light/5 p-6 animate-in fade-in">
-            <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-6">
-                {/* Sidebar */}
+        <div className="min-h-screen bg-slate-50 dark:bg-background-light/5 px-3 py-4 pb-28 sm:p-6 lg:pb-6 animate-in fade-in">
+            <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-4 sm:gap-6">
+                {/* Sidebar — escritorio */}
                 <div className="col-span-2 hidden lg:block space-y-2">
                     <div className="bg-white p-4 rounded-xl shadow-sm mb-6 flex items-center gap-3 border border-slate-100">
                         <div className="size-10 bg-primary rounded-full flex items-center justify-center text-background-dark font-bold">
@@ -1582,43 +1714,16 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                             <p className="text-xs text-slate-500">Panel de Control</p>
                         </div>
                     </div>
+                    {ADMIN_MAIN_NAV.map((item) => (
+                        <AdminNavButton
+                            key={item.id}
+                            item={item}
+                            active={activeTab === item.id}
+                            onClick={() => selectAdminTab(item.id)}
+                        />
+                    ))}
                     <button
-                        onClick={() => setActiveTab('verification')}
-                        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'verification' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
-                    >
-                        <span className="material-symbols-outlined text-lg">fact_check</span> Verificación
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('teamRoster')}
-                        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'teamRoster' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
-                    >
-                        <span className="material-symbols-outlined text-lg">shield_person</span> Equipos
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('teams')}
-                        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'teams' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
-                    >
-                        <span className="material-symbols-outlined text-lg">payments</span> Pagos e inscripciones
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('competition')}
-                        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'competition' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
-                    >
-                        <span className="material-symbols-outlined text-lg">trophy</span> Competición
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('sponsors')}
-                        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'sponsors' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
-                    >
-                        <span className="material-symbols-outlined text-lg">handshake</span> Patrocinadores
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('categories')}
-                        className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors ${activeTab === 'categories' ? 'bg-primary/10 text-primary-dark border border-primary/20' : 'text-slate-500 hover:bg-white border border-transparent'}`}
-                    >
-                        <span className="material-symbols-outlined text-lg">settings_suggest</span> Configuración
-                    </button>
-                    <button
+                        type="button"
                         onClick={handleLogout}
                         className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium text-red-500 hover:bg-red-50 mt-12 transition-colors"
                     >
@@ -1627,12 +1732,96 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                 </div>
 
                 {/* Main Content */}
-                <div className="col-span-12 lg:col-span-10 space-y-6">
+                <div className="col-span-12 lg:col-span-10 space-y-4 sm:space-y-6">
+                    {/* Navegación móvil (cabecera + aviso) */}
+                    <div className="lg:hidden sticky top-14 sm:top-16 z-30 -mx-3 px-3 sm:-mx-6 sm:px-6 pt-1 pb-2 bg-white border-b-2 border-primary/40 shadow-sm space-y-2">
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setMobileNavOpen(true)}
+                                className="shrink-0 size-10 rounded-xl bg-primary/15 border border-primary/40 flex items-center justify-center text-primary-dark shadow-sm"
+                                aria-label="Abrir menú del panel"
+                            >
+                                <span className="material-symbols-outlined">apps</span>
+                            </button>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-primary-dark">
+                                    Sección activa
+                                </p>
+                                <h2 className="font-bold text-sm text-slate-900 truncate">
+                                    {activeNavItem?.label ?? 'Administración'}
+                                </h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleLogout}
+                                className="shrink-0 size-10 rounded-xl border border-red-200 bg-red-50 text-red-600 flex items-center justify-center"
+                                aria-label="Cerrar sesión"
+                            >
+                                <span className="material-symbols-outlined text-xl">logout</span>
+                            </button>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-snug bg-slate-50 rounded-lg px-2 py-1.5 border border-slate-200">
+                            Usa la <strong>barra inferior</strong> para cambiar de sección (Comp, Pagos, Resp…).
+                            El menú ☰ de arriba del torneo es la web pública, no el panel.
+                        </p>
+                    </div>
+
+                    {mobileNavOpen && (
+                        <>
+                            <button
+                                type="button"
+                                className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+                                aria-label="Cerrar menú"
+                                onClick={() => setMobileNavOpen(false)}
+                            />
+                            <nav className="fixed top-0 left-0 bottom-0 z-50 w-[min(100vw-2.5rem,300px)] bg-white shadow-2xl flex flex-col lg:hidden animate-in slide-in-from-left duration-200">
+                                <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="size-10 bg-primary rounded-full flex items-center justify-center text-background-dark shrink-0">
+                                            <span className="material-symbols-outlined">admin_panel_settings</span>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h3 className="font-bold text-sm truncate">Organizador</h3>
+                                            <p className="text-xs text-slate-500">Panel de Control</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setMobileNavOpen(false)}
+                                        className="size-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-600"
+                                        aria-label="Cerrar"
+                                    >
+                                        <span className="material-symbols-outlined">close</span>
+                                    </button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                                    {ADMIN_MAIN_NAV.map((item) => (
+                                        <AdminNavButton
+                                            key={item.id}
+                                            item={item}
+                                            active={activeTab === item.id}
+                                            onClick={() => selectAdminTab(item.id)}
+                                        />
+                                    ))}
+                                </div>
+                                <div className="p-3 border-t border-slate-100">
+                                    <button
+                                        type="button"
+                                        onClick={handleLogout}
+                                        className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-lg">logout</span> Salir
+                                    </button>
+                                </div>
+                            </nav>
+                        </>
+                    )}
 
                     {/* --- VERIFICATION TAB --- */}
                     {activeTab === 'verification' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
                                     <h3 className="font-bold text-lg text-slate-800">Verificación de Documentos</h3>
                                     <p className="text-xs text-slate-500 mt-1">Valida DNI de todos y seguro solo de jugadores (entrenadores/oficiales no llevan seguro).</p>
@@ -1692,15 +1881,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                     </select>
                                 </div>
                             </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
+                            <div className="overflow-x-auto [&_th]:px-3 [&_td]:px-3 sm:[&_th]:px-6 sm:[&_td]:px-6 [&_th]:py-3 [&_td]:py-3 sm:[&_th]:py-4 sm:[&_td]:py-4">
+                                <table className="w-full text-sm text-left min-w-[640px]">
                                     <thead className="bg-slate-50 text-slate-500 font-medium uppercase text-xs">
                                         <tr>
-                                            <th className="px-6 py-4">Persona</th>
-                                            <th className="px-6 py-4">Rol</th>
-                                            <th className="px-6 py-4">Equipo</th>
-                                            <th className="px-6 py-4">DNI</th>
-                                            <th className="px-6 py-4">Seguro</th>
+                                            <th>Persona</th>
+                                            <th>Rol</th>
+                                            <th>Equipo</th>
+                                            <th>DNI</th>
+                                            <th>Seguro</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -1727,7 +1916,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         : ''
                                                 }`}
                                             >
-                                                <td className="px-6 py-4 font-bold text-slate-800">
+                                                <td className="font-bold text-slate-800">
                                                     <div className="flex items-center gap-3">
                                                         <div className="size-8 rounded-full bg-slate-200 overflow-hidden shrink-0">
                                                             {player.avatarUrl && (
@@ -1748,7 +1937,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td>
                                                     <span
                                                         className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
                                                             isPlayerRole(player.role)
@@ -1759,10 +1948,10 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         {playerRoleLabel(player.role)}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-slate-600">
+                                                <td className="text-slate-600">
                                                     {player.teamName}
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td>
                                                     <div className="flex items-center gap-2">
                                                         {player.dniNumber ? (
                                                             <span className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
@@ -1853,7 +2042,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                         const rosterReminder = rosterTeam ? getTeamSquadReminderStatus(rosterTeam) : null;
                         return (
                             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div>
                                         <h3 className="font-bold text-lg text-slate-800">
                                             {rosterTeam ? rosterTeam.name : 'Equipos por categoría'}
@@ -1904,15 +2093,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 </div>
 
                                 {rosterTeam ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm text-left">
+                                    <div className="overflow-x-auto [&_th]:px-3 [&_td]:px-3 sm:[&_th]:px-6 sm:[&_td]:px-6 [&_th]:py-3 [&_td]:py-3 sm:[&_th]:py-4 sm:[&_td]:py-4">
+                                        <table className="w-full text-sm text-left min-w-[520px]">
                                             <thead className="bg-slate-50 text-slate-500 font-medium uppercase text-xs">
                                                 <tr>
-                                                    <th className="px-6 py-4">Jugador</th>
-                                                    <th className="px-6 py-4">Rol</th>
-                                                    <th className="px-6 py-4">DNI</th>
-                                                    <th className="px-6 py-4">Seguro</th>
-                                                    <th className="px-6 py-4 text-right">Acciones</th>
+                                                    <th>Jugador</th>
+                                                    <th>Rol</th>
+                                                    <th>DNI</th>
+                                                    <th>Seguro</th>
+                                                    <th className="text-right">Acciones</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
@@ -2176,6 +2365,178 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                             </div>
                         );
                     })()}
+
+                    {/* --- RESPONSABLES (WhatsApp / contacto) --- */}
+                    {activeTab === 'managers' && (
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                            <div className="p-4 sm:p-6 border-b border-slate-100 space-y-4">
+                                <div>
+                                    <h3 className="font-bold text-lg text-slate-800">Responsables de equipo</h3>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Nombre, teléfono y equipo que entrenan. Un registro por equipo (si alguien lleva varios, aparece varias veces).
+                                        Ideal para crear grupos de WhatsApp.
+                                    </p>
+                                </div>
+                                <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                                    <input
+                                        type="search"
+                                        placeholder="Buscar nombre, teléfono, equipo…"
+                                        value={managersSearch}
+                                        onChange={(e) => setManagersSearch(e.target.value)}
+                                        className="flex-1 min-w-[200px] text-sm border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                    />
+                                    <select
+                                        value={managersDivision}
+                                        onChange={(e) =>
+                                            setManagersDivision(e.target.value as Team['division'] | 'all')
+                                        }
+                                        className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 outline-none focus:ring-1 focus:ring-primary"
+                                    >
+                                        <option value="all">Todas las categorías</option>
+                                        {DIVISION_OPTIONS.map((d) => (
+                                            <option key={d} value={d}>
+                                                {d}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <label className="flex items-center gap-2 text-xs font-bold text-slate-600 px-2 py-2 rounded-lg border border-slate-200 bg-slate-50 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={managersOnlyApproved}
+                                            onChange={(e) => setManagersOnlyApproved(e.target.checked)}
+                                            className="rounded border-slate-300 text-primary focus:ring-primary"
+                                        />
+                                        Solo equipos aprobados
+                                    </label>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => void copyManagersText('full')}
+                                        className="text-xs font-bold px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 flex items-center gap-1"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">content_copy</span>
+                                        Copiar listado completo
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void copyManagersText('phones')}
+                                        className="text-xs font-bold px-3 py-2 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100 flex items-center gap-1"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">call</span>
+                                        Copiar solo teléfonos
+                                    </button>
+                                    <span className="text-xs text-slate-500 self-center">
+                                        {managerEntries.length} registro(s)
+                                        {managerEntries.filter((t) => !t.managerPhone?.trim()).length > 0 && (
+                                            <>
+                                                {' '}
+                                                ·{' '}
+                                                <span className="text-amber-700 font-bold">
+                                                    {managerEntries.filter((t) => !t.managerPhone?.trim()).length} sin teléfono
+                                                </span>
+                                            </>
+                                        )}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Móvil: tarjetas */}
+                            <div className="lg:hidden divide-y divide-slate-100">
+                                {managerEntries.map((team) => {
+                                    const digits = phoneDigits(team.managerPhone);
+                                    const waHref = digits
+                                        ? `https://wa.me/${digits.startsWith('34') ? digits : `34${digits}`}`
+                                        : undefined;
+                                    return (
+                                        <div key={team.id} className="p-4 space-y-2">
+                                            <p className="font-bold text-slate-900">{team.managerName}</p>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {team.managerPhone?.trim() ? (
+                                                    <>
+                                                        <a
+                                                            href={`tel:${digits}`}
+                                                            className="text-sm font-mono text-teal-800 font-bold"
+                                                        >
+                                                            {team.managerPhone}
+                                                        </a>
+                                                        {waHref && (
+                                                            <a
+                                                                href={waHref}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-[10px] font-black uppercase px-2 py-1 rounded bg-green-100 text-green-800"
+                                                            >
+                                                                WhatsApp
+                                                            </a>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <span className="text-xs text-amber-700 font-bold">Sin teléfono en inscripción</span>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-slate-700">
+                                                <span className="text-slate-400 font-bold text-[10px] uppercase">Equipo · </span>
+                                                {team.name}
+                                            </p>
+                                            <p className="text-xs text-slate-500">{team.division}</p>
+                                            <p className="text-[10px] text-slate-400 truncate">{team.managerEmail}</p>
+                                        </div>
+                                    );
+                                })}
+                                {managerEntries.length === 0 && (
+                                    <p className="text-center text-slate-500 py-12 text-sm px-4">
+                                        No hay responsables con estos filtros.
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Escritorio: tabla */}
+                            <div className="hidden lg:block overflow-x-auto [&_th]:px-4 [&_td]:px-4 [&_th]:py-3 [&_td]:py-3">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-slate-500 font-medium uppercase text-xs">
+                                        <tr>
+                                            <th>Responsable</th>
+                                            <th>Teléfono</th>
+                                            <th>Equipo</th>
+                                            <th>Categoría</th>
+                                            <th>Correo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {managerEntries.map((team) => {
+                                            const digits = phoneDigits(team.managerPhone);
+                                            return (
+                                                <tr key={team.id} className="hover:bg-slate-50/80">
+                                                    <td className="font-bold text-slate-800">{team.managerName}</td>
+                                                    <td>
+                                                        {team.managerPhone?.trim() ? (
+                                                            <a
+                                                                href={`tel:${digits}`}
+                                                                className="font-mono text-teal-800 hover:underline"
+                                                            >
+                                                                {team.managerPhone}
+                                                            </a>
+                                                        ) : (
+                                                            <span className="text-amber-700 text-xs font-bold">Sin teléfono</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="font-medium text-slate-800">{team.name}</td>
+                                                    <td className="text-slate-600">{team.division}</td>
+                                                    <td className="text-slate-500 text-xs">{team.managerEmail}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                                {managerEntries.length === 0 && (
+                                    <p className="text-center text-slate-500 py-12 text-sm">
+                                        No hay responsables con estos filtros.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* --- TEAMS TAB --- */}
                     {activeTab === 'teams' && (
@@ -2462,15 +2823,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
                     {/* --- COMPETITION DASHBOARD --- */}
                     {activeTab === 'competition' && (
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
 
                             {/* Simulación | Oficial */}
                             <div className="mb-5 space-y-2">
-                                <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1 shadow-sm">
+                                <div className="flex flex-col sm:inline-flex sm:flex-row w-full sm:w-auto rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1 shadow-sm">
                                     <button
                                         type="button"
                                         onClick={() => setCompArenaMode('simulation')}
-                                        className={`px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${
+                                        className={`px-5 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors sm:flex-initial flex-1 ${
                                             compArenaMode === 'simulation'
                                                 ? 'bg-purple-600 text-white shadow'
                                                 : 'text-slate-600 hover:bg-white'
@@ -2482,7 +2843,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                     <button
                                         type="button"
                                         onClick={() => setCompArenaMode('official')}
-                                        className={`px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${
+                                        className={`px-5 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors sm:flex-initial flex-1 ${
                                             compArenaMode === 'official'
                                                 ? 'bg-teal-700 text-white shadow'
                                                 : 'text-slate-600 hover:bg-white'
@@ -2508,13 +2869,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                             </div>
 
                             {/* Sub-tabs (iguales en Simulación y Oficial) */}
-                            <div className="flex flex-wrap border-b border-slate-200 mb-6 gap-1">
+                            <div className="flex overflow-x-auto no-scrollbar border-b border-slate-200 mb-6 gap-0 -mx-4 px-4 sm:mx-0 sm:px-0">
                                 {compSubTabs.map((tab) => (
                                     <button
                                         key={tab.id}
                                         type="button"
                                         onClick={() => setCompSubTab(tab.id)}
-                                        className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
+                                        className={`shrink-0 whitespace-nowrap px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
                                             compSubTab === tab.id
                                                 ? compArenaMode === 'simulation'
                                                     ? 'border-purple-600 text-purple-700'
@@ -2976,7 +3337,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             />
                                                             <span>
                                                                 <strong>Ayuda Google AI (mix)</strong> — Primero el simulador{' '}
-                                                                <strong>determinístico</strong> (equipos pagados y aprobados; grupos con nombres reales; cuartos 1º vs 3º, semis y final en plantilla hasta clasificar). Luego la IA coloca <strong>PENDIENTE</strong> en lotes de {MUSKIZ_AI_SLOT_ASSIST_MAX}{' '}
+                                                                <strong>determinístico</strong> (equipos pagados y aprobados; grupos con nombres reales; cuartos ≥11: 1º vs 3º mejor, 1º vs gan. repesca, 1º vs 2º y 2º vs 2º; semis y final en plantilla). Luego la IA coloca <strong>PENDIENTE</strong> en lotes de {MUSKIZ_AI_SLOT_ASSIST_MAX}{' '}
                                                                 (máx. {MUSKIZ_AI_MAX_CALLS_PER_DAY} consultas/día). Usa el campo{' '}
                                                                 <strong>«Formato del torneo»</strong> del borrador como instrucciones. Al final, optimización
                                                                 local de descansos <strong>sin API</strong>. Si Gemini falla, se conserva el borrador
@@ -3024,7 +3385,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         <p className="mt-2 text-[11px] text-teal-800">
                                                             La comida del sábado es fija de 14:15 a 15:45 para todas las categorías; la tarde arranca justo al terminar.
                                                             Semifinales, cuartos y finales solo después de terminar todos los partidos de grupos.
-                                                            Orden: grupos → consolación/repesca (si aplica) → cuartos (≥11 equipos) → semis → finales. ≥11: mejor 3º directo y repesca entre los 2 peores terceros.
+                                                            Orden: grupos → consolación/repesca (si aplica) → cuartos (≥11 equipos) → semis → finales. ≥11: mejor 3º directo + repesca entre los 2 peores terceros; cuartos: 1º vs 3º mejor, 1º vs gan. repesca, 1º vs 2º y 2º vs 2º.
                                                             La cuadrícula muestra todas las franjas hasta las 21:00 (huecos vacíos para mover partidos).
                                                             Ajusta partidos a mano en la lista de abajo o en Calendario (tabla / cuadrícula).
                                                         </p>
@@ -3685,6 +4046,39 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                     )}
                 </div>
             </div>
+
+            {/* Barra inferior fija — navegación del panel en móvil */}
+            <nav
+                className="lg:hidden fixed bottom-0 left-0 right-0 z-[55] bg-white border-t-2 border-primary shadow-[0_-6px_24px_rgba(0,0,0,0.15)]"
+                style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+                aria-label="Secciones del panel de administración"
+            >
+                <div className="grid grid-cols-7 divide-x divide-slate-100">
+                    {ADMIN_MAIN_NAV.map((item) => (
+                        <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => selectAdminTab(item.id)}
+                            className={`flex flex-col items-center justify-center gap-0.5 py-2 min-h-[3.25rem] transition-colors ${
+                                activeTab === item.id
+                                    ? 'bg-primary text-background-dark'
+                                    : 'text-slate-600 active:bg-slate-100'
+                            }`}
+                        >
+                            <span
+                                className={`material-symbols-outlined text-[22px] leading-none ${
+                                    activeTab === item.id ? 'filled-icon' : ''
+                                }`}
+                            >
+                                {item.icon}
+                            </span>
+                            <span className="text-[8px] font-black uppercase leading-tight text-center px-0.5">
+                                {item.shortLabel}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+            </nav>
 
             {/* --- ACTA MODAL --- */}
             {selectedMatchForReport && (

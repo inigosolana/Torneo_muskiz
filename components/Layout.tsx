@@ -34,6 +34,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     document.documentElement.classList.toggle('dark', newTheme === 'dark');
   };
 
+  const isAdminRoute =
+    location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+
   const navItems = [
     { label: 'Inicio', path: '/' },
     { label: 'Información', path: '/info' },
@@ -53,20 +56,28 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-background-dark/95 backdrop-blur-md text-white shadow-lg">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
+          <div
+            className={`flex items-center justify-between ${
+              isAdminRoute ? 'h-14 sm:h-16 lg:h-20' : 'h-20'
+            }`}
+          >
             {/* Logo */}
             <Link
               to="/"
-              className="flex items-center gap-4 cursor-pointer group"
+              className="flex items-center gap-4 cursor-pointer group min-w-0"
             >
-              <div className="flex items-center gap-2">
-                <img src="/logo_torneo.png" alt="Muskiz Beach Cup" className="h-10 w-auto object-contain transition-transform group-hover:scale-105" />
-                <img src="/logo_muskiz.png" alt="Muskiz Eskubaloia" className="h-10 w-auto object-contain transition-transform group-hover:scale-105" />
-                <img src="/logo_kolosaurios.png" alt="Kolosaurios" className="h-10 w-auto object-contain transition-transform group-hover:scale-105" />
+              <div className="flex items-center gap-2 shrink-0">
+                <img src="/logo_torneo.png" alt="Muskiz Beach Cup" className={`${isAdminRoute ? 'h-8 sm:h-10' : 'h-10'} w-auto object-contain transition-transform group-hover:scale-105`} />
+                <img src="/logo_muskiz.png" alt="Muskiz Eskubaloia" className={`${isAdminRoute ? 'hidden sm:block h-10' : 'h-10'} w-auto object-contain transition-transform group-hover:scale-105`} />
+                <img src="/logo_kolosaurios.png" alt="Kolosaurios" className={`${isAdminRoute ? 'hidden sm:block h-10' : 'h-10'} w-auto object-contain transition-transform group-hover:scale-105`} />
               </div>
-              <div className="hidden sm:block">
-                <h1 className="text-xl font-bold tracking-tight uppercase leading-none text-white">II Torneo</h1>
-                <span className="text-xs font-medium text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors">Muskizko Udala</span>
+              <div className={isAdminRoute ? 'min-w-0' : 'hidden sm:block'}>
+                <h1 className={`font-bold tracking-tight uppercase leading-none text-white truncate ${isAdminRoute ? 'text-sm sm:text-xl' : 'text-xl'}`}>
+                  {isAdminRoute ? 'Panel Admin' : 'II Torneo'}
+                </h1>
+                <span className={`font-medium text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors ${isAdminRoute ? 'text-[10px] sm:text-xs hidden sm:block' : 'text-xs'}`}>
+                  {isAdminRoute ? 'Organización' : 'Muskizko Udala'}
+                </span>
               </div>
             </Link>
 
@@ -111,18 +122,29 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </span>
               )}
 
-              <button
-                className="lg:hidden p-2 text-slate-300 hover:text-primary"
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              >
-                <span className="material-symbols-outlined">menu</span>
-              </button>
+              {!isAdminRoute ? (
+                <button
+                  type="button"
+                  className="lg:hidden p-2 text-slate-300 hover:text-primary"
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  aria-label="Menú del torneo"
+                >
+                  <span className="material-symbols-outlined">menu</span>
+                </button>
+              ) : (
+                <Link
+                  to="/schedule"
+                  className="lg:hidden text-[10px] font-bold uppercase text-primary px-2 py-1.5 rounded-lg border border-primary/40 hover:bg-primary/10"
+                >
+                  Web
+                </Link>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Mobile Menu */}
-        {mobileMenuOpen && (
+        {/* Mobile Menu (no en /admin: el panel tiene su propia barra inferior) */}
+        {mobileMenuOpen && !isAdminRoute && (
           <div className="lg:hidden bg-background-dark border-t border-white/10">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
               {navItems.map((item) => (
@@ -143,7 +165,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         )}
       </header>
 
-      <RegistrationUrgencyBanner variant="strip" />
+      {!isAdminRoute && <RegistrationUrgencyBanner variant="strip" />}
 
       <main className="flex-grow">
         {children}
