@@ -41,7 +41,7 @@ import {
     resolveMatchDivision,
     resolveMinMatchesForDivision,
     resolveTeamForMatchSide,
-    syncSeniorFemeninoSemisInSaturdayDraft,
+    patchSaturdaySimulationDraft,
     teamsEligibleForSchedule,
     type MuskizSimulatorOptions,
 } from '../services/muskizScheduleSimulator';
@@ -808,13 +808,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
-    /** Añade semifinales SF al borrador del sábado si la simulación guardada aún no las tiene. */
+    /** Completa el borrador del sábado (semis SF, vueltas JF-A, etc.) si faltan partidos del formato. */
     useEffect(() => {
         if (!simulationsLoaded || teams.length === 0 || simDrafts.length === 0) return;
         const saturdayDraft = simDrafts.find((d) => d.scheduleDay === 'Sábado');
         if (!saturdayDraft) return;
 
-        const { matches, changed } = syncSeniorFemeninoSemisInSaturdayDraft(
+        const { matches, changed, notes } = patchSaturdaySimulationDraft(
             teams,
             saturdayDraft.matches,
             muskizSimulatorOptions
@@ -827,7 +827,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         );
         setSimDrafts(nextDrafts);
         void persistSimDraftsAsync(nextDrafts, activeDraftId);
-        toast.info('Semifinales Senior Femenino añadidas al calendario del sábado.', { duration: 8000 });
+        toast.info(`Calendario del sábado actualizado: ${notes.join(' · ')}.`, { duration: 9000 });
         // eslint-disable-next-line react-hooks/exhaustive-deps -- evita bucle al actualizar simDrafts
     }, [simulationsLoaded, teams, muskizSimulatorOptions]);
 

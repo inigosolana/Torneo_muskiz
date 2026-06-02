@@ -619,8 +619,8 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     for (const g of groups) {
         const label = `${code}-${g.key}`;
         const pairs = roundRobinPairs(g.names);
-        const isSeniorMasculinoGroupCReturnLegs =
-            div === 'Senior Masculino' && g.key === 'C' && g.names.length === 3;
+        /** Grupos de 3: ida y vuelta (6 partidos). Ej. JF-A, SM-C. */
+        const usesHomeAndAway = g.names.length === 3;
         for (const { a, b } of pairs) {
             out.push({
                 teamA: a,
@@ -630,7 +630,7 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
                 phaseOrder: 0,
                 roundLabel: `Grupos · ${label}`,
             });
-            if (isSeniorMasculinoGroupCReturnLegs) {
+            if (usesHomeAndAway) {
                 out.push({
                     teamA: b,
                     teamB: a,
@@ -2458,6 +2458,84 @@ export function syncSeniorFemeninoSemisInSaturdayDraft(
     });
 
     return { matches: merged, changed: true };
+}
+
+/** Partido de vuelta en fase de grupos (grupos de 3, ida y vuelta). */
+export function isGroupReturnLegMatch(m: Pick<Match, 'round'>): boolean {
+    const r = (m.round ?? '').toLowerCase();
+    return r.includes('grupos') && r.includes('vuelta');
+}
+
+/** Clave única de una vuelta de grupo (orden A–B importa). */
+export function groupReturnLegKey(m: Pick<Match, 'teamA' | 'teamB' | 'round'>): string | null {
+    if (!isGroupReturnLegMatch(m)) return null;
+    const div = divisionFromMatchRound(m.round);
+    if (!div) return null;
+    const gm = /Grupos\s*·\s*([A-Z]{2}-[A-Z0-9]+)/i.exec(m.round ?? '');
+    if (!gm) return null;
+    const a = normalizeTeamLabel(m.teamA);
+    const b = normalizeTeamLabel(m.teamB);
+    if (!a || !b || isPlaceholderTeamName(m.teamA) || isPlaceholderTeamName(m.teamB)) return null;
+    return `${div}|${gm[1]!}|${a}|${b}|vuelta`;
+}
+
+/**
+ * Añade al borrador del sábado las vueltas que falten en grupos de 3 (p. ej. JF-A).
+ */
+export function syncMissingThreeTeamGroupReturnLegsInSaturdayDraft(
+    teams: Team[],
+    saturdayMatches: Match[],
+    options?: MuskizSimulatorOptions
+): { matches: Match[]; changed: boolean; added: number } {
+    const { matches: freshSaturday } = buildMuskizDayDraftMatches(teams, 'Sábado', options);
+    const freshReturns = freshSaturday.filter(isGroupReturnLegMatch);
+    if (freshReturns.length === 0) return { matches: saturdayMatches, changed: false, added: 0 };
+
+    const existingKeys = new Set(
+        saturdayMatches.map((m) => groupReturnLegKey(m)).filter((k): k is string => !!k)
+    );
+    const toAdd = freshReturns.filter((m) => {
+        const k = groupReturnLegKey(m);
+        return k && !existingKeys.has(k);
+    });
+    if (toAdd.length === 0) return { matches: saturdayMatches, changed: false, added: 0 };
+
+    const merged = [...saturdayMatches, ...toAdd].sort((a, b) => {
+        const ta = a.time === 'PENDIENTE' ? 99_999 : timeToMinutes(a.time);
+        const tb = b.time === 'PENDIENTE' ? 99_999 : timeToMinutes(b.time);
+        if (ta !== tb) return ta - tb;
+        return (a.court ?? '').localeCompare(b.court ?? '', 'es');
+    });
+
+    return { matches: merged, changed: true, added: toAdd.length };
+}
+
+/** Parches del borrador del sábado (semis SF, vueltas de grupos de 3, etc.). */
+export function patchSaturdaySimulationDraft(
+    teams: Team[],
+    saturdayMatches: Match[],
+    options?: MuskizSimulatorOptions
+): { matches: Match[]; changed: boolean; notes: string[] } {
+    let matches = saturdayMatches;
+    const notes: string[] = [];
+
+    const semis = syncSeniorFemeninoSemisInSaturdayDraft(teams, matches, options);
+    if (semis.changed) {
+        matches = semis.matches;
+        notes.push('semifinales Senior Femenino');
+    }
+
+    const returns = syncMissingThreeTeamGroupReturnLegsInSaturdayDraft(teams, matches, options);
+    if (returns.changed) {
+        matches = returns.matches;
+        notes.push(
+            returns.added === 1
+                ? '1 partido de vuelta (grupo de 3)'
+                : `${returns.added} partidos de vuelta (grupos de 3)`
+        );
+    }
+
+    return { matches, changed: notes.length > 0, notes };
 }
 
 function realTeamsOverlapInSameDivision(
