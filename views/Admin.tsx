@@ -3275,6 +3275,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                                     <p className="text-xl font-black text-pink-900">{totals.semis}</p>
                                                                 </div>
                                                             )}
+                                                            {totals.tercerPuesto > 0 && (
+                                                                <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-center">
+                                                                    <p className="text-[10px] font-black uppercase text-teal-800">3º y 4º</p>
+                                                                    <p className="text-xl font-black text-teal-900">{totals.tercerPuesto}</p>
+                                                                </div>
+                                                            )}
                                                             {totals.final > 0 && (
                                                                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-center">
                                                                     <p className="text-[10px] font-black uppercase text-amber-800">Final</p>
@@ -3630,7 +3636,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             <strong>Sábado:</strong> juvenil/senior 9:35–21:00 (cuadrícula con huecos vacíos hasta las 21:00), comida fija 14:15–15:45, 6 campos.{' '}
                                                             <strong>Domingo:</strong> infantiles 9:35–15:35, 4 campos.{' '}
                                                             Huecos <strong>35 min</strong>. Mínimo de partidos por equipo configurable en cada categoría (por defecto {MIN_REAL_MATCHES_PER_TEAM}).{' '}
-                                                            ≤6 → liguilla + final (Senior Femenino: semis + final; con 6 equipos, 2 grupos) · 7 → 3+4 + consolación + semis + final · 8–10 → 2 grupos + semis + final (9: 4+5) · ≥11 → 3 grupos + repesca + cuartos + semis + final (11: 4+4+3).{' '}
+                                                            ≤6 → liguilla + final (Senior Femenino: semis + final; con 6 equipos, 2 grupos) · 7 → 3+4 + consolación + semis + final · 8–10 → 2 grupos + semis + 3º/4º puesto + final (9: 4+5) · JM/JF/SM incluyen partido 3º y 4º puesto · ≥11 → 3 grupos + repesca + cuartos + semis + final (11: 4+4+3).{' '}
                                                             Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo cuando hay varios grupos.{' '}
                                                             Categorías mezcladas en el horario. Intenta evitar <strong>dos partidos seguidos</strong>, pero los permite si no caben todos (menos PENDIENTE). Partidos sin hueco: <strong>PENDIENTE</strong>.{' '}
                                                             <strong>Homónimos:</strong> equipos con el mismo nombre en distintas categorías se distinguen por código (CF, CM, JF…) y por id en base de datos; no se mezclan al validar solapes.

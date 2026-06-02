@@ -198,7 +198,33 @@ function generateSlotStarts(
 }
 
 // ─── Fases ─────────────────────────────────────────────────────────────────
-type Phase = 'GRUPOS' | 'REPESCA' | 'CUARTOS' | 'SEMIS' | 'FINAL';
+type Phase = 'GRUPOS' | 'REPESCA' | 'CUARTOS' | 'SEMIS' | 'TERCER_PUESTO' | 'FINAL';
+
+/** JM, JF y SM: partido entre perdedores de semifinales. */
+export function divisionUsesThirdFourthPlaceMatch(division: Team['division']): boolean {
+    return (
+        division === 'Juvenil Femenino' ||
+        division === 'Juvenil Masculino' ||
+        division === 'Senior Masculino'
+    );
+}
+
+function appendThirdFourthPlaceMatch(
+    out: RawMatchSpec[],
+    div: Team['division'],
+    code: string,
+    phaseOrder: number
+): void {
+    if (!divisionUsesThirdFourthPlaceMatch(div)) return;
+    out.push({
+        teamA: `Perd.Semi ${code} 1`,
+        teamB: `Perd.Semi ${code} 2`,
+        division: div,
+        phase: 'TERCER_PUESTO',
+        phaseOrder,
+        roundLabel: `3º y 4º puesto · ${code}`,
+    });
+}
 
 interface RawMatchSpec {
     teamA: string;
@@ -461,8 +487,9 @@ export interface DivisionMatchBreakdown {
     repesca: number;
     cuartos: number;
     semis: number;
+    tercerPuesto: number;
     final: number;
-    /** Repesca + cuartos + semis + final */
+    /** Repesca + cuartos + semis + 3º/4º + final */
     eliminatoria: number;
     total: number;
 }
@@ -477,6 +504,7 @@ export function countDivisionMatchBreakdown(
         repesca: 0,
         cuartos: 0,
         semis: 0,
+        tercerPuesto: 0,
         final: 0,
         eliminatoria: 0,
         total: 0,
@@ -494,20 +522,23 @@ export function countDivisionMatchBreakdown(
         let repesca = 0;
         let cuartos = 0;
         let semis = 0;
+        let tercerPuesto = 0;
         let finals = 0;
         for (const s of specs) {
             if (s.phase === 'GRUPOS') grupos++;
             else if (s.phase === 'REPESCA') repesca++;
             else if (s.phase === 'CUARTOS') cuartos++;
             else if (s.phase === 'SEMIS') semis++;
+            else if (s.phase === 'TERCER_PUESTO') tercerPuesto++;
             else if (s.phase === 'FINAL') finals++;
         }
-        const eliminatoria = repesca + cuartos + semis + finals;
+        const eliminatoria = repesca + cuartos + semis + tercerPuesto + finals;
         return {
             grupos,
             repesca,
             cuartos,
             semis,
+            tercerPuesto,
             final: finals,
             eliminatoria,
             total: specs.length,
@@ -666,7 +697,8 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
             { teamA: `Gan.Ctos ${code} 1`, teamB: `Gan.Ctos ${code} 2`, division: div, phase: 'SEMIS', phaseOrder: 3, roundLabel: `Semi · ${code} 1` },
             { teamA: `Gan.Ctos ${code} 3`, teamB: `Gan.Ctos ${code} 4`, division: div, phase: 'SEMIS', phaseOrder: 3, roundLabel: `Semi · ${code} 2` },
         );
-        out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 4, roundLabel: `Final · ${code}` });
+        appendThirdFourthPlaceMatch(out, div, code, 4);
+        out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 5, roundLabel: `Final · ${code}` });
     } else if (numGroups >= 2) {
         const [ga, gb] = [gkeys[0] ?? 'A', gkeys[1] ?? 'B'];
         if (n === 7) {
@@ -683,14 +715,16 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
                 { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 1 · 1º${ga} vs 2º${gb}` },
                 { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'SEMIS', phaseOrder: 2, roundLabel: `Semi · ${code} 2 · 1º${gb} vs 2º${ga}` },
             );
-            out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 3, roundLabel: `Final · ${code}` });
+            appendThirdFourthPlaceMatch(out, div, code, 3);
+            out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 4, roundLabel: `Final · ${code}` });
         } else {
             // 8–10 equipos (9 → 4+5; 8 → 4+4; 10 → 5+5): semis + final
             out.push(
                 { teamA: `1º Gr.${ga}`, teamB: `2º Gr.${gb}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 1 · 1º${ga} vs 2º${gb}` },
                 { teamA: `1º Gr.${gb}`, teamB: `2º Gr.${ga}`, division: div, phase: 'SEMIS', phaseOrder: 1, roundLabel: `Semi · ${code} 2 · 1º${gb} vs 2º${ga}` },
             );
-            out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 2, roundLabel: `Final · ${code}` });
+            appendThirdFourthPlaceMatch(out, div, code, 2);
+            out.push({ teamA: `Gan.Semi ${code} 1`, teamB: `Gan.Semi ${code} 2`, division: div, phase: 'FINAL', phaseOrder: 3, roundLabel: `Final · ${code}` });
         }
     } else if (seniorFemeninoRequiresSemifinals(div) && n >= 3) {
         appendSeniorFemeninoSemisAndFinal(out, div, code, n, 1);
@@ -1013,6 +1047,7 @@ export function isPlaceholderTeamName(name: string): boolean {
     if (!n) return false;
     if (/^\d+º\b/u.test(n)) return true;
     if (/^Gan\./i.test(n)) return true;
+    if (/^Perd\.Semi\b/i.test(n)) return true;
     if (/^[12]º\s+Clasificado\b/i.test(n)) return true;
     if (/^3º\s+(peor|mejor)\b/i.test(n)) return true;
     if (/^3º\s+Gr\./i.test(n)) return true;
@@ -1467,6 +1502,7 @@ function specsByPhase(specs: RawMatchSpec[]) {
         repesca: specs.filter((s) => s.phase === 'REPESCA'),
         cuartos: specs.filter((s) => s.phase === 'CUARTOS'),
         semis: specs.filter((s) => s.phase === 'SEMIS'),
+        tercerPuesto: specs.filter((s) => s.phase === 'TERCER_PUESTO'),
         finals: specs.filter((s) => s.phase === 'FINAL'),
     };
 }
@@ -1485,7 +1521,7 @@ function scheduleUnplacedRecovery(
     const pool = [...state.unplaced];
     state.unplaced = [];
 
-    const phaseOrder: Phase[] = ['GRUPOS', 'REPESCA', 'CUARTOS', 'SEMIS', 'FINAL'];
+    const phaseOrder: Phase[] = ['GRUPOS', 'REPESCA', 'CUARTOS', 'SEMIS', 'TERCER_PUESTO', 'FINAL'];
     const divisionsInPool = Array.from(new Set(pool.map((s) => s.division)));
 
     for (const phase of phaseOrder) {
@@ -1502,6 +1538,7 @@ function scheduleUnplacedRecovery(
             const endRepesca = maxAssignedEndForPhaseAndDivision(state, 'REPESCA', div);
             const endCuartos = maxAssignedEndForPhaseAndDivision(state, 'CUARTOS', div);
             const endSemis = maxAssignedEndForPhaseAndDivision(state, 'SEMIS', div);
+            const endTercer = maxAssignedEndForPhaseAndDivision(state, 'TERCER_PUESTO', div);
 
             let effectiveEnd: number | undefined;
             if (phase === 'GRUPOS') {
@@ -1512,8 +1549,13 @@ function scheduleUnplacedRecovery(
                 effectiveEnd = Math.max(endRepesca, endGrupos);
             } else if (phase === 'SEMIS') {
                 effectiveEnd = Math.max(endCuartos, Math.max(endRepesca, endGrupos));
-            } else if (phase === 'FINAL') {
+            } else if (phase === 'TERCER_PUESTO') {
                 effectiveEnd = Math.max(endSemis, Math.max(endCuartos, Math.max(endRepesca, endGrupos)));
+            } else if (phase === 'FINAL') {
+                effectiveEnd = Math.max(
+                    endTercer,
+                    Math.max(endSemis, Math.max(endCuartos, Math.max(endRepesca, endGrupos)))
+                );
             }
 
             const rawMin =
@@ -1521,10 +1563,13 @@ function scheduleUnplacedRecovery(
                     ? undefined
                     : minSlotStartFromPhaseEnd(slotStartsMin, effectiveEnd);
 
-            // Parón del sábado: sólo para CUARTOS/SEMIS/FINAL, NO para REPESCA.
+            // Parón del sábado: sólo para CUARTOS/SEMIS/TERCER_PUESTO/FINAL, NO para REPESCA.
             const shouldClamp =
                 options?.minKnockoutStartMin != null &&
-                (phase === 'CUARTOS' || phase === 'SEMIS' || phase === 'FINAL');
+                (phase === 'CUARTOS' ||
+                    phase === 'SEMIS' ||
+                    phase === 'TERCER_PUESTO' ||
+                    phase === 'FINAL');
 
             const finalMin = rawMin == null ? (shouldClamp ? options!.minKnockoutStartMin : undefined) : rawMin;
             if (finalMin != null) minByDivision[div] = shouldClamp
@@ -1587,11 +1632,11 @@ function scheduleGreedy(
     const lunchEndMin = day === 'Sábado' && cfg.lunch ? timeToMinutes(cfg.lunch.end) : undefined;
     const postGroupsBreakMin = day === 'Viernes' ? 15 : 0;
 
-    const { grupos, repesca, cuartos, semis, finals } = specsByPhase(specs);
+    const { grupos, repesca, cuartos, semis, tercerPuesto, finals } = specsByPhase(specs);
     const reservedFinalSlots = reservedFinalSlotStarts(slotStartsMin, finals.length, courts.length);
     const reservedKnockoutSlots = reservedKnockoutSlotStarts(
         slotStartsMin,
-        repesca.length + cuartos.length + semis.length,
+        repesca.length + cuartos.length + semis.length + tercerPuesto.length,
         courts.length,
         reservedFinalSlots
     );
@@ -1668,12 +1713,30 @@ function scheduleGreedy(
         minSlotStartMinByDivision: minAfterCuartosByDiv,
     });
 
-    const endAfterFinalPredecessorByDiv: Partial<Record<Team['division'], number>> = {};
-    const minAfterKnockoutByDiv: Partial<Record<Team['division'], number>> = {};
+    const endAfterSemisByDiv: Partial<Record<Team['division'], number>> = {};
+    const minAfterSemisByDiv: Partial<Record<Team['division'], number>> = {};
     for (const div of divisionsInDay) {
         const semisEnd = maxAssignedEndForPhaseAndDivision(state, 'SEMIS', div);
         const preEnd = endAfterCuartosOrRepescaByDiv[div] ?? -Infinity;
         const effectiveEnd = Math.max(semisEnd, preEnd);
+        endAfterSemisByDiv[div] = effectiveEnd;
+        const min = minSlotStartFromPhaseEnd(slotStartsMin, effectiveEnd);
+        if (min != null) minAfterSemisByDiv[div] = lunchEndMin != null ? Math.max(min, lunchEndMin) : min;
+    }
+
+    scheduleSpecBatch(state, tercerPuesto, {
+        slotTimePolicy: 'earliest',
+        allowedSlotStarts: tercerPuesto.length > 0 ? reservedKnockoutSlots : undefined,
+        forbiddenSlotStarts: reservedFinalSlots,
+        minSlotStartMinByDivision: minAfterSemisByDiv,
+    });
+
+    const endAfterFinalPredecessorByDiv: Partial<Record<Team['division'], number>> = {};
+    const minAfterKnockoutByDiv: Partial<Record<Team['division'], number>> = {};
+    for (const div of divisionsInDay) {
+        const tercerEnd = maxAssignedEndForPhaseAndDivision(state, 'TERCER_PUESTO', div);
+        const semisEnd = endAfterSemisByDiv[div] ?? -Infinity;
+        const effectiveEnd = Math.max(tercerEnd, semisEnd);
         endAfterFinalPredecessorByDiv[div] = effectiveEnd;
         const min = minSlotStartFromPhaseEnd(slotStartsMin, effectiveEnd);
         if (min != null) minAfterKnockoutByDiv[div] = lunchEndMin != null ? Math.max(min, lunchEndMin) : min;
@@ -1843,7 +1906,7 @@ function exhaustivePlaceUnplacedPhased(
 
     const phases: Phase[] = options?.onlyPhase
         ? [options.onlyPhase]
-        : ['GRUPOS', 'REPESCA', 'CUARTOS', 'SEMIS', 'FINAL'];
+        : ['GRUPOS', 'REPESCA', 'CUARTOS', 'SEMIS', 'TERCER_PUESTO', 'FINAL'];
 
     const allPending = [...state.unplaced];
     const holdOther = options?.onlyPhase
@@ -2592,6 +2655,76 @@ export function removeObsoleteGroupExtrasFromSaturdayDraft(
     };
 }
 
+/** Etiqueta estructural del partido (sin día/hora) para comparar borrador vs formato. */
+export function extractStructuralRoundLabel(round: string): string {
+    const parts = round.split('·').map((p) => p.trim());
+    const idx = parts.findIndex((p) =>
+        /^(Grupos|Semi|Final|Cuartos|Repesca|Consolaci|3º)/i.test(p)
+    );
+    if (idx >= 0) return parts.slice(idx).join(' · ');
+    return parts.slice(-2).join(' · ');
+}
+
+export function matchPlanKey(m: Pick<Match, 'teamA' | 'teamB' | 'round'>): string {
+    const div = divisionFromMatchRound(m.round) ?? '';
+    const label = extractStructuralRoundLabel(m.round ?? '');
+    const a = normalizeTeamLabel(m.teamA);
+    const b = normalizeTeamLabel(m.teamB);
+    if (/vuelta/i.test(label)) return `${div}|${label}|${a}|${b}`;
+    if (isPlaceholderTeamName(m.teamA) || isPlaceholderTeamName(m.teamB)) {
+        return `${div}|${label}|${a}|${b}`;
+    }
+    const pair = a < b ? `${a}|${b}` : `${b}|${a}`;
+    return `${div}|${label}|${pair}`;
+}
+
+export interface SaturdayDraftAudit {
+    complete: boolean;
+    expectedCount: number;
+    draftCount: number;
+    missing: string[];
+}
+
+/** Compara el borrador del sábado con el calendario que generaría el simulador ahora. */
+export function auditSaturdayDraftAgainstFormat(
+    teams: Team[],
+    saturdayMatches: Match[],
+    options?: MuskizSimulatorOptions
+): SaturdayDraftAudit {
+    const { matches: fresh } = buildMuskizDayDraftMatches(teams, 'Sábado', options);
+    const existing = new Set(saturdayMatches.map((m) => matchPlanKey(m)));
+    const missing = fresh
+        .filter((m) => !existing.has(matchPlanKey(m)))
+        .map((m) => `${extractStructuralRoundLabel(m.round ?? '')}: ${m.teamA} vs ${m.teamB}`);
+    return {
+        complete: missing.length === 0,
+        expectedCount: fresh.length,
+        draftCount: saturdayMatches.length,
+        missing,
+    };
+}
+
+/** Añade al borrador cualquier partido del sábado que falte respecto al formato actual. */
+export function syncMissingSaturdayMatchesFromFresh(
+    teams: Team[],
+    saturdayMatches: Match[],
+    options?: MuskizSimulatorOptions
+): { matches: Match[]; changed: boolean; added: number } {
+    const { matches: fresh } = buildMuskizDayDraftMatches(teams, 'Sábado', options);
+    const existing = new Set(saturdayMatches.map((m) => matchPlanKey(m)));
+    const toAdd = fresh.filter((m) => !existing.has(matchPlanKey(m)));
+    if (toAdd.length === 0) return { matches: saturdayMatches, changed: false, added: 0 };
+
+    const merged = [...saturdayMatches, ...toAdd].sort((a, b) => {
+        const ta = a.time === 'PENDIENTE' ? 99_999 : timeToMinutes(a.time);
+        const tb = b.time === 'PENDIENTE' ? 99_999 : timeToMinutes(b.time);
+        if (ta !== tb) return ta - tb;
+        return (a.court ?? '').localeCompare(b.court ?? '', 'es');
+    });
+
+    return { matches: merged, changed: true, added: toAdd.length };
+}
+
 /** Parches del borrador del sábado (semis SF, vueltas de grupos de 3, etc.). */
 export function patchSaturdaySimulationDraft(
     teams: Team[],
@@ -2624,6 +2757,16 @@ export function patchSaturdaySimulationDraft(
             returns.added === 1
                 ? '1 partido de vuelta (grupo de 3)'
                 : `${returns.added} partidos de vuelta (grupos de 3)`
+        );
+    }
+
+    const missing = syncMissingSaturdayMatchesFromFresh(teams, matches, options);
+    if (missing.changed) {
+        matches = missing.matches;
+        notes.push(
+            missing.added === 1
+                ? '1 partido faltante del formato'
+                : `${missing.added} partidos faltantes del formato`
         );
     }
 

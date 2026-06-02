@@ -45,6 +45,7 @@ function isPlaceholder(name: string): boolean {
   const n = normalizeLabel(name);
   if (/^\d+º\b/u.test(n)) return true;
   if (/^Gan\./i.test(n)) return true;
+  if (/^Perd\.Semi\b/i.test(n)) return true;
   if (/^[12]º\s+Clasificado\b/i.test(n)) return true;
   if (/^3º\s+(peor|mejor)\b/i.test(n)) return true;
   if (/^3º\s+Gr\./i.test(n)) return true;
