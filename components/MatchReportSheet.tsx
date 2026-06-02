@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import type { Match, Team } from '../types';
 import { siteContent } from '../constants/siteContent';
+import { resolveTeamForMatchSide } from '../services/muskizScheduleSimulator';
 import {
     ACTA_CELL_ROSTER_NAME,
     ACTA_CELL_ROSTER_THIN,
@@ -29,8 +30,14 @@ export const MatchReportSheet: React.FC<MatchReportSheetProps> = ({
 }) => {
     const competitionName = (competitionNameProp ?? siteContent.heroTitle ?? 'Torneo').toUpperCase();
 
-    const teamA = useMemo(() => teams.find((t) => t.name === match.teamA), [teams, match.teamA]);
-    const teamB = useMemo(() => teams.find((t) => t.name === match.teamB), [teams, match.teamB]);
+    const teamA = useMemo(
+        () => resolveTeamForMatchSide(match, match.teamA, teams),
+        [teams, match]
+    );
+    const teamB = useMemo(
+        () => resolveTeamForMatchSide(match, match.teamB, teams),
+        [teams, match]
+    );
 
     const categoryLabel = teamA?.division ?? teamB?.division ?? '';
     const groupLabel = teamA?.competitionGroup ?? teamB?.competitionGroup ?? '';

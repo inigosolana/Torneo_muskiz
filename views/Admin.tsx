@@ -32,6 +32,7 @@ import {
     MUSKIZ_AI_SLOT_ASSIST_MAX,
     resolveMatchDivision,
     resolveMinMatchesForDivision,
+    resolveTeamForMatchSide,
     teamsEligibleForSchedule,
     type MuskizSimulatorOptions,
 } from '../services/muskizScheduleSimulator';
@@ -1389,8 +1390,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     // --- Report (Acta) Logic ---
     const openReportModal = (match: Match) => {
-        const teamAObj = teams.find((t) => t.name === match.teamA);
-        const teamBObj = teams.find((t) => t.name === match.teamB);
+        const teamAObj = resolveTeamForMatchSide(match, match.teamA, teams);
+        const teamBObj = resolveTeamForMatchSide(match, match.teamB, teams);
 
         if (!match.report) {
             const tempMatch = {
@@ -1404,8 +1405,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             setSelectedMatchForReport(tempMatch);
             setReportMode('DIGITAL');
         } else {
-            const teamAObj = teams.find(t => t.name === match.teamA);
-            const teamBObj = teams.find(t => t.name === match.teamB);
+            const teamAObj = resolveTeamForMatchSide(match, match.teamA, teams);
+            const teamBObj = resolveTeamForMatchSide(match, match.teamB, teams);
             const eligibleIds = new Set([
                 ...(teamAObj ? playersEligibleForMatch(teamAObj.players) : []),
                 ...(teamBObj ? playersEligibleForMatch(teamBObj.players) : []),
@@ -2989,7 +2990,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             Huecos <strong>35 min</strong>. Mínimo de partidos por equipo configurable en cada categoría (por defecto {MIN_REAL_MATCHES_PER_TEAM}).{' '}
                                                             ≤6 → liguilla + final · 7 → 3+4 + consolación + semis + final · 8–10 → 2 grupos + semis + final (9: 4+5) · ≥11 → 3 grupos + repesca + cuartos + semis + final (11: 4+4+3).{' '}
                                                             Mínimo {MIN_TEAMS_PER_GROUP} equipos por grupo cuando hay varios grupos.{' '}
-                                                            Categorías mezcladas en el horario. Intenta evitar <strong>dos partidos seguidos</strong>, pero los permite si no caben todos (menos PENDIENTE). Partidos sin hueco: <strong>PENDIENTE</strong>.
+                                                            Categorías mezcladas en el horario. Intenta evitar <strong>dos partidos seguidos</strong>, pero los permite si no caben todos (menos PENDIENTE). Partidos sin hueco: <strong>PENDIENTE</strong>.{' '}
+                                                            <strong>Homónimos:</strong> equipos con el mismo nombre en distintas categorías se distinguen por código (CF, CM, JF…) y por id en base de datos; no se mezclan al validar solapes.
                                                         </p>
                                                         <div className="mt-3 rounded-lg border border-teal-200 bg-white/70 p-3">
                                                             <p className="text-[11px] font-bold uppercase tracking-wide text-teal-900 mb-2">

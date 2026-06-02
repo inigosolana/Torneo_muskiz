@@ -11,9 +11,13 @@ import {
     applyMuskizSlotAssignments,
     buildMuskizDayDraftMatches,
     buildMuskizSlotOptimizePayload,
+    divisionFromMatchRound,
     improveScheduleRestGaps,
+    isPlaceholderTeamName,
     MUSKIZ_AI_MAX_CALLS_PER_DAY,
     MUSKIZ_AI_SLOT_ASSIST_MAX,
+    normalizeTeamLabel,
+    resolveScheduleTeamKey,
     type MuskizBuildResult,
     type MuskizScheduleDayLabel,
     type MuskizSimulatorOptions,
@@ -76,8 +80,8 @@ async function refinePendingWithAi(
         }
     }
 
-    const improved = improveScheduleRestGaps(current, day, options);
-    const beforeBb = countBackToBack(improved, options?.slotDurationMins ?? 35);
+    const improved = improveScheduleRestGaps(current, day, options, allTeams);
+    const beforeBb = countBackToBack(improved, options?.slotDurationMins ?? 35, allTeams);
     const afterNote =
         beforeBb > 0
             ? `; ${beforeBb} equipo(s) aún con partidos seguidos (revisa cuadrícula)`
@@ -89,14 +93,19 @@ async function refinePendingWithAi(
     };
 }
 
-function countBackToBack(matches: Match[], slotMins: number): number {
+function countBackToBack(matches: Match[], slotMins: number, scheduleTeams: Team[]): number {
     const byTeam = new Map<string, number[]>();
     for (const m of matches) {
         if (m.time === 'PENDIENTE') continue;
+        const div = divisionFromMatchRound(m.round);
+        if (!div) continue;
         for (const t of [m.teamA, m.teamB]) {
-            if (!byTeam.has(t)) byTeam.set(t, []);
+            if (isPlaceholderTeamName(t)) continue;
+            const key = resolveScheduleTeamKey(div, t, scheduleTeams);
+            if (!key.startsWith('id:')) continue;
+            if (!byTeam.has(key)) byTeam.set(key, []);
             const [h, min] = m.time.split(':').map(Number);
-            byTeam.get(t)!.push((h ?? 0) * 60 + (min ?? 0));
+            byTeam.get(key)!.push((h ?? 0) * 60 + (min ?? 0));
         }
     }
     let v = 0;

@@ -3,8 +3,10 @@ import {
     autoGroupCount,
     computeGroups,
     DIVISION_CODE,
+    divisionFromMatchRound,
     expectedGroupSizesForTeamCount,
     MIN_TEAMS_PER_GROUP,
+    normalizeTeamLabel,
     resolveMatchDivision,
 } from '../services/muskizScheduleSimulator';
 
@@ -18,13 +20,30 @@ function isGroupPhaseMatch(m: Match): boolean {
     return (m.round ?? '').includes('Grupos');
 }
 
-function matchInvolvesTeam(m: Match, teamName: string): boolean {
-    return m.teamA === teamName || m.teamB === teamName;
+function matchInvolvesTeam(
+    m: Match,
+    teamName: string,
+    division: Team['division'],
+    teams: Team[]
+): boolean {
+    const label = normalizeTeamLabel(teamName);
+    const onMatch =
+        normalizeTeamLabel(m.teamA) === label || normalizeTeamLabel(m.teamB) === label;
+    if (!onMatch) return false;
+    const matchDiv = divisionFromMatchRound(m.round) ?? resolveMatchDivision(m, teams);
+    return matchDiv === division;
 }
 
-function opponentName(m: Match, teamName: string): string | null {
-    if (m.teamA === teamName) return m.teamB;
-    if (m.teamB === teamName) return m.teamA;
+function opponentName(
+    m: Match,
+    teamName: string,
+    division: Team['division'],
+    teams: Team[]
+): string | null {
+    if (!matchInvolvesTeam(m, teamName, division, teams)) return null;
+    const label = normalizeTeamLabel(teamName);
+    if (normalizeTeamLabel(m.teamA) === label) return m.teamB;
+    if (normalizeTeamLabel(m.teamB) === label) return m.teamA;
     return null;
 }
 
@@ -213,15 +232,15 @@ export function remapMatchesAfterGroupChange(
     let next = matchList.filter((m) => {
         if (resolveMatchDivision(m, teams) !== division) return true;
         if (!isGroupPhaseMatch(m)) return true;
-        if (!matchInvolvesTeam(m, teamName)) return true;
-        const opp = opponentName(m, teamName);
+        if (!matchInvolvesTeam(m, teamName, division, teams)) return true;
+        const opp = opponentName(m, teamName, division, teams);
         if (!opp) return true;
         if (opp.startsWith('1º') || opp.startsWith('2º') || opp.startsWith('Gan.')) return true;
         return newGroupNames.has(opp);
     });
 
     next = next.map((m) => {
-        if (!isGroupPhaseMatch(m) || !matchInvolvesTeam(m, teamName)) return m;
+        if (!isGroupPhaseMatch(m) || !matchInvolvesTeam(m, teamName, division, teams)) return m;
         return {
             ...m,
             round: m.round ? updateRoundGroup(m.round, code, newKey) : m.round,

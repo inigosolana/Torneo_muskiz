@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { searchRules } from '../services/geminiService';
 import { Team } from '../types';
 import { useTournamentData } from '../context/TournamentDataContext';
-import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
+import { resolveTeamForMatchSide } from '../services/muskizScheduleSimulator';
 
 export const Schedule: React.FC = () => {
     const { matches, teams, categoryLimits, publicMatchesVisible } = useTournamentData();
@@ -282,8 +282,8 @@ export const Schedule: React.FC = () => {
                                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                                         {publicMatches
                                             .filter((m) => {
-                                                const teamA = teams.find((t) => t.name === m.teamA);
-                                                const teamB = teams.find((t) => t.name === m.teamB);
+                                                const teamA = resolveTeamForMatchSide(m, m.teamA, teams);
+                                                const teamB = resolveTeamForMatchSide(m, m.teamB, teams);
                                                 if (m.status === 'FINISHED') return false;
                                                 if (!teamA || !teamB) return true;
                                                 return teamA.paymentStatus === 'PAID' && teamB.paymentStatus === 'PAID';

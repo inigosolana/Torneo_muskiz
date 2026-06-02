@@ -12,10 +12,9 @@
  * - 8–10 equipos : 2 grupos → semis → final (9: 4+5)
  * - ≥11 equipos  : 3 grupos (11: 4+4+3) → repesca 2 peores 3º + cuartos + semis → final
  *
- * El calendario usa equipos reales (pagados y aprobados). La fase de grupos lleva nombres
- * de club; cuartos, semis y final usan plantillas de clasificación (1º Gr.A, Gan.Semi…)
- * que se sustituyen por equipos reales al cerrar grupos. La final siempre se programa
- * en calendario, horarios y resultados.
+ * El calendario usa equipos reales (pagados y aprobados). Cada equipo se identifica por
+ * categoría + id de BD (nunca solo por nombre: evita confundir homónimos CF/CM, JF/JM…).
+ * Cuartos/semis/final usan plantillas (1º Gr.A, Gan.Semi…) en el campo round va el código CF/CM….
  * El simulador intenta que cada equipo juegue ≥4 partidos reales; si no cabe, baja a ≥3.
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
  * Las fases de grupos/cuartos se programan antes que semis/finales.
@@ -825,6 +824,29 @@ export function normalizeTeamLabel(name: string): string {
     return name.trim().replace(/\s+/g, ' ');
 }
 
+/** Clave de horario por categoría + equipo (evita homónimos CF/CM, JF/JM…). */
+export function teamScheduleKey(
+    division: Team['division'],
+    teamName: string,
+    scheduleTeams: Team[]
+): string {
+    return resolveScheduleTeamKey(division, teamName, scheduleTeams);
+}
+
+/** Equipo inscrito por nombre dentro de una sola categoría (nunca mezcla géneros/categorías). */
+export function findTeamInDivision(
+    teams: Team[],
+    teamName: string,
+    division: Team['division']
+): Team | null {
+    const label = normalizeTeamLabel(teamName);
+    const roster = teams.filter(
+        (t) => t.division === division && normalizeTeamLabel(t.name) === label
+    );
+    if (roster.length !== 1) return null;
+    return roster[0]!;
+}
+
 /**
  * Cruces ficticos (1º Gr.A, Gan.Semi…). Solo patrones de plantilla, no subcadenas
  * («grupo», «mejor»…) que aparecen en nombres reales de clubes.
@@ -855,7 +877,8 @@ export function resolveScheduleTeamKey(
     const roster = teams.filter(
         (t) => t.division === division && normalizeTeamLabel(t.name) === label
     );
-    if (roster.length >= 1) return `id:${roster[0]!.id}`;
+    if (roster.length === 1) return `id:${roster[0]!.id}`;
+    if (roster.length > 1) return `ambig:${division}:${label}`;
     return `name:${division}:${label}`;
 }
 
@@ -883,7 +906,7 @@ function assignmentUsesKey(a: GreedyAssignment, teamKey: string): boolean {
 }
 
 function isRealTeamKey(key: string): boolean {
-    return key.startsWith('id:') || key.startsWith('name:');
+    return key.startsWith('id:');
 }
 
 /** Conflicto de equipo solo misma división y misma identidad (id), no nombres parecidos. */
@@ -1646,7 +1669,8 @@ export function buildMuskizSlotOptimizePayload(
 export function improveScheduleRestGaps(
     matches: Match[],
     _day: MuskizScheduleDayLabel,
-    options?: MuskizSimulatorOptions
+    options?: MuskizSimulatorOptions,
+    scheduleTeams: Team[] = []
 ): Match[] {
     const slotMins = options?.slotDurationMins ?? 35;
     const slots = new Set(
@@ -1664,7 +1688,8 @@ export function improveScheduleRestGaps(
             if (!div) continue;
             for (const t of [m.teamA, m.teamB]) {
                 if (isPlaceholderTeamName(t)) continue;
-                const key = teamScheduleKey(div, t);
+                const key = teamScheduleKey(div, t, scheduleTeams);
+                if (!isRealTeamKey(key)) continue;
                 if (!byTeam.has(key)) byTeam.set(key, []);
                 byTeam.get(key)!.push(timeToMinutes(m.time));
             }
@@ -1901,6 +1926,13 @@ export function buildMuskizDayDraftMatches(
         const list = byDivision.get(div);
         if (!list?.length || list.length < 2) continue;
 
+        const dupNames = findDuplicateNormalizedNamesInDivision(list);
+        if (dupNames.length > 0) {
+            warnings.push(
+                `«${div}»: varios equipos con el mismo nombre normalizado (${dupNames.slice(0, 2).join(', ')}). El calendario los distingue por id de BD.`
+            );
+        }
+
         const groups = computeGroups(list);
         for (const g of groups ?? []) {
             if (g.names.length < MIN_TEAMS_PER_GROUP && list.length > 6) {
@@ -2085,11 +2117,26 @@ function realTeamsOverlapInSameDivision(
     return aTeams.some((t) => bSet.has(t));
 }
 
-export function resolveMatchDivision(match: Match, teams: Team[]): Team['division'] | null {
-    const code = getDivisionCodeFromRound(match.round);
-    if (code && CODE_TO_DIVISION[code]) return CODE_TO_DIVISION[code];
+/** Nombres repetidos (normalizados) dentro de la misma categoría. */
+function findDuplicateNormalizedNamesInDivision(teams: Team[]): string[] {
+    const byLabel = new Map<string, number>();
+    for (const t of teams) {
+        const label = normalizeTeamLabel(t.name);
+        byLabel.set(label, (byLabel.get(label) ?? 0) + 1);
+    }
+    return [...byLabel.entries()].filter(([, n]) => n > 1).map(([label]) => label);
+}
 
-    const linked = teams.filter((t) => t.name === match.teamA || t.name === match.teamB);
+export function resolveMatchDivision(match: Match, teams: Team[]): Team['division'] | null {
+    const fromRound = divisionFromMatchRound(match.round);
+    if (fromRound) return fromRound;
+
+    const labelA = normalizeTeamLabel(match.teamA);
+    const labelB = normalizeTeamLabel(match.teamB);
+    const linked = teams.filter((t) => {
+        const n = normalizeTeamLabel(t.name);
+        return n === labelA || n === labelB;
+    });
     if (linked.length === 0) return null;
     const divisions = new Set(linked.map((t) => t.division));
     if (divisions.size === 1) return linked[0]!.division;
@@ -2103,15 +2150,11 @@ export function resolveTeamForMatchSide(
     teams: Team[]
 ): Team | null {
     const division = resolveMatchDivision(match, teams);
-    const label = normalizeTeamLabel(teamName);
-    const roster = division
-        ? teams.filter((t) => t.division === division && normalizeTeamLabel(t.name) === label)
-        : teams.filter((t) => normalizeTeamLabel(t.name) === label);
-    if (roster.length === 1) return roster[0]!;
-    return null;
+    if (!division) return null;
+    return findTeamInDivision(teams, teamName, division);
 }
 
-/** Misma identidad de equipo en dos partidos (id de BD; nunca por subcadena del nombre). */
+/** Misma identidad de equipo en dos partidos (id de BD + misma categoría; nunca solo por nombre). */
 export function isSameScheduledTeam(
     teamName: string,
     matchA: Match,
@@ -2124,18 +2167,14 @@ export function isSameScheduledTeam(
 
     const keyA = resolveScheduleTeamKey(divA, teamName, teams);
     const keyB = resolveScheduleTeamKey(divB, teamName, teams);
-    if (isRealTeamKey(keyA) && keyA === keyB) return true;
+    if (!isRealTeamKey(keyA) || !isRealTeamKey(keyB)) return false;
+    if (keyA !== keyB) return false;
 
     const teamA = resolveTeamForMatchSide(matchA, teamName, teams);
     const teamB = resolveTeamForMatchSide(matchB, teamName, teams);
     if (teamA && teamB) return teamA.id === teamB.id;
 
-    const label = normalizeTeamLabel(teamName);
-    const inA =
-        normalizeTeamLabel(matchA.teamA) === label || normalizeTeamLabel(matchA.teamB) === label;
-    const inB =
-        normalizeTeamLabel(matchB.teamA) === label || normalizeTeamLabel(matchB.teamB) === label;
-    return inA && inB;
+    return false;
 }
 
 export interface DayGridOptions {
