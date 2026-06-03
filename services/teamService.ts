@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { Team, Player, Match } from '../types';
 import { applySmBitxiBlueFlowGroupSwap } from '../utils/smBitxiBlueFlowGroupSwap';
+import { databaseRowToMatch, matchToDatabaseRow } from './matchDbMapper';
 
 export const teamService = {
     async getTeams(): Promise<Team[]> {
@@ -273,22 +274,7 @@ export const teamService = {
 
 /** Fila `matches` de Supabase → modelo `Match`. */
 export function mapSupabaseMatchRow(m: Record<string, unknown>): Match {
-    const r = m as Record<string, any>;
-    return {
-        id: String(r.id ?? ''),
-        time: String(r.time ?? ''),
-        court: String(r.court ?? ''),
-        teamA: String(r.team_a ?? r.teamA ?? ''),
-        teamB: String(r.team_b ?? r.teamB ?? ''),
-        scoreA: r.score_a ?? r.scoreA ?? null,
-        scoreB: r.score_b ?? r.scoreB ?? null,
-        status: (r.status as Match['status']) ?? 'SCHEDULED',
-        round: r.round ?? undefined,
-        report: r.report ?? undefined,
-        scheduleDay: (r.schedule_day ?? r.scheduleDay) as Match['scheduleDay'] | undefined,
-        isPublic: typeof r.is_public === 'boolean' ? r.is_public : true,
-        referees: r.referees ? String(r.referees) : undefined,
-    };
+    return databaseRowToMatch(m);
 }
 
 export const matchService = {
@@ -322,30 +308,23 @@ export const matchService = {
     },
 
     async saveMatches(matches: Match[]): Promise<void> {
-        // Basic implementation: delete existing and insert new for bracket regen
-        await supabase.from('matches').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Hack to clear
+        await supabase.from('matches').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
         const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
         if (matches.length === 0) return;
 
-        const { error } = await supabase
-            .from('matches')
-            .insert(matches.map(m => ({
-                ...(UUID_RX.test(m.id) ? { id: m.id } : {}),
-                time: m.time,
-                court: m.court,
-                team_a: m.teamA,
-                team_b: m.teamB,
-                score_a: m.scoreA,
-                score_b: m.scoreB,
-                status: m.status,
-                round: m.round,
-                report: m.report,
-                is_public: m.isPublic,
-                referees: m.referees ?? null,
-            })));
+        const teams = await teamService.getTeams();
+        const rows = matches.map((m) => {
+            const row = matchToDatabaseRow(m, teams);
+            if (UUID_RX.test(m.id)) row.id = m.id;
+            return row;
+        });
 
-        if (error) console.error('Error saving matches:', error);
+        const { error } = await supabase.from('matches').insert(rows);
+        if (error) {
+            console.error('Error saving matches:', error);
+            throw new Error(error.message);
+        }
     },
 
     async updateMatchReferees(matchId: string, referees: string): Promise<void> {

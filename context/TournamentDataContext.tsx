@@ -11,6 +11,8 @@ interface TournamentDataContextValue {
   /** Calendario / resultados / clasificación visibles para cualquier visitante (no staff). */
   publicMatchesVisible: boolean;
   persistPublicMatchesVisible: (visible: boolean) => Promise<void>;
+  /** Oficial publicado (`is_public`) sin datos de acta — web y panel responsable. */
+  publicDisplayMatches: Match[];
 }
 
 const TournamentDataContext = createContext<TournamentDataContextValue | undefined>(undefined);

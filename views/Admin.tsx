@@ -1330,6 +1330,33 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
     };
 
+    /** Calendario + resultados + clasificación en la web; actas solo en Admin oficial. */
+    const handlePublishScheduleToWeb = async () => {
+        const merged = mergeWeekendDraftMatches(simDrafts);
+        if (
+            !window.confirm(
+                '¿Publicar el calendario oficial para todo el mundo?\n\n' +
+                    `· Volcará ${merged.length || matches.length} partidos al calendario oficial (BD).\n` +
+                    '· Se verán horarios, resultados y clasificación en Competición.\n' +
+                    '· Las actas NO se muestran al público ni a responsables (solo Admin → Oficial).\n' +
+                    '· Sustituye los partidos actuales en la base de datos.'
+            )
+        ) {
+            return;
+        }
+        try {
+            const source = merged.length > 0 ? merged : matches;
+            const finalized = finalizeMatchesForDatabase(source, { isPublic: true });
+            await onUpdateMatches(finalized);
+            await persistPublicMatchesVisible(true);
+            toast.success(
+                `Calendario publicado (${finalized.length} partidos). Actas y edición de marcadores: Admin → Oficial → Resultados.`
+            );
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'No se pudo publicar en la web.');
+        }
+    };
+
     const handleAddSimulation = async () => {
         const nm = window.prompt('Nombre de la nueva simulación', `Simulación ${simDrafts.length + 1}`);
         if (!nm?.trim()) return;
@@ -3371,7 +3398,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             <div>
                                                 <p className="font-bold text-slate-800 mb-1">Visibilidad pública</p>
                                                 <p className="text-xs text-slate-600 max-w-xl">
-                                                    Controla si Calendario, Resultados y Clasificación aparecen en la web pública.
+                                                    Calendario, resultados y clasificación en la web pública. Las{' '}
+                                                    <strong>actas</strong> solo se generan y descargan aquí (Oficial → Resultados);
+                                                    visitantes y responsables no las ven.
                                                 </p>
                                                 <label className="mt-3 flex items-center gap-3 cursor-pointer">
                                                     <input
@@ -3384,6 +3413,14 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                         Mostrar Calendario, Resultados y Clasificación en la web
                                                     </span>
                                                 </label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handlePublishScheduleToWeb()}
+                                                    className="mt-4 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg flex items-center gap-2"
+                                                >
+                                                    <span className="material-symbols-outlined text-lg">public</span>
+                                                    Publicar calendario en la web
+                                                </button>
                                             </div>
                                         </div>
                                         <div

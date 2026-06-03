@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Team, Match, CategoryLimits } from './types';
 import { Layout } from './components/Layout';
@@ -26,7 +26,14 @@ import { reportOpsAlert } from './services/opsAlertService';
 import { Toaster, toast } from 'sonner';
 import type { User } from '@supabase/supabase-js';
 import { TournamentDataProvider } from './context/TournamentDataContext';
-import { fetchScheduleVisibility, saveScheduleVisibility } from './services/tournamentScheduleService';
+import {
+    fetchCalendarSimulations,
+    fetchScheduleVisibility,
+    mergeWeekendDraftMatches,
+    normalizeCalendarSimulations,
+    saveScheduleVisibility,
+} from './services/tournamentScheduleService';
+import { matchesForPublicSchedule } from './utils/matchPublicView';
 
 const App: React.FC = () => {
   // Category Limits (Admin controlled)
@@ -48,6 +55,8 @@ const App: React.FC = () => {
   const [matches, setMatches] = useState<Match[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [publicMatchesVisible, setPublicMatchesVisible] = useState(false);
+  /** Horarios oficiales en borrador (si aún no están en tabla matches). */
+  const [publicSimulationMatches, setPublicSimulationMatches] = useState<Match[]>([]);
 
   // Auth Manager
   const [user, setUser] = useState<User | null>(null);
@@ -106,6 +115,15 @@ const App: React.FC = () => {
       const dbMatches = await matchService.getMatches();
       setTeams(dbTeams);
       setMatches(dbMatches);
+
+      const simPayload = await fetchCalendarSimulations();
+      if (simPayload?.drafts?.length) {
+        const normalized = normalizeCalendarSimulations(simPayload);
+        setPublicSimulationMatches(mergeWeekendDraftMatches(normalized.drafts));
+      } else {
+        setPublicSimulationMatches([]);
+      }
+
       setDataLoaded(true);
     };
     loadData();
@@ -233,6 +251,12 @@ const App: React.FC = () => {
     }
   };
 
+  const publicDisplayMatches = useMemo(() => {
+    const official = matchesForPublicSchedule(matches);
+    if (official.length > 0) return official;
+    return matchesForPublicSchedule(publicSimulationMatches);
+  }, [matches, publicSimulationMatches]);
+
   const hasApprovedTeam = teams.some(
     (t) => t.managerEmail === user?.email && t.status === 'approved'
   );
@@ -258,6 +282,7 @@ const App: React.FC = () => {
             setCategoryLimits,
             publicMatchesVisible,
             persistPublicMatchesVisible,
+            publicDisplayMatches,
           }}
         >
           <Routes>

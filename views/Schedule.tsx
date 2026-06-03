@@ -6,11 +6,11 @@ import { resolveTeamForMatchSide } from '../services/muskizScheduleSimulator';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 
 export const Schedule: React.FC = () => {
-    const { matches, teams, categoryLimits, publicMatchesVisible } = useTournamentData();
+    const { teams, categoryLimits, publicMatchesVisible, publicDisplayMatches } = useTournamentData();
     const [activeTab, setActiveTab] = useState<'info' | 'calendar' | 'results' | 'standings'>('info');
     const [infoSubTab, setInfoSubTab] = useState<'general' | 'rules'>('general');
 
-    const publicMatches = useMemo(() => matches.filter((m) => m.isPublic === true), [matches]);
+    const publicMatches = publicDisplayMatches;
 
     const [showMapModal, setShowMapModal] = useState(false);
     const [mapQuery, setMapQuery] = useState('');

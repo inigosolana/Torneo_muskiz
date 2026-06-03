@@ -21,14 +21,14 @@ interface ManagerSchedulePanelProps {
 }
 
 export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ managerTeams }) => {
-    const { matches, teams: allTeams, publicMatchesVisible } = useTournamentData();
+    const { publicDisplayMatches, teams: allTeams, publicMatchesVisible } = useTournamentData();
     const [panelTab, setPanelTab] = useState<PanelTab>('results');
     const [teamFilterId, setTeamFilterId] = useState<'all' | string>('all');
     const [calendarDay, setCalendarDay] = useState<MuskizScheduleDayLabel>('Viernes');
 
     const baseMatches = useMemo(
-        () => filterMatchesForManagerTeams(matches, managerTeams),
-        [matches, managerTeams]
+        () => filterMatchesForManagerTeams(publicDisplayMatches, managerTeams),
+        [publicDisplayMatches, managerTeams]
     );
 
     const filteredMatches = useMemo(
@@ -50,7 +50,7 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
         [filteredMatches]
     );
 
-    const scheduleReady = hasPublishedScheduleForManager(matches, managerTeams);
+    const scheduleReady = hasPublishedScheduleForManager(publicDisplayMatches, managerTeams);
     const filterLabel =
         teamFilterId === 'all'
             ? 'Todos mis equipos'
