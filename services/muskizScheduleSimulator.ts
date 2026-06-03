@@ -27,6 +27,7 @@
  * permite hasta 2 consecutivos para reducir PENDIENTE.
  */
 import type { Match, Team } from '../types';
+import { SUNDAY_BREAK_START, SUNDAY_FINAL_START } from '../utils/sundaySchedule';
 
 export type MuskizScheduleDayLabel = 'Viernes' | 'Sábado' | 'Domingo';
 
@@ -985,7 +986,14 @@ export function defaultConfigs(): Record<MuskizScheduleDayLabel, DayConfig> {
     return {
         Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:20', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6 },
         Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:35', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6, lunch: { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END } },
-        Domingo: { label: 'Domingo', dayShort: 'Dom', playStart: '09:35', playEndExclusive: '15:35', courts: DEFAULT_COURTS_4 },
+        Domingo: {
+            label: 'Domingo',
+            dayShort: 'Dom',
+            playStart: '09:35',
+            playEndExclusive: '15:35',
+            courts: DEFAULT_COURTS_4,
+            lunch: { start: SUNDAY_BREAK_START, end: SUNDAY_FINAL_START },
+        },
     };
 }
 
@@ -1000,7 +1008,21 @@ export function getDayScheduleConfig(
             lunch: { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END },
         };
     }
+    if (day === 'Domingo') {
+        configs.Domingo = {
+            ...configs.Domingo,
+            lunch: { start: SUNDAY_BREAK_START, end: SUNDAY_FINAL_START },
+        };
+    }
     return configs[day];
+}
+
+/** Cuadrícula: fila 14:15 (tras semis) + pausa hasta 14:25 + finales en 14:25. */
+function sundayDisplayTimeSlots(slotTimes: string[]): string[] {
+    const out = slotTimes.filter((t) => t !== '14:50');
+    if (!out.includes(SUNDAY_BREAK_START)) out.push(SUNDAY_BREAK_START);
+    if (!out.includes(SUNDAY_FINAL_START)) out.push(SUNDAY_FINAL_START);
+    return out.sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
 }
 
 export function buildFullDayTimeSlots(
@@ -1009,7 +1031,8 @@ export function buildFullDayTimeSlots(
     options?: MuskizSimulatorOptions
 ): string[] {
     const cfg = getDayScheduleConfig(day, options);
-    return generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch).map(minutesToTime);
+    const times = generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch).map(minutesToTime);
+    return day === 'Domingo' ? sundayDisplayTimeSlots(times) : times;
 }
 
 // ─── Planificador greedy ───────────────────────────────────────────────────

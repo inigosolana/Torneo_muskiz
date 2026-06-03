@@ -242,7 +242,9 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                                 colSpan={courts.length}
                                                 className="border border-lime-500 bg-lime-300 text-lime-950 px-2 py-1 text-[10px] font-black uppercase tracking-wide"
                                             >
-                                                Pausa comida: {lunch.start} - {lunch.end}
+                                                {viewDay === 'Domingo'
+                                                    ? `Descanso: ${lunch.start} - ${lunch.end}`
+                                                    : `Pausa comida: ${lunch.start} - ${lunch.end}`}
                                             </td>
                                         </tr>
                                     )}
