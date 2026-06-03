@@ -1,4 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+    clearManagerRecoveryPending,
+    isManagerRecoveryPending,
+    MANAGER_PASSWORD_RESET_PATH,
+    setManagerRecoveryPending,
+} from './managerRecoveryPending';
 
 export type RecoveryBootstrapResult =
     | { status: 'idle' }
@@ -38,6 +44,23 @@ function readAuthErrorFromUrl(): string | null {
     return raw ? decodeAuthError(raw) : null;
 }
 
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForRecoverySession(
+    supabase: SupabaseClient,
+    maxMs = 4000
+): Promise<boolean> {
+    const steps = Math.ceil(maxMs / 100);
+    for (let i = 0; i < steps; i++) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) return true;
+        await sleep(100);
+    }
+    return false;
+}
+
 /**
  * Activa la sesión de recuperación a partir del enlace del correo (hash, token_hash o code).
  */
@@ -51,8 +74,15 @@ export async function bootstrapManagerPasswordRecovery(
         return { status: 'error', message: urlError };
     }
 
-    if (!urlLooksLikePasswordRecovery()) {
+    const fromUrl = urlLooksLikePasswordRecovery();
+    const pending = isManagerRecoveryPending();
+
+    if (!fromUrl && !pending) {
         return { status: 'idle' };
+    }
+
+    if (fromUrl) {
+        setManagerRecoveryPending();
     }
 
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -84,6 +114,15 @@ export async function bootstrapManagerPasswordRecovery(
                         const { data: { session } } = await supabase.auth.getSession();
                         if (!session) throw error;
                     }
+                } else if (pending) {
+                    const gotSession = await waitForRecoverySession(supabase);
+                    if (!gotSession) {
+                        return {
+                            status: 'error',
+                            message:
+                                'No se pudo activar el enlace. Solicita uno nuevo y ábrelo en el mismo navegador (sin incógnito).',
+                        };
+                    }
                 }
             }
         }
@@ -94,11 +133,11 @@ export async function bootstrapManagerPasswordRecovery(
             return {
                 status: 'error',
                 message:
-                    'No se pudo activar el enlace. Solicita uno nuevo desde «¿Has olvidado tu contraseña?» (abre el enlace en el mismo móvil/navegador).',
+                    'No se pudo activar el enlace. Solicita uno nuevo desde el inicio de sesión de responsables.',
             };
         }
 
-        window.history.replaceState({}, '', '/manager-login');
+        window.history.replaceState({}, '', MANAGER_PASSWORD_RESET_PATH);
         return { status: 'ready' };
     } catch (err) {
         const msg =
@@ -109,7 +148,7 @@ export async function bootstrapManagerPasswordRecovery(
             return {
                 status: 'error',
                 message:
-                    'El enlace no se pudo validar en este dispositivo. Vuelve a pulsar «¿Has olvidado tu contraseña?», espera el correo y abre el enlace en el mismo móvil o navegador (sin modo incógnito).',
+                    'El enlace no se pudo validar en este dispositivo. Solicita un correo nuevo y ábrelo en el mismo navegador (sin incógnito).',
             };
         }
         return { status: 'error', message: msg };

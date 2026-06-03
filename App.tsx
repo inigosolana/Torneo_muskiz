@@ -14,6 +14,7 @@ import { Media } from './views/Media';
 import { Information } from './views/Information';
 import { PlayerSelfRegistration } from './views/PlayerSelfRegistration';
 import { ManagerLogin } from './views/ManagerLogin';
+import { ManagerResetPassword } from './views/ManagerResetPassword';
 import { MatchReport } from './views/MatchReport';
 import { MatchReportsBulk } from './views/MatchReportsBulk';
 import { RefereeLogin } from './views/RefereeLogin';
@@ -305,6 +306,7 @@ const App: React.FC = () => {
               <Route path="/schedule" element={<Schedule />} />
               <Route path="/registration" element={<Registration onRegister={addTeams} />} />
               <Route path="/manager-login" element={<ManagerLogin />} />
+              <Route path="/manager-reset-password" element={<ManagerResetPassword />} />
               <Route path="/sponsors" element={<Sponsors />} />
               <Route path="/media" element={<Media />} />
               <Route path="/self-registration" element={<PlayerSelfRegistration onUpdateTeam={updateTeam} />} />

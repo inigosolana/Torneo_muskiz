@@ -1,54 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getEdgeFunctionErrorMessage } from '../utils/invokeEdgeFunction';
 import { isTeamRegistrationClosed } from '../constants/registrationDeadlines';
+import { urlLooksLikePasswordRecovery } from '../utils/managerPasswordRecovery';
 import {
-    bootstrapManagerPasswordRecovery,
-    urlLooksLikePasswordRecovery,
-    type RecoveryBootstrapResult,
-} from '../utils/managerPasswordRecovery';
+    isManagerRecoveryPending,
+    MANAGER_PASSWORD_RESET_PATH,
+} from '../utils/managerRecoveryPending';
 
 export const ManagerLogin: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [recoveryMode, setRecoveryMode] = useState(() => urlLooksLikePasswordRecovery());
-    const [recoveryBootstrap, setRecoveryBootstrap] = useState<RecoveryBootstrapResult>(() =>
-        urlLooksLikePasswordRecovery() ? { status: 'loading' } : { status: 'idle' }
-    );
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [isResetting, setIsResetting] = useState(false);
 
     useEffect(() => {
-        let cancelled = false;
-
-        if (urlLooksLikePasswordRecovery()) {
-            setRecoveryMode(true);
-            setRecoveryBootstrap({ status: 'loading' });
-            void bootstrapManagerPasswordRecovery(supabase).then((result) => {
-                if (cancelled) return;
-                setRecoveryBootstrap(result);
-                if (result.status === 'ready') setRecoveryMode(true);
-                if (result.status === 'error') setRecoveryMode(true);
-            });
+        if (urlLooksLikePasswordRecovery() || isManagerRecoveryPending()) {
+            const dest = `${MANAGER_PASSWORD_RESET_PATH}${location.search}${location.hash}`;
+            navigate(dest, { replace: true });
         }
-
-        const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-            if (event === 'PASSWORD_RECOVERY') {
-                setRecoveryMode(true);
-                setRecoveryBootstrap({ status: 'ready' });
-            }
-        });
-
-        return () => {
-            cancelled = true;
-            sub.subscription.unsubscribe();
-        };
-    }, []);
+    }, [navigate, location.search, location.hash]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -118,127 +92,6 @@ export const ManagerLogin: React.FC = () => {
             setIsLoading(false);
         }
     };
-
-    const handleSetNewPassword = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (newPassword.length < 6) {
-            toast.error('La contraseña debe tener al menos 6 caracteres.');
-            return;
-        }
-        if (newPassword !== confirmPassword) {
-            toast.error('Las contraseñas no coinciden.');
-            return;
-        }
-
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            toast.error('El enlace ha caducado o no es válido. Solicita uno nuevo con «¿Has olvidado tu contraseña?».');
-            return;
-        }
-
-        setIsResetting(true);
-        const { error } = await supabase.auth.updateUser({ password: newPassword });
-        setIsResetting(false);
-
-        if (error) {
-            toast.error(error.message || 'No se pudo guardar la contraseña. Solicita un nuevo enlace.');
-            return;
-        }
-
-        toast.success('Contraseña actualizada. Ya puedes entrar con tu nueva contraseña.');
-        setRecoveryMode(false);
-        setRecoveryBootstrap({ status: 'idle' });
-        setNewPassword('');
-        setConfirmPassword('');
-        window.history.replaceState({}, '', '/manager-login');
-        await supabase.auth.signOut();
-    };
-
-    if (recoveryMode) {
-        const recoveryLoading = recoveryBootstrap.status === 'loading';
-        const recoveryError =
-            recoveryBootstrap.status === 'error' ? recoveryBootstrap.message : null;
-
-        return (
-            <div className="min-h-[80vh] flex flex-col items-center justify-center bg-background-light dark:bg-background-dark p-4">
-                <div className="w-full max-w-md bg-white dark:bg-surface-dark p-8 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/5">
-                    <div className="text-center mb-6">
-                        <span className="material-symbols-outlined text-4xl text-primary">lock_reset</span>
-                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mt-3">Nueva contraseña</h2>
-                        <p className="text-slate-500 text-sm mt-2">
-                            Elige una contraseña nueva para tu cuenta de responsable.
-                        </p>
-                    </div>
-
-                    {recoveryLoading && (
-                        <div className="flex flex-col items-center gap-3 py-8">
-                            <span className="material-symbols-outlined animate-spin text-4xl text-primary">
-                                progress_activity
-                            </span>
-                            <p className="text-slate-500 text-sm text-center">Activando enlace seguro…</p>
-                        </div>
-                    )}
-
-                    {recoveryError && !recoveryLoading && (
-                        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900/50 p-4">
-                            <p className="text-red-800 dark:text-red-200 text-sm leading-relaxed">{recoveryError}</p>
-                            <button
-                                type="button"
-                                className="mt-3 text-sm font-bold text-primary hover:underline"
-                                onClick={() => {
-                                    setRecoveryMode(false);
-                                    setRecoveryBootstrap({ status: 'idle' });
-                                    window.history.replaceState({}, '', '/manager-login');
-                                }}
-                            >
-                                Volver al inicio de sesión
-                            </button>
-                        </div>
-                    )}
-
-                    {!recoveryLoading && !recoveryError && (
-                    <form onSubmit={handleSetNewPassword} className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
-                                Nueva contraseña
-                            </label>
-                            <input
-                                type="password"
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary"
-                                autoComplete="new-password"
-                                required
-                                minLength={6}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
-                                Repetir contraseña
-                            </label>
-                            <input
-                                type="password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary"
-                                autoComplete="new-password"
-                                required
-                                minLength={6}
-                            />
-                        </div>
-                        <button
-                            type="submit"
-                            disabled={isResetting}
-                            className="w-full bg-primary text-background-dark font-bold py-3 rounded-xl disabled:opacity-60"
-                        >
-                            {isResetting ? 'Guardando…' : 'Guardar contraseña'}
-                        </button>
-                    </form>
-                    )}
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="min-h-[80vh] flex flex-col items-center justify-center bg-background-light dark:bg-background-dark p-4">

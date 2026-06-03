@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const redirectTo = `${siteUrl()}/manager-login`;
+    const redirectTo = `${siteUrl()}/manager-reset-password`;
 
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: "recovery",

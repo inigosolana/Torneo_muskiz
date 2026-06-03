@@ -36,7 +36,8 @@ $noJwt = @(
   "notify-player-doc-manager-email",
   "notify-ops-alert",
   "configure-telegram-webhooks",
-  "request-manager-password-reset"
+  "request-manager-password-reset",
+  "notify-manager-password-changed"
 )
 foreach ($name in $noJwt) {
   npx --yes supabase@latest functions deploy $name --project-ref $ProjectRef --no-verify-jwt

@@ -49,6 +49,7 @@ jobs:
             notify-ops-alert
             configure-telegram-webhooks
             request-manager-password-reset
+            notify-manager-password-changed
           )
 
           for name in "${NO_JWT[@]}"; do
