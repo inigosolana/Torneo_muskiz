@@ -13,6 +13,8 @@ import {
     getMatchGridColors,
 } from '../utils/matchGridColors';
 import { downloadTournamentGridExcel, printTournamentGridPdf } from '../utils/tournamentGridExport';
+import { getMatchPhaseDisplayLabel } from '../utils/matchPhaseLabel';
+import { isEliminationMatch } from '../utils/finalPhaseBracket';
 
 type ViewMode = 'day' | 'category';
 
@@ -29,9 +31,13 @@ interface CompetitionCalendarViewsProps {
     /** Descarga ZIP de actas DOCX de todos los partidos de una categoría. */
     onDownloadCategoryActas?: (division: Team['division'], matches: Match[]) => void;
     actasExporting?: boolean;
-    /** Excel / PDF por día (simulación). */
+    /** Excel / PDF por día (simulación o responsables). */
     showDayExport?: boolean;
     exportFileNamePrefix?: string;
+    /** Resalta en la cuadrícula los partidos de estos equipos. */
+    highlightTeamNames?: string[];
+    /** Solo muestra días donde hay al menos un partido de highlightTeamNames (si está definido). */
+    onlyDaysWithHighlightTeams?: boolean;
     emptyMessage?: string;
 }
 
@@ -87,6 +93,8 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
     actasExporting,
     showDayExport = false,
     exportFileNamePrefix = 'calendario_simulacion',
+    highlightTeamNames,
+    onlyDaysWithHighlightTeams = false,
     emptyMessage = 'No hay partidos para mostrar.',
 }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('day');
@@ -95,6 +103,16 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
     const byDay = useMemo(() => groupByDay(matches), [matches]);
     const byCategory = useMemo(() => groupByCategory(matches, teams), [matches, teams]);
     const totalByDay = WEEKEND_SCHEDULE_DAYS.reduce((n, d) => n + byDay[d].length, 0);
+    const highlightSet = useMemo(
+        () => new Set((highlightTeamNames ?? []).map((n) => n.trim())),
+        [highlightTeamNames]
+    );
+    const daysToShow = useMemo(() => {
+        if (!onlyDaysWithHighlightTeams || highlightSet.size === 0) return WEEKEND_SCHEDULE_DAYS;
+        return WEEKEND_SCHEDULE_DAYS.filter((day) =>
+            byDay[day].some((m) => highlightSet.has(m.teamA) || highlightSet.has(m.teamB))
+        );
+    }, [byDay, highlightSet, onlyDaysWithHighlightTeams]);
 
     if (matches.length === 0) {
         return (
@@ -145,9 +163,17 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                 </div>
             </div>
 
+            {highlightSet.size > 0 && (
+                <p className="text-[11px] text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-sm">info</span>
+                    Partidos con <strong>borde verde</strong> son de tus equipos. La línea inferior indica la{' '}
+                    <strong>fase o ronda</strong> (grupos, semifinal, final…).
+                </p>
+            )}
+
             {viewMode === 'day' && (
                 <div className="space-y-8">
-                    {WEEKEND_SCHEDULE_DAYS.map((day) => {
+                    {daysToShow.map((day) => {
                         const dayMatches = byDay[day];
                         return (
                             <section key={day} className="rounded-xl border border-slate-200 overflow-hidden">
@@ -203,8 +229,56 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                         fixedDay={day}
                                         fillEmptySlots
                                         readOnly={gridReadOnly}
+                                        highlightTeamNames={highlightTeamNames}
                                         onUpdateMatch={gridReadOnly ? undefined : onUpdateMatch}
                                     />
+                                    {highlightSet.size > 0 &&
+                                        (() => {
+                                            const mineElim = dayMatches
+                                                .filter(
+                                                    (m) =>
+                                                        (highlightSet.has(m.teamA) ||
+                                                            highlightSet.has(m.teamB)) &&
+                                                        isEliminationMatch(
+                                                            m,
+                                                            resolveMatchDivision(m, teams),
+                                                            teams
+                                                        )
+                                                )
+                                                .sort((a, b) => a.time.localeCompare(b.time));
+                                            if (mineElim.length === 0) return null;
+                                            return (
+                                                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2.5">
+                                                    <p className="text-[10px] font-black uppercase text-amber-900 mb-2 flex items-center gap-1">
+                                                        <span className="material-symbols-outlined text-sm">
+                                                            emoji_events
+                                                        </span>
+                                                        Fase final y eliminatorias — tus equipos ({day})
+                                                    </p>
+                                                    <ul className="space-y-1.5">
+                                                        {mineElim.map((m) => (
+                                                            <li
+                                                                key={m.id}
+                                                                className="text-[11px] text-slate-800 flex flex-wrap gap-x-2 gap-y-0.5"
+                                                            >
+                                                                <span className="font-mono font-bold text-slate-600">
+                                                                    {m.time}
+                                                                </span>
+                                                                <span className="font-bold">{m.court}</span>
+                                                                <span>
+                                                                    {m.teamA}{' '}
+                                                                    <span className="text-slate-400">vs</span>{' '}
+                                                                    {m.teamB}
+                                                                </span>
+                                                                <span className="text-amber-800 font-bold">
+                                                                    {getMatchPhaseDisplayLabel(m.round)}
+                                                                </span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            );
+                                        })()}
                                     {dayMatches.length === 0 && (
                                         <p className="text-xs text-slate-400 text-center mt-2">
                                             Sin partidos aún — cuadrícula vacía hasta las 21:00 para planificar.
@@ -308,8 +382,8 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                                         <td className="px-4 py-2 text-xs">{m.court}</td>
                                                         <td className="px-4 py-2 font-semibold text-slate-800">{m.teamA}</td>
                                                         <td className="px-4 py-2 font-semibold text-slate-800">{m.teamB}</td>
-                                                        <td className="px-4 py-2 text-[10px] text-slate-500 max-w-[160px] truncate" title={m.round}>
-                                                            {(m.round ?? '').split('·').slice(2).join('·').trim() || m.round}
+                                                        <td className="px-4 py-2 text-[10px] font-bold text-slate-600 max-w-[200px] truncate" title={m.round}>
+                                                            {getMatchPhaseDisplayLabel(m.round) || m.round}
                                                         </td>
                                                     </tr>
                                                     );

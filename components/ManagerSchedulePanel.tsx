@@ -64,6 +64,13 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
 
     const exportBaseName = `horarios_muskiz_${filterLabel.replace(/\s+/g, '_').slice(0, 40)}`;
 
+    const highlightTeamNames = useMemo(() => teamsToShow.map((t) => t.name), [teamsToShow]);
+
+    const fullDayGridMatches = useMemo(
+        () => publicDisplayMatches.filter((m) => m.isPublic),
+        [publicDisplayMatches]
+    );
+
     const handleExportExcel = () => {
         if (filteredMatches.length === 0) return;
         downloadManagerScheduleExcel(filteredMatches, allTeams, exportBaseName);
@@ -188,15 +195,21 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
             {panelTab === 'calendar' && (
                 <div className="space-y-3">
                     <p className="text-xs text-slate-500">
-                        Misma cuadrícula que el calendario oficial, con <strong>solo tus partidos</strong> ({filterLabel}).
+                        Cuadrícula oficial del torneo (todos los campos). Tus partidos van con{' '}
+                        <strong>borde verde</strong>; en cada celda verás la <strong>fase o ronda</strong>. Puedes
+                        descargar cada día en Excel ({filterLabel}).
                     </p>
                     <CompetitionCalendarViews
-                        matches={filteredMatches}
+                        matches={fullDayGridMatches}
                         teams={allTeams}
                         readOnly
                         readOnlyAudience="public"
-                        title={`Mis partidos — ${filterLabel}`}
-                        emptyMessage="No hay partidos publicados con el filtro actual."
+                        title={`Calendario — ${filterLabel}`}
+                        highlightTeamNames={highlightTeamNames}
+                        onlyDaysWithHighlightTeams
+                        showDayExport
+                        exportFileNamePrefix={exportBaseName}
+                        emptyMessage="No hay calendario publicado para tus equipos."
                     />
                 </div>
             )}

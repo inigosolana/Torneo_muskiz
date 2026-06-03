@@ -1,4 +1,5 @@
 import type { Match, Team } from '../types';
+import { resolveTeamShield } from '../constants/teamShields';
 import { DIVISION_CODE, normalizeTeamLabel, resolveMatchDivision } from '../services/muskizScheduleSimulator';
 import { getTeamsInDivisionGroup } from './groupMatchSync';
 
@@ -47,7 +48,7 @@ export function computeStandings(
     roster.forEach((t) => {
         stats[t.name] = {
             name: t.name,
-            logoUrl: t.logoUrl,
+            logoUrl: resolveTeamShield(t.name, t.logoUrl),
             played: 0,
             won: 0,
             lost: 0,
@@ -61,8 +62,28 @@ export function computeStandings(
         if (m.status !== 'FINISHED' || m.scoreA === null || m.scoreB === null) return;
         if (!rosterNames.has(m.teamA) || !rosterNames.has(m.teamB)) return;
 
-        if (!stats[m.teamA]) stats[m.teamA] = { name: m.teamA, played: 0, won: 0, lost: 0, gf: 0, ga: 0, points: 0 };
-        if (!stats[m.teamB]) stats[m.teamB] = { name: m.teamB, played: 0, won: 0, lost: 0, gf: 0, ga: 0, points: 0 };
+        if (!stats[m.teamA])
+            stats[m.teamA] = {
+                name: m.teamA,
+                logoUrl: resolveTeamShield(m.teamA),
+                played: 0,
+                won: 0,
+                lost: 0,
+                gf: 0,
+                ga: 0,
+                points: 0,
+            };
+        if (!stats[m.teamB])
+            stats[m.teamB] = {
+                name: m.teamB,
+                logoUrl: resolveTeamShield(m.teamB),
+                played: 0,
+                won: 0,
+                lost: 0,
+                gf: 0,
+                ga: 0,
+                points: 0,
+            };
 
         stats[m.teamA].played += 1;
         stats[m.teamA].gf += m.scoreA;

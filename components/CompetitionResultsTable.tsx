@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import type { BeachSetScores, Match } from '../types';
+import type { BeachSetScores, Match, Team } from '../types';
+import { resolveTeamShield } from '../constants/teamShields';
+import { TeamNameWithShield } from './TeamShield';
 import { inferMatchScheduleDay, WEEKEND_SCHEDULE_DAYS } from '../services/tournamentScheduleService';
 import type { MuskizScheduleDayLabel } from '../services/muskizScheduleSimulator';
 import { getMatchSetsDisplay } from '../utils/beachSetScoring';
@@ -29,6 +31,8 @@ function sortMatchesBySchedule(matches: Match[]): Match[] {
 
 interface CompetitionResultsTableProps {
     matches: Match[];
+    /** Para resolver escudos por nombre de equipo inscrito. */
+    teams?: Team[];
     previewMode: 'official' | 'simulation';
     onUpdateSetScores?: (matchId: string, setScores: BeachSetScores) => void;
     onOpenReport?: (match: Match) => void;
@@ -42,6 +46,7 @@ interface CompetitionResultsTableProps {
 /** Resultados con horario; marcador visible = sets ganados (2:0, 2:1, 0:2, 1:2). */
 export const CompetitionResultsTable: React.FC<CompetitionResultsTableProps> = ({
     matches,
+    teams = [],
     previewMode,
     onUpdateSetScores,
     onOpenReport,
@@ -51,6 +56,15 @@ export const CompetitionResultsTable: React.FC<CompetitionResultsTableProps> = (
     hideActions = false,
 }) => {
     const sorted = useMemo(() => sortMatchesBySchedule(matches), [matches]);
+    const logoByTeamName = useMemo(() => {
+        const map = new Map<string, string | undefined>();
+        for (const t of teams) {
+            map.set(t.name, resolveTeamShield(t.name, t.logoUrl));
+        }
+        return map;
+    }, [teams]);
+    const shieldFor = (name: string) =>
+        logoByTeamName.get(name) ?? resolveTeamShield(name);
     const isSim = previewMode === 'simulation';
     const canEditScores = Boolean(onUpdateSetScores) && !hideActions;
     const canActa = Boolean(onOpenReport || onNavigateActa) && !hideActions;
@@ -100,8 +114,12 @@ export const CompetitionResultsTable: React.FC<CompetitionResultsTableProps> = (
                                         </span>
                                     </td>
                                     <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{match.court}</td>
-                                    <td className="px-3 py-2.5 font-semibold text-slate-800 max-w-[140px] truncate" title={match.teamA}>
-                                        {match.teamA}
+                                    <td className="px-3 py-2.5 font-semibold text-slate-800 max-w-[180px]" title={match.teamA}>
+                                        <TeamNameWithShield
+                                            teamName={match.teamA}
+                                            logoUrl={shieldFor(match.teamA)}
+                                            nameClassName="font-semibold text-slate-800"
+                                        />
                                     </td>
                                     <td className="px-3 py-2.5 text-center">
                                         {canEditScores ? (
@@ -123,8 +141,12 @@ export const CompetitionResultsTable: React.FC<CompetitionResultsTableProps> = (
                                             <span className="text-base font-black tabular-nums text-slate-700">{display}</span>
                                         )}
                                     </td>
-                                    <td className="px-3 py-2.5 font-semibold text-slate-800 max-w-[140px] truncate" title={match.teamB}>
-                                        {match.teamB}
+                                    <td className="px-3 py-2.5 font-semibold text-slate-800 max-w-[180px]" title={match.teamB}>
+                                        <TeamNameWithShield
+                                            teamName={match.teamB}
+                                            logoUrl={shieldFor(match.teamB)}
+                                            nameClassName="font-semibold text-slate-800"
+                                        />
                                     </td>
                                     <td className="px-3 py-2.5 text-[10px] text-slate-500 max-w-[120px] truncate" title={match.round}>
                                         {phaseLabel}

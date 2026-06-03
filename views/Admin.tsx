@@ -53,6 +53,7 @@ import {
 } from '../services/muskizScheduleHybrid';
 import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
 import { CompetitionResultsTable } from '../components/CompetitionResultsTable';
+import { TeamNameWithShield } from '../components/TeamShield';
 import { CompetitionDraftPicker } from '../components/CompetitionDraftPicker';
 import { saveBulkActasPayload } from '../utils/bulkActasSession';
 import { downloadTournamentGridExcel, printTournamentGridPdf } from '../utils/tournamentGridExport';
@@ -4086,6 +4087,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                         </div>
                                         <CompetitionResultsTable
                                             matches={resultsFilteredMatches}
+                                            teams={teams}
                                             previewMode={compArenaMode}
                                             onUpdateSetScores={
                                                 compArenaMode === 'official'
@@ -4268,7 +4270,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             className={`hover:bg-slate-50/50 ${index < 4 ? 'bg-green-50/30' : ''}`}
                                                         >
                                                             <td className="px-6 py-4 font-mono text-slate-400">{index + 1}</td>
-                                                            <td className="px-6 py-4 font-bold text-slate-800">{team.name}</td>
+                                                            <td className="px-6 py-4 font-bold text-slate-800">
+                                                                <TeamNameWithShield
+                                                                    teamName={team.name}
+                                                                    logoUrl={team.logoUrl}
+                                                                    nameClassName="font-bold text-slate-800"
+                                                                />
+                                                            </td>
                                                             <td className="px-4 py-4 text-center">{team.played}</td>
                                                             <td className="px-4 py-4 text-center font-medium text-green-600">{team.won}</td>
                                                             <td className="px-4 py-4 text-center text-slate-500">{team.gf}</td>

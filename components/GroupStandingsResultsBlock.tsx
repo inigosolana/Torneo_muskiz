@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import type { Match, Team } from '../types';
 import { CompetitionResultsTable } from './CompetitionResultsTable';
+import { TeamNameWithShield } from './TeamShield';
 import { computeStandings, filterMatchesForDivisionGroup } from '../utils/computeStandings';
 import { getTeamsInDivisionGroup } from '../utils/groupMatchSync';
 
@@ -93,7 +94,11 @@ export const GroupStandingsResultsBlock: React.FC<GroupStandingsResultsBlockProp
                                         >
                                             <td className="px-6 py-4 font-mono text-slate-400">{index + 1}</td>
                                             <td className="px-6 py-4 font-bold text-slate-800 dark:text-white">
-                                                {team.name}
+                                                <TeamNameWithShield
+                                                    teamName={team.name}
+                                                    logoUrl={team.logoUrl}
+                                                    nameClassName="font-bold text-slate-800 dark:text-white"
+                                                />
                                                 {isMine && (
                                                     <span className="ml-2 text-[9px] font-black uppercase text-primary">
                                                         Tu equipo
@@ -128,6 +133,7 @@ export const GroupStandingsResultsBlock: React.FC<GroupStandingsResultsBlockProp
                 </h4>
                 <CompetitionResultsTable
                     matches={tableMatches}
+                    teams={teams}
                     previewMode="official"
                     hideActions
                     emptyMessage={

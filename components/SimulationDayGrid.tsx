@@ -10,6 +10,7 @@ import {
     collectGridLegendEntries,
     getMatchGridColors,
 } from '../utils/matchGridColors';
+import { getMatchPhaseDisplayLabel } from '../utils/matchPhaseLabel';
 
 const DAY_LABELS: MuskizScheduleDayLabel[] = ['Viernes', 'Sábado', 'Domingo'];
 const MATCH_DRAG_MIME = 'application/x-torneo-match-id';
@@ -96,6 +97,8 @@ interface SimulationDayGridProps {
     readOnly?: boolean;
     /** Callback cuando el usuario edita o arrastra un partido (solo modo Simulación). */
     onUpdateMatch?: (matchId: string, patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>) => void;
+    /** Resalta partidos de estos equipos (panel responsables). */
+    highlightTeamNames?: string[];
 }
 
 // ─── Componente principal ──────────────────────────────────────────────────
@@ -105,8 +108,13 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
     fillEmptySlots = true,
     readOnly = false,
     onUpdateMatch,
+    highlightTeamNames,
 }) => {
     const editable = !readOnly && Boolean(onUpdateMatch);
+    const highlightSet = useMemo(
+        () => new Set((highlightTeamNames ?? []).map((n) => n.trim())),
+        [highlightTeamNames]
+    );
     const SLOT_MINS = 35;
     const [day, setDay] = useState<MuskizScheduleDayLabel>(fixedDay ?? 'Sábado');
     const viewDay = fixedDay ?? day;
@@ -265,10 +273,14 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                             const m = grid[t]?.[c] ?? null;
                                             const isDropTarget = dropTarget?.time === t && dropTarget?.court === c;
                                             const colors = getMatchGridColors(m?.round);
+                                            const isMine =
+                                                m &&
+                                                highlightSet.size > 0 &&
+                                                (highlightSet.has(m.teamA) || highlightSet.has(m.teamB));
                                             return (
                                                 <td
                                                     key={c}
-                                                    className={`border border-slate-200 align-top p-0.5 min-h-[48px] h-[48px] max-w-[140px] transition-colors ${isDropTarget ? 'bg-teal-100 border-2 border-teal-400' : m ? colors.cell : editable ? 'bg-slate-50/80' : ''}`}
+                                                    className={`border border-slate-200 align-top p-0.5 min-h-[48px] h-[48px] max-w-[140px] transition-colors ${isDropTarget ? 'bg-teal-100 border-2 border-teal-400' : m ? colors.cell : editable ? 'bg-slate-50/80' : ''} ${isMine ? 'ring-2 ring-inset ring-teal-500' : ''}`}
                                                     onDragEnter={(e) => {
                                                         if (!editable) return;
                                                         e.preventDefault();
@@ -317,8 +329,11 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                                             <div className="text-[9px] font-semibold text-slate-800 line-clamp-2">
                                                                 {m.teamA} <span className="text-slate-400">vs</span> {m.teamB}
                                                             </div>
-                                                            <div className="mt-0.5 text-[8px] text-slate-500 truncate" title={m.round}>
-                                                                {(m.round ?? '').split('·').slice(2).join('·').trim()}
+                                                            <div
+                                                                className={`mt-0.5 text-[8px] truncate font-bold ${/\b(semi|final|cuarto|repesca)\b/i.test(m.round ?? '') ? 'text-amber-800' : 'text-slate-600'}`}
+                                                                title={m.round}
+                                                            >
+                                                                {getMatchPhaseDisplayLabel(m.round)}
                                                             </div>
                                                             {editable && (
                                                                 <div className="mt-0.5 text-[7px] text-slate-400 flex items-center gap-0.5">

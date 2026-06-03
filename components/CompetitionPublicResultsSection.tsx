@@ -80,6 +80,7 @@ export const CompetitionPublicResultsSection: React.FC<CompetitionPublicResultsS
             </div>
             <CompetitionResultsTable
                 matches={filtered}
+                teams={teams}
                 previewMode="official"
                 hideActions
                 emptyMessage={
