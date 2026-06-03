@@ -7,4 +7,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error('Faltan variables de entorno VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY. Revisa tu archivo .env');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+/**
+ * implicit: los enlaces de recuperación se generan en el servidor (generateLink) y
+ * vuelven con tokens en el hash (#access_token). PKCE exige code_verifier en el
+ * mismo navegador que inició el flujo, y falla al abrir el correo.
+ */
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+        detectSessionInUrl: true,
+        flowType: 'implicit',
+        persistSession: true,
+    },
+});

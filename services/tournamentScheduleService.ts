@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { applySmBitxiBlueFlowSimulationPayload } from '../utils/smBitxiBlueFlowGroupSwap';
 import type { CalendarDraft, CalendarSimulationsPayload, Match, ScheduleVisibilityPayload } from '../types';
 import type { MuskizScheduleDayLabel } from './muskizScheduleSimulator';
 
@@ -176,13 +177,14 @@ export async function fetchCalendarSimulations(): Promise<CalendarSimulationsPay
     }
     const v = data?.value as CalendarSimulationsPayload | undefined;
     if (!v || !Array.isArray(v.drafts) || v.drafts.length === 0) return null;
-    return v;
+    return applySmBitxiBlueFlowSimulationPayload(v);
 }
 
 export async function saveCalendarSimulations(payload: CalendarSimulationsPayload): Promise<void> {
+    const normalized = applySmBitxiBlueFlowSimulationPayload(payload);
     const { error } = await supabase
         .from('site_content')
-        .upsert({ key: CALENDAR_SIMULATIONS_KEY, value: payload }, { onConflict: 'key' });
+        .upsert({ key: CALENDAR_SIMULATIONS_KEY, value: normalized }, { onConflict: 'key' });
     if (error) throw new Error(error.message);
 }
 

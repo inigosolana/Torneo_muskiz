@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { Team, Player, Match } from '../types';
+import { applySmBitxiBlueFlowGroupSwap } from '../utils/smBitxiBlueFlowGroupSwap';
 
 export const teamService = {
     async getTeams(): Promise<Team[]> {
@@ -49,7 +50,7 @@ export const teamService = {
         };
 
         // Map snake_case from DB to camelCase in app
-        return data.map((t: any) => ({
+        const mapped = data.map((t: any) => ({
             id: t.id,
             name: t.name,
             city: t.city,
@@ -82,6 +83,7 @@ export const teamService = {
                 signatureUrl: p.signature_url
             }))
         }));
+        return applySmBitxiBlueFlowGroupSwap(mapped);
     },
 
     async registerTeam(team: Partial<Team>, receiptFile?: File | null): Promise<Team | null> {

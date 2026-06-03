@@ -4,37 +4,50 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { getEdgeFunctionErrorMessage } from '../utils/invokeEdgeFunction';
 import { isTeamRegistrationClosed } from '../constants/registrationDeadlines';
-
-function isPasswordRecoveryUrl(): boolean {
-    if (typeof window === 'undefined') return false;
-    const hash = window.location.hash.replace(/^#/, '');
-    const params = new URLSearchParams(hash);
-    if (params.get('type') === 'recovery') return true;
-    return window.location.search.includes('type=recovery');
-}
+import {
+    bootstrapManagerPasswordRecovery,
+    urlLooksLikePasswordRecovery,
+    type RecoveryBootstrapResult,
+} from '../utils/managerPasswordRecovery';
 
 export const ManagerLogin: React.FC = () => {
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [recoveryMode, setRecoveryMode] = useState(false);
+    const [recoveryMode, setRecoveryMode] = useState(() => urlLooksLikePasswordRecovery());
+    const [recoveryBootstrap, setRecoveryBootstrap] = useState<RecoveryBootstrapResult>(() =>
+        urlLooksLikePasswordRecovery() ? { status: 'loading' } : { status: 'idle' }
+    );
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isResetting, setIsResetting] = useState(false);
 
     useEffect(() => {
-        if (isPasswordRecoveryUrl()) {
+        let cancelled = false;
+
+        if (urlLooksLikePasswordRecovery()) {
             setRecoveryMode(true);
+            setRecoveryBootstrap({ status: 'loading' });
+            void bootstrapManagerPasswordRecovery(supabase).then((result) => {
+                if (cancelled) return;
+                setRecoveryBootstrap(result);
+                if (result.status === 'ready') setRecoveryMode(true);
+                if (result.status === 'error') setRecoveryMode(true);
+            });
         }
 
         const { data: sub } = supabase.auth.onAuthStateChange((event) => {
             if (event === 'PASSWORD_RECOVERY') {
                 setRecoveryMode(true);
+                setRecoveryBootstrap({ status: 'ready' });
             }
         });
 
-        return () => sub.subscription.unsubscribe();
+        return () => {
+            cancelled = true;
+            sub.subscription.unsubscribe();
+        };
     }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -117,6 +130,12 @@ export const ManagerLogin: React.FC = () => {
             return;
         }
 
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            toast.error('El enlace ha caducado o no es válido. Solicita uno nuevo con «¿Has olvidado tu contraseña?».');
+            return;
+        }
+
         setIsResetting(true);
         const { error } = await supabase.auth.updateUser({ password: newPassword });
         setIsResetting(false);
@@ -128,6 +147,7 @@ export const ManagerLogin: React.FC = () => {
 
         toast.success('Contraseña actualizada. Ya puedes entrar con tu nueva contraseña.');
         setRecoveryMode(false);
+        setRecoveryBootstrap({ status: 'idle' });
         setNewPassword('');
         setConfirmPassword('');
         window.history.replaceState({}, '', '/manager-login');
@@ -135,6 +155,10 @@ export const ManagerLogin: React.FC = () => {
     };
 
     if (recoveryMode) {
+        const recoveryLoading = recoveryBootstrap.status === 'loading';
+        const recoveryError =
+            recoveryBootstrap.status === 'error' ? recoveryBootstrap.message : null;
+
         return (
             <div className="min-h-[80vh] flex flex-col items-center justify-center bg-background-light dark:bg-background-dark p-4">
                 <div className="w-full max-w-md bg-white dark:bg-surface-dark p-8 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/5">
@@ -145,6 +169,34 @@ export const ManagerLogin: React.FC = () => {
                             Elige una contraseña nueva para tu cuenta de responsable.
                         </p>
                     </div>
+
+                    {recoveryLoading && (
+                        <div className="flex flex-col items-center gap-3 py-8">
+                            <span className="material-symbols-outlined animate-spin text-4xl text-primary">
+                                progress_activity
+                            </span>
+                            <p className="text-slate-500 text-sm text-center">Activando enlace seguro…</p>
+                        </div>
+                    )}
+
+                    {recoveryError && !recoveryLoading && (
+                        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900/50 p-4">
+                            <p className="text-red-800 dark:text-red-200 text-sm leading-relaxed">{recoveryError}</p>
+                            <button
+                                type="button"
+                                className="mt-3 text-sm font-bold text-primary hover:underline"
+                                onClick={() => {
+                                    setRecoveryMode(false);
+                                    setRecoveryBootstrap({ status: 'idle' });
+                                    window.history.replaceState({}, '', '/manager-login');
+                                }}
+                            >
+                                Volver al inicio de sesión
+                            </button>
+                        </div>
+                    )}
+
+                    {!recoveryLoading && !recoveryError && (
                     <form onSubmit={handleSetNewPassword} className="space-y-4">
                         <div>
                             <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
@@ -182,6 +234,7 @@ export const ManagerLogin: React.FC = () => {
                             {isResetting ? 'Guardando…' : 'Guardar contraseña'}
                         </button>
                     </form>
+                    )}
                 </div>
             </div>
         );
