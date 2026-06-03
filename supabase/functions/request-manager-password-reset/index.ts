@@ -18,6 +18,90 @@ function siteUrl(): string {
   return (fromEnv ?? DEFAULT_SITE_URL).replace(/\/$/, "");
 }
 
+/** Yahoo Mail, AOL, etc.: Resend a veces rechaza o Yahoo filtra sin SPF/DKIM al destino. */
+function isYahooFamilyMailbox(email: string): boolean {
+  return /@(yahoo\.|ymail\.|rocketmail\.|aol\.|aim\.)/i.test(email);
+}
+
+function parseResendError(body: string): string {
+  try {
+    const j = JSON.parse(body) as { message?: string; name?: string };
+    return j.message ?? body;
+  } catch {
+    return body;
+  }
+}
+
+/** Envío nativo de Supabase Auth (plantilla de recuperación del proyecto). */
+async function sendRecoveryViaSupabaseAuth(
+  managerEmail: string,
+  redirectTo: string,
+): Promise<{ ok: boolean; detail?: string }> {
+  const anonKey =
+    Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("VITE_SUPABASE_ANON_KEY");
+  if (!SUPABASE_URL || !anonKey) {
+    return { ok: false, detail: "missing anon key" };
+  }
+
+  const recoverRes = await fetch(
+    `${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: anonKey,
+      },
+      body: JSON.stringify({ email: managerEmail }),
+    },
+  );
+
+  if (recoverRes.ok) return { ok: true };
+  const detail = await recoverRes.text();
+  console.error("Supabase recover error:", detail);
+  return { ok: false, detail };
+}
+
+async function sendRecoveryViaResend(
+  managerEmail: string,
+  recoveryLink: string,
+): Promise<{ ok: boolean; detail?: string }> {
+  const resendRes = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: FROM_EMAIL,
+      to: managerEmail,
+      subject: "🔐 Recuperación de contraseña - Torneo Muskiz",
+      text: [
+        "Recuperar contraseña del panel de responsables.",
+        "",
+        "Abre este enlace (válido un tiempo limitado):",
+        recoveryLink,
+        "",
+        "Si no solicitaste este cambio, ignora este mensaje.",
+      ].join("\n"),
+      html: `
+          <div style="font-family:Segoe UI,Tahoma,sans-serif;max-width:620px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+            <h2 style="margin:0 0 10px;color:#0f172a;">Recuperar contraseña</h2>
+            <p style="margin:0 0 12px;color:#475569;">Hemos recibido una solicitud para restablecer tu contraseña del panel de responsables.</p>
+            <p style="margin:0 0 16px;color:#475569;">Pulsa en el siguiente botón (válido un tiempo limitado):</p>
+            <a href="${recoveryLink}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:600;">Restablecer contraseña</a>
+            <p style="margin:16px 0 8px;color:#64748b;font-size:12px;">Si el botón no funciona, copia este enlace en el navegador:<br/><a href="${recoveryLink}" style="color:#0d9488;word-break:break-all;">${recoveryLink}</a></p>
+            <p style="margin:0;color:#94a3b8;font-size:12px;">Si no solicitaste este cambio, ignora este mensaje.</p>
+          </div>
+        `,
+    }),
+  });
+
+  if (resendRes.ok) return { ok: true };
+  const resendBody = await resendRes.text();
+  console.error("Resend error:", resendBody);
+  return { ok: false, detail: parseResendError(resendBody) };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -88,36 +172,33 @@ Deno.serve(async (req) => {
       throw new Error("No se pudo generar el enlace de recuperación.");
     }
 
-    const resendRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
-        to: managerEmail,
-        subject: "🔐 Recuperación de contraseña - Torneo Muskiz",
-        html: `
-          <div style="font-family:Segoe UI,Tahoma,sans-serif;max-width:620px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
-            <h2 style="margin:0 0 10px;color:#0f172a;">Recuperar contraseña</h2>
-            <p style="margin:0 0 12px;color:#475569;">Hemos recibido una solicitud para restablecer tu contraseña del panel de responsables.</p>
-            <p style="margin:0 0 16px;color:#475569;">Pulsa en el siguiente botón (válido un tiempo limitado):</p>
-            <a href="${recoveryLink}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:600;">Restablecer contraseña</a>
-            <p style="margin:16px 0 8px;color:#64748b;font-size:12px;">Si el botón no funciona, copia este enlace en el navegador:<br/><a href="${recoveryLink}" style="color:#0d9488;word-break:break-all;">${recoveryLink}</a></p>
-            <p style="margin:0;color:#94a3b8;font-size:12px;">Si no solicitaste este cambio, ignora este mensaje.</p>
-          </div>
-        `,
-      }),
-    });
+    let sentVia: "resend" | "supabase_auth" | null = null;
 
-    if (!resendRes.ok) {
-      const resendBody = await resendRes.text();
-      console.error("Resend error:", resendBody);
-      throw new Error("No se pudo enviar el correo. Inténtalo más tarde o contacta con la organización.");
+    if (isYahooFamilyMailbox(managerEmail)) {
+      const authFirst = await sendRecoveryViaSupabaseAuth(managerEmail, redirectTo);
+      if (authFirst.ok) sentVia = "supabase_auth";
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    if (!sentVia) {
+      const resend = await sendRecoveryViaResend(managerEmail, recoveryLink);
+      if (resend.ok) sentVia = "resend";
+    }
+
+    if (!sentVia) {
+      const authFallback = await sendRecoveryViaSupabaseAuth(managerEmail, redirectTo);
+      if (authFallback.ok) sentVia = "supabase_auth";
+    }
+
+    if (!sentVia) {
+      const yahooHint = isYahooFamilyMailbox(managerEmail)
+        ? " Si usas Yahoo o @ymail.com, revisa también la carpeta de spam y «Correo no deseado»."
+        : "";
+      throw new Error(
+        `No se pudo enviar el correo.${yahooHint} Si sigue fallando, escribe a torneomuskizbmplaya@gmail.com indicando tu correo y equipo inscrito.`,
+      );
+    }
+
+    return new Response(JSON.stringify({ success: true, via: sentVia }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

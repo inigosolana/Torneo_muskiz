@@ -83,7 +83,7 @@ export const ManagerLogin: React.FC = () => {
                 toast.error((data as { error: string }).error);
             } else {
                 toast.success(
-                    'Si el correo está registrado, recibirás un enlace para restablecer la contraseña (revisa spam).'
+                    'Si el correo está registrado, recibirás un enlace para restablecer la contraseña. Revisa bandeja de entrada y spam (Yahoo/ymail suele filtrarlo).'
                 );
             }
         } catch (err) {
