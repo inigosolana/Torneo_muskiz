@@ -1,10 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { searchRules } from '../services/geminiService';
-import { Team } from '../types';
 import { useTournamentData } from '../context/TournamentDataContext';
 import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
 import { CompetitionPublicResultsSection } from '../components/CompetitionPublicResultsSection';
-import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
+import { CompetitionPublicStandingsSection } from '../components/CompetitionPublicStandingsSection';
 
 export const Schedule: React.FC = () => {
     const { teams, categoryLimits, publicMatchesVisible, publicDisplayMatches } = useTournamentData();
@@ -16,30 +15,11 @@ export const Schedule: React.FC = () => {
     const [showMapModal, setShowMapModal] = useState(false);
     const [mapQuery, setMapQuery] = useState('');
     const [mapResult, setMapResult] = useState<{ text: string, links: any[] } | null>(null);
-    const [selectedStandingsCategory, setSelectedStandingsCategory] = useState<Team['division']>('Senior Masculino');
-    const [selectedStandingsGroup, setSelectedStandingsGroup] = useState<string>('all');
-
-    const standingsGroups = useMemo(
-        () => competitionGroupsForDivision(teams, selectedStandingsCategory, true),
-        [teams, selectedStandingsCategory]
-    );
-
     const handleSearchVenue = async () => {
         setMapResult(null);
         const res = await searchRules(`¿Dónde está la cancha ${mapQuery || 'más cercana'}?`);
         setMapResult(res);
     };
-
-    // --- Calculated Standings (Client Side View) ---
-    const standings = useMemo(
-        () =>
-            computeStandings(teams, publicMatches, {
-                division: selectedStandingsCategory,
-                group: selectedStandingsGroup,
-                onlyPaidTeams: true,
-            }),
-        [publicMatches, teams, selectedStandingsCategory, selectedStandingsGroup]
-    );
 
     return (
         <div className="min-h-screen bg-background-light dark:bg-background-dark py-12 px-4 sm:px-6 lg:px-8 animate-in fade-in">
@@ -287,88 +267,7 @@ export const Schedule: React.FC = () => {
                         )}
 
                         {activeTab === 'standings' && (
-                            <div className="space-y-6 animate-in fade-in">
-                                {publicMatches.length === 0 ? (
-                                    <div className="rounded-xl border border-slate-200 bg-slate-50 dark:bg-white/5 px-6 py-12 text-center text-slate-600 dark:text-slate-300">
-                                        <p className="text-lg font-black text-slate-800 dark:text-white mb-2">Clasificación en preparación</p>
-                                        <p className="text-sm leading-relaxed max-w-md mx-auto">
-                                            El calendario oficial se publicará próximamente.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <div className="flex flex-col gap-3">
-                                            <div className="flex overflow-x-auto no-scrollbar gap-2">
-                                                {[
-                                                    'Infantil Femenino', 'Infantil Masculino',
-                                                    'Cadete Femenino', 'Cadete Masculino',
-                                                    'Juvenil Femenino', 'Juvenil Masculino',
-                                                    'Senior Femenino', 'Senior Masculino'
-                                                ].map((cat) => (
-                                                    <button
-                                                        key={cat}
-                                                        onClick={() => {
-                                                            setSelectedStandingsCategory(cat as Team['division']);
-                                                            setSelectedStandingsGroup('all');
-                                                        }}
-                                                        className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap ${selectedStandingsCategory === cat ? 'bg-primary text-background-dark' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}
-                                                    >
-                                                        {cat}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            {standingsGroups.length > 0 && (
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="text-[10px] font-bold uppercase text-slate-500">Grupo</span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setSelectedStandingsGroup('all')}
-                                                        className={`px-3 py-1 rounded-full text-[10px] font-bold ${selectedStandingsGroup === 'all' ? 'bg-secondary text-background-dark' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}
-                                                    >
-                                                        Todos
-                                                    </button>
-                                                    {standingsGroups.map((g) => (
-                                                        <button
-                                                            key={g}
-                                                            type="button"
-                                                            onClick={() => setSelectedStandingsGroup(g)}
-                                                            className={`px-3 py-1 rounded-full text-[10px] font-bold ${selectedStandingsGroup === g ? 'bg-secondary text-background-dark' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}
-                                                        >
-                                                            {g}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10">
-                                            <table className="w-full text-sm text-left">
-                                                <thead className="bg-slate-50 dark:bg-white/5 text-slate-500 font-bold uppercase text-xs">
-                                                    <tr>
-                                                        <th className="px-6 py-4">Pos</th>
-                                                        <th className="px-6 py-4">Equipo</th>
-                                                        <th className="px-4 py-4 text-center">PJ</th>
-                                                        <th className="px-4 py-4 text-center">PG</th>
-                                                        <th className="px-4 py-4 text-center">PP</th>
-                                                        <th className="px-6 py-4 text-right">PTS</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                                    {standings.map((team, index) => (
-                                                        <tr key={team.name} className="hover:bg-slate-50/50 dark:hover:bg-white/5">
-                                                            <td className="px-6 py-4">{index + 1}</td>
-                                                            <td className="px-6 py-4 font-bold">{team.name}</td>
-                                                            <td className="px-4 py-4 text-center">{team.played}</td>
-                                                            <td className="px-4 py-4 text-center">{team.won}</td>
-                                                            <td className="px-4 py-4 text-center">{team.lost}</td>
-                                                            <td className="px-6 py-4 text-right font-black">{team.points}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+                            <CompetitionPublicStandingsSection matches={publicMatches} teams={teams} />
                         )}
                     </div>
                 </div>

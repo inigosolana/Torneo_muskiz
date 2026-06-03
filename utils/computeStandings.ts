@@ -1,4 +1,6 @@
 import type { Match, Team } from '../types';
+import { DIVISION_CODE, normalizeTeamLabel, resolveMatchDivision } from '../services/muskizScheduleSimulator';
+import { getTeamsInDivisionGroup } from './groupMatchSync';
 
 export interface StandingsRow {
     name: string;
@@ -85,6 +87,30 @@ export function computeStandings(
     });
 
     return Object.values(stats).sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga));
+}
+
+/** Partidos de una categoría y grupo (fase de grupos por round o ambos equipos del cuadro). */
+export function filterMatchesForDivisionGroup(
+    matches: Match[],
+    teams: Team[],
+    division: Team['division'],
+    groupKey: string
+): Match[] {
+    const roster = getTeamsInDivisionGroup(teams, division, groupKey, false);
+    const rosterNames = new Set(roster.map((t) => t.name));
+    const rosterNorm = new Set(roster.map((t) => normalizeTeamLabel(t.name)));
+    const code = DIVISION_CODE[division];
+    const groupRoundRx = code ? new RegExp(`Grupos\\s*·\\s*${code}-${groupKey}\\b`, 'i') : null;
+
+    const inRoster = (name: string) =>
+        rosterNames.has(name) || rosterNorm.has(normalizeTeamLabel(name));
+
+    return matches.filter((m) => {
+        if (resolveMatchDivision(m, teams) !== division) return false;
+        const round = m.round ?? '';
+        if (round.includes('Grupos') && groupRoundRx?.test(round)) return true;
+        return inRoster(m.teamA) && inRoster(m.teamB);
+    });
 }
 
 /** Grupos distintos (no vacíos) usados por equipos PAID en una división */
