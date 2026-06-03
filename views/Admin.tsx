@@ -884,7 +884,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         if (!anyChanged) return;
 
         setSimDrafts(nextDrafts);
-        void persistSimDraftsAsync(nextDrafts, activeSimDraftId);
+        void persistSimDraftsAsync(nextDrafts, activeDraftId);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- evita bucle al actualizar simDrafts
     }, [simulationsLoaded, teams, muskizSimulatorOptions]);
 
