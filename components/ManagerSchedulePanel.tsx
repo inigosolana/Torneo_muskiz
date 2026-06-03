@@ -64,6 +64,13 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
 
     const exportBaseName = `horarios_muskiz_${filterLabel.replace(/\s+/g, '_').slice(0, 40)}`;
 
+    const highlightTeamNames = useMemo(() => teamsToShow.map((t) => t.name), [teamsToShow]);
+
+    const fullDayGridMatches = useMemo(
+        () => publicDisplayMatches.filter((m) => m.isPublic),
+        [publicDisplayMatches]
+    );
+
     const handleExportExcel = () => {
         if (filteredMatches.length === 0) return;
         downloadManagerScheduleExcel(filteredMatches, allTeams, exportBaseName);
@@ -188,19 +195,21 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
             {panelTab === 'calendar' && (
                 <div className="space-y-3">
                     <p className="text-xs text-slate-500">
-                        Solo <strong>tus partidos</strong> y las fases finales que puede jugar tu grupo ({filterLabel}).
-                        Misma cuadrícula que el oficial, sin el resto de equipos.
+                        Cuadrícula oficial del torneo (todos los campos). Tus partidos van con{' '}
+                        <strong>borde verde</strong>; en cada celda verás la <strong>fase o ronda</strong>. Puedes
+                        descargar cada día en Excel ({filterLabel}).
                     </p>
                     <CompetitionCalendarViews
-                        matches={filteredMatches}
+                        matches={fullDayGridMatches}
                         teams={allTeams}
                         readOnly
                         readOnlyAudience="public"
-                        compactGrid
-                        title={`Mis partidos — ${filterLabel}`}
+                        title={`Calendario — ${filterLabel}`}
+                        highlightTeamNames={highlightTeamNames}
+                        onlyDaysWithHighlightTeams
                         showDayExport
                         exportFileNamePrefix={exportBaseName}
-                        emptyMessage="No hay partidos publicados con el filtro actual."
+                        emptyMessage="No hay calendario publicado para tus equipos."
                     />
                 </div>
             )}

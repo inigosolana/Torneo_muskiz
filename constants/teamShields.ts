@@ -90,4 +90,3 @@ export function resolveTeamShield(teamName: string, logoFromDb?: string | null):
     if (db && (db.includes('/') || db.includes('.'))) return db;
     return resolveBuiltinTeamShield(teamName);
 }
-
