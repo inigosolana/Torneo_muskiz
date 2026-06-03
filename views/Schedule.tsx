@@ -4,10 +4,11 @@ import { useTournamentData } from '../context/TournamentDataContext';
 import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
 import { CompetitionPublicResultsSection } from '../components/CompetitionPublicResultsSection';
 import { CompetitionPublicStandingsSection } from '../components/CompetitionPublicStandingsSection';
+import { CompetitionPublicFinalPhaseSection } from '../components/CompetitionPublicFinalPhaseSection';
 
 export const Schedule: React.FC = () => {
     const { teams, categoryLimits, publicMatchesVisible, publicDisplayMatches } = useTournamentData();
-    const [activeTab, setActiveTab] = useState<'info' | 'calendar' | 'results' | 'standings'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'calendar' | 'results' | 'standings' | 'finals'>('info');
     const [infoSubTab, setInfoSubTab] = useState<'general' | 'rules'>('general');
 
     const publicMatches = publicDisplayMatches;
@@ -41,15 +42,23 @@ export const Schedule: React.FC = () => {
 
                 <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-sm border border-slate-200 dark:border-white/5 overflow-hidden">
                     <div className="flex border-b border-slate-200 dark:border-white/10 overflow-x-auto no-scrollbar">
-                        {(['info', 'calendar', 'results', 'standings'] as const)
+                        {(['info', 'calendar', 'results', 'standings', 'finals'] as const)
                             .filter((tab) => tab === 'info' || publicMatchesVisible)
                             .map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
-                                className={`px-8 py-4 font-bold text-sm uppercase tracking-wide whitespace-nowrap transition-colors border-b-2 ${activeTab === tab ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                className={`px-6 sm:px-8 py-4 font-bold text-sm uppercase tracking-wide whitespace-nowrap transition-colors border-b-2 ${activeTab === tab ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                             >
-                                {tab === 'info' ? 'Información' : tab === 'calendar' ? 'Calendario' : tab === 'results' ? 'Resultados' : 'Clasificación'}
+                                {tab === 'info'
+                                    ? 'Información'
+                                    : tab === 'calendar'
+                                      ? 'Calendario'
+                                      : tab === 'results'
+                                        ? 'Resultados'
+                                        : tab === 'standings'
+                                          ? 'Clasificación'
+                                          : 'Fase final'}
                             </button>
                         ))}
                     </div>
@@ -270,6 +279,10 @@ export const Schedule: React.FC = () => {
 
                         {activeTab === 'standings' && (
                             <CompetitionPublicStandingsSection matches={publicMatches} teams={teams} />
+                        )}
+
+                        {activeTab === 'finals' && (
+                            <CompetitionPublicFinalPhaseSection matches={publicMatches} teams={teams} />
                         )}
                     </div>
                 </div>

@@ -747,6 +747,30 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     return out;
 }
 
+export type DivisionEliminationPhase = 'REPESCA' | 'CUARTOS' | 'SEMIS' | 'TERCER_PUESTO' | 'FINAL';
+
+export interface DivisionEliminationSlot {
+    phase: DivisionEliminationPhase;
+    phaseOrder: number;
+    roundLabel: string;
+    teamA: string;
+    teamB: string;
+}
+
+/** Plantilla de fase final (repesca, cuartos, semis, 3º/4º, final) según equipos pagados de la categoría. */
+export function getDivisionEliminationTemplate(paidTeamsInDivision: Team[]): DivisionEliminationSlot[] {
+    if (paidTeamsInDivision.length < 2) return [];
+    return specsForPaidDivision(paidTeamsInDivision)
+        .filter((s) => s.phase !== 'GRUPOS')
+        .map((s) => ({
+            phase: s.phase as DivisionEliminationPhase,
+            phaseOrder: s.phaseOrder,
+            roundLabel: s.roundLabel,
+            teamA: s.teamA,
+            teamB: s.teamB,
+        }));
+}
+
 // ─── Conteo de partidos reales ─────────────────────────────────────────────
 function countRealRealMatches(specs: RawMatchSpec[], realNames: Set<string>): Map<string, number> {
     const m = new Map<string, number>();

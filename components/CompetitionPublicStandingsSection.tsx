@@ -1,18 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import type { Match, Team } from '../types';
+import { DivisionCategorySelect } from './DivisionCategorySelect';
 import { GroupStandingsResultsBlock } from './GroupStandingsResultsBlock';
 import { getGroupDistributionForDivision } from '../utils/groupMatchSync';
-
-const DIVISIONS_LIST: Team['division'][] = [
-    'Infantil Femenino',
-    'Infantil Masculino',
-    'Cadete Femenino',
-    'Cadete Masculino',
-    'Juvenil Femenino',
-    'Juvenil Masculino',
-    'Senior Femenino',
-    'Senior Masculino',
-];
 
 interface CompetitionPublicStandingsSectionProps {
     matches: Match[];
@@ -49,22 +39,7 @@ export const CompetitionPublicStandingsSection: React.FC<CompetitionPublicStandi
                 <strong>horarios y resultados</strong> de ese grupo.
             </p>
 
-            <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1">
-                {DIVISIONS_LIST.map((cat) => (
-                    <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setDivision(cat)}
-                        className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shrink-0 ${
-                            division === cat
-                                ? 'bg-primary text-background-dark shadow'
-                                : 'bg-slate-100 dark:bg-white/5 text-slate-500'
-                        }`}
-                    >
-                        {cat}
-                    </button>
-                ))}
-            </div>
+            <DivisionCategorySelect value={division} onChange={setDivision} />
 
             {groups.length === 0 ? (
                 <p className="text-sm text-slate-500 text-center py-8 border border-dashed rounded-lg">

@@ -2,7 +2,9 @@ import React, { useMemo, useState } from 'react';
 import type { Match, Team } from '../types';
 import { useTournamentData } from '../context/TournamentDataContext';
 import { CompetitionCalendarViews } from './CompetitionCalendarViews';
+import { FinalPhaseBracketView } from './FinalPhaseBracketView';
 import { GroupStandingsResultsBlock } from './GroupStandingsResultsBlock';
+import { getTeamFinalPhasePaths } from '../utils/finalPhaseBracket';
 import {
     filterMatchesByTeamFilter,
     filterMatchesForManagerTeams,
@@ -10,7 +12,7 @@ import {
 } from '../utils/managerSchedule';
 import { downloadManagerScheduleExcel, printManagerSchedulePdf } from '../utils/managerScheduleExport';
 
-type PanelTab = 'calendar' | 'standings';
+type PanelTab = 'calendar' | 'standings' | 'finals';
 
 interface ManagerSchedulePanelProps {
     managerTeams: Team[];
@@ -47,6 +49,12 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
         const t = managerTeams.find((x) => x.id === teamFilterId);
         return t ? [t] : managerTeams;
     }, [managerTeams, teamFilterId]);
+
+    const divisionsForFinals = useMemo(() => {
+        const set = new Set<Team['division']>();
+        for (const t of teamsToShow) set.add(t.division);
+        return [...set].sort((a, b) => a.localeCompare(b, 'es'));
+    }, [teamsToShow]);
 
     const scheduleReady = hasPublishedScheduleForManager(publicDisplayMatches, managerTeams);
     const filterLabel =
@@ -138,30 +146,42 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
                 </div>
             </div>
 
-            <div className="flex gap-1 bg-white dark:bg-surface-dark rounded-lg border border-slate-200 dark:border-white/10 p-1 w-fit">
+            <div className="flex flex-wrap gap-1 bg-white dark:bg-surface-dark rounded-lg border border-slate-200 dark:border-white/10 p-1 w-full sm:w-fit">
                 <button
                     type="button"
                     onClick={() => setPanelTab('calendar')}
-                    className={`px-4 py-2 rounded-md text-xs font-bold flex items-center gap-1 ${
+                    className={`px-3 sm:px-4 py-2 rounded-md text-xs font-bold flex items-center gap-1 ${
                         panelTab === 'calendar'
                             ? 'bg-primary text-background-dark shadow'
                             : 'text-slate-600 hover:bg-slate-50 dark:hover:bg-white/5'
                     }`}
                 >
                     <span className="material-symbols-outlined text-sm">grid_view</span>
-                    Calendario (cuadrícula)
+                    Calendario
                 </button>
                 <button
                     type="button"
                     onClick={() => setPanelTab('standings')}
-                    className={`px-4 py-2 rounded-md text-xs font-bold flex items-center gap-1 ${
+                    className={`px-3 sm:px-4 py-2 rounded-md text-xs font-bold flex items-center gap-1 ${
                         panelTab === 'standings'
                             ? 'bg-primary text-background-dark shadow'
                             : 'text-slate-600 hover:bg-slate-50 dark:hover:bg-white/5'
                     }`}
                 >
                     <span className="material-symbols-outlined text-sm">leaderboard</span>
-                    Clasificación y resultados
+                    Clasificación
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setPanelTab('finals')}
+                    className={`px-3 sm:px-4 py-2 rounded-md text-xs font-bold flex items-center gap-1 ${
+                        panelTab === 'finals'
+                            ? 'bg-primary text-background-dark shadow'
+                            : 'text-slate-600 hover:bg-slate-50 dark:hover:bg-white/5'
+                    }`}
+                >
+                    <span className="material-symbols-outlined text-sm">emoji_events</span>
+                    Fase final
                 </button>
             </div>
 
@@ -206,6 +226,54 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
                             />
                         );
                     })}
+                </div>
+            )}
+
+            {panelTab === 'finals' && (
+                <div className="space-y-8">
+                    <p className="text-xs text-slate-500">
+                        Cuadro de <strong>fase final</strong> de tu categoría y, para cada equipo,{' '}
+                        <strong>todas las formas</strong> en que puede entrar según su grupo (1º, 2º, 3º…).
+                    </p>
+
+                    {teamsToShow.map((team) => {
+                        const paths = getTeamFinalPhasePaths(team, allTeams, publicDisplayMatches);
+                        if (paths.length === 0) return null;
+                        return (
+                            <div
+                                key={`paths-${team.id}`}
+                                className="rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50/60 dark:bg-teal-950/20 p-4"
+                            >
+                                <h4 className="text-sm font-black text-teal-900 dark:text-teal-100 mb-2">
+                                    {team.name} · {team.division} · Grupo {teamGroupKey(team)}
+                                </h4>
+                                <ul className="space-y-1.5 text-xs text-slate-700 dark:text-slate-200">
+                                    {paths.map((p) => (
+                                        <li key={`${team.id}-${p.ifPosition}-${p.slot.roundLabel}`}>
+                                            <span className="font-bold">{p.ifPosition}:</span> {p.accessLabel}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        );
+                    })}
+
+                    {divisionsForFinals.map((div) => (
+                        <FinalPhaseBracketView
+                            key={div}
+                            division={div}
+                            matches={publicDisplayMatches}
+                            teams={allTeams}
+                            focusTeam={
+                                teamFilterId === 'all'
+                                    ? teamsToShow.find((t) => t.division === div) ?? null
+                                    : teamsToShow[0]?.division === div
+                                      ? teamsToShow[0]
+                                      : null
+                            }
+                            showTeamPaths={teamFilterId !== 'all'}
+                        />
+                    ))}
                 </div>
             )}
         </div>
