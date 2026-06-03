@@ -1,4 +1,5 @@
 import type { Match, Team } from '../types';
+import { inferMatchScheduleDay } from './tournamentScheduleService';
 import {
     divisionFromMatchRound,
     findTeamInDivision,
@@ -32,6 +33,7 @@ export function matchToDatabaseRow(
         score_b: m.scoreB,
         status: m.status ?? 'SCHEDULED',
         round: m.round ?? null,
+        schedule_day: m.scheduleDay ?? inferMatchScheduleDay(m) ?? null,
         is_public: m.isPublic ?? true,
         referees: m.referees ?? null,
     };

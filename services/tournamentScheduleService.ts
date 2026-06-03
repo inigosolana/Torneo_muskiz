@@ -124,7 +124,9 @@ export function mergeWeekendDraftMatches(drafts: CalendarDraft[]): Match[] {
     const ordered: Match[] = [];
     for (const day of WEEKEND_SCHEDULE_DAYS) {
         const d = drafts.find((x) => x.scheduleDay === day);
-        if (d?.matches.length) ordered.push(...d.matches);
+        if (d?.matches.length) {
+            ordered.push(...d.matches.map((m) => ({ ...m, scheduleDay: m.scheduleDay ?? day })));
+        }
     }
     return ensureStableDraftMatchIds(ordered);
 }
@@ -159,6 +161,7 @@ export function finalizeMatchesForDatabase(
         status: m.status ?? 'SCHEDULED',
         round: m.round,
         report: m.report,
+        scheduleDay: m.scheduleDay ?? inferMatchScheduleDay(m) ?? undefined,
         isPublic,
         referees: m.referees,
     }));

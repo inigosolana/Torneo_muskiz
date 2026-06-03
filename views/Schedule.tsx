@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { searchRules } from '../services/geminiService';
 import { Team } from '../types';
 import { useTournamentData } from '../context/TournamentDataContext';
-import { resolveTeamForMatchSide } from '../services/muskizScheduleSimulator';
+import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 
 export const Schedule: React.FC = () => {
@@ -272,38 +272,12 @@ export const Schedule: React.FC = () => {
 
                         {activeTab === 'calendar' && (
                             <div className="animate-in fade-in">
-                                {publicMatches.length === 0 ? (
-                                    <div className="rounded-xl border border-slate-200 bg-slate-50 dark:bg-white/5 px-6 py-12 text-center text-slate-600 dark:text-slate-300">
-                                        <p className="text-lg font-black text-slate-800 dark:text-white mb-2">Calendario en preparación</p>
-                                        <p className="text-sm leading-relaxed max-w-md mx-auto">
-                                            El calendario oficial se publicará próximamente.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                        {publicMatches
-                                            .filter((m) => {
-                                                const teamA = resolveTeamForMatchSide(m, m.teamA, teams);
-                                                const teamB = resolveTeamForMatchSide(m, m.teamB, teams);
-                                                if (m.status === 'FINISHED') return false;
-                                                if (!teamA || !teamB) return true;
-                                                return teamA.paymentStatus === 'PAID' && teamB.paymentStatus === 'PAID';
-                                            })
-                                            .map((match) => (
-                                                <div
-                                                    key={match.id}
-                                                    className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 border border-slate-200 dark:border-white/5"
-                                                >
-                                                    <div className="text-xs font-bold text-slate-500 mb-2">
-                                                        {match.time} | {match.court}
-                                                    </div>
-                                                    <div className="font-bold text-slate-900 dark:text-white text-lg">
-                                                        {match.teamA} vs {match.teamB}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                    </div>
-                                )}
+                                <CompetitionCalendarViews
+                                    matches={publicMatches}
+                                    teams={teams}
+                                    title="Calendario oficial (Viernes · Sábado · Domingo)"
+                                    emptyMessage="El calendario oficial se publicará próximamente."
+                                />
                             </div>
                         )}
 
