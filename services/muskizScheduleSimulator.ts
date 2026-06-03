@@ -18,7 +18,7 @@
  * El simulador intenta que cada equipo juegue ≥4 partidos reales; si no cabe, baja a ≥3.
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
  * Las fases de grupos/cuartos se programan antes que semis/finales.
- * Domingo: descanso 14:15–14:25 y finales a las 14:25 (sin tocar borradores guardados).
+ * Las finales se reservan en las últimas franjas del día (cierre del calendario).
  * Orden estricto: todos los grupos → cuartos → semis → finales (sin mezclar fases).
  * Entre fases se usa un snapshot de maxAssignedEndMin antes de cada lote (no nextPhaseSlotMin dinámico).
  * Máximo 2 partidos consecutivos por equipo; nunca 3 seguidos (rechazo duro en scoreSlot).
@@ -54,11 +54,6 @@ export type DivisionMinMatchesMap = Partial<Record<Team['division'], number>>;
 /** Comida sábado fija para todas las categorías. */
 const SATURDAY_LUNCH_START = '14:15';
 const SATURDAY_LUNCH_DEFAULT_END = '15:45';
-
-/** Descanso domingo entre última franja y finales (no se programan partidos aquí). */
-export const SUNDAY_BREAK_START = '14:15';
-/** Inicio de las finales del domingo. */
-export const SUNDAY_FINAL_START = '14:25';
 
 export interface MuskizBuildResult {
     matches: Match[];
@@ -990,14 +985,7 @@ export function defaultConfigs(): Record<MuskizScheduleDayLabel, DayConfig> {
     return {
         Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:20', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6 },
         Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:35', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6, lunch: { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END } },
-        Domingo: {
-            label: 'Domingo',
-            dayShort: 'Dom',
-            playStart: '09:35',
-            playEndExclusive: '15:35',
-            courts: DEFAULT_COURTS_4,
-            lunch: { start: SUNDAY_BREAK_START, end: SUNDAY_FINAL_START },
-        },
+        Domingo: { label: 'Domingo', dayShort: 'Dom', playStart: '09:35', playEndExclusive: '15:35', courts: DEFAULT_COURTS_4 },
     };
 }
 
@@ -1012,20 +1000,7 @@ export function getDayScheduleConfig(
             lunch: { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END },
         };
     }
-    if (day === 'Domingo') {
-        configs.Domingo = {
-            ...configs.Domingo,
-            lunch: { start: SUNDAY_BREAK_START, end: SUNDAY_FINAL_START },
-        };
-    }
     return configs[day];
-}
-
-/** Cuadrícula domingo: franja 14:15 (fin de semis) + descanso hasta 14:25 + finales. */
-function sundayDisplayTimeSlots(slotTimes: string[]): string[] {
-    const out = slotTimes.filter((t) => t !== '14:50');
-    if (!out.includes(SUNDAY_BREAK_START)) out.push(SUNDAY_BREAK_START);
-    return out.sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
 }
 
 export function buildFullDayTimeSlots(
@@ -1034,8 +1009,7 @@ export function buildFullDayTimeSlots(
     options?: MuskizSimulatorOptions
 ): string[] {
     const cfg = getDayScheduleConfig(day, options);
-    const times = generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch).map(minutesToTime);
-    return day === 'Domingo' ? sundayDisplayTimeSlots(times) : times;
+    return generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch).map(minutesToTime);
 }
 
 // ─── Planificador greedy ───────────────────────────────────────────────────
@@ -1111,17 +1085,8 @@ export function resolveScheduleTeamKey(
 }
 
 /** Franjas reservadas al final del día para colocar todas las finales. */
-function reservedFinalSlotStarts(
-    slotStartsMin: number[],
-    finalCount: number,
-    courtCount: number,
-    day?: MuskizScheduleDayLabel
-): number[] {
+function reservedFinalSlotStarts(slotStartsMin: number[], finalCount: number, courtCount: number): number[] {
     if (finalCount <= 0 || slotStartsMin.length === 0) return [];
-    if (day === 'Domingo') {
-        const t = timeToMinutes(SUNDAY_FINAL_START);
-        return slotStartsMin.includes(t) ? [t] : [t];
-    }
     const waves = Math.max(1, Math.ceil(finalCount / courtCount));
     return slotStartsMin.slice(-Math.min(waves, slotStartsMin.length));
 }
@@ -1678,7 +1643,7 @@ function scheduleGreedy(
     const postGroupsBreakMin = day === 'Viernes' ? 15 : 0;
 
     const { grupos, repesca, cuartos, semis, tercerPuesto, finals } = specsByPhase(specs);
-    const reservedFinalSlots = reservedFinalSlotStarts(slotStartsMin, finals.length, courts.length, day);
+    const reservedFinalSlots = reservedFinalSlotStarts(slotStartsMin, finals.length, courts.length);
     const reservedKnockoutSlots = reservedKnockoutSlotStarts(
         slotStartsMin,
         repesca.length + cuartos.length + semis.length + tercerPuesto.length,
@@ -1810,9 +1775,6 @@ function scheduleGreedy(
     if (day === 'Viernes') {
         enforceFridayKnockoutSpacing(state, slotMins);
     }
-    if (day === 'Domingo') {
-        enforceSundayFinalStart(state, slotMins);
-    }
 
     return { placed: state.placed, unplaced: state.unplaced };
 }
@@ -1830,16 +1792,6 @@ function updateScheduledCellStart(state: ScheduleGreedyState, cell: ScheduledCel
     if (assign) {
         assign.tStart = nextStart;
         assign.tEnd = nextStart + slotMins;
-    }
-}
-
-function enforceSundayFinalStart(state: ScheduleGreedyState, slotMins: number): void {
-    const finalStart = timeToMinutes(SUNDAY_FINAL_START);
-    const finals = state.placed
-        .filter((p) => p.spec.phase === 'FINAL')
-        .sort((a, b) => a.timeMin - b.timeMin || a.courtIdx - b.courtIdx);
-    for (const f of finals) {
-        updateScheduledCellStart(state, f, finalStart, slotMins);
     }
 }
 
