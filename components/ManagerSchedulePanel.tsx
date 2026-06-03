@@ -2,29 +2,35 @@ import React, { useMemo, useState } from 'react';
 import type { Match, Team } from '../types';
 import { useTournamentData } from '../context/TournamentDataContext';
 import { CompetitionCalendarViews } from './CompetitionCalendarViews';
-import { CompetitionResultsTable } from './CompetitionResultsTable';
-import { SimulationScheduleGridTabs } from './SimulationDayGrid';
-import { WEEKEND_SCHEDULE_DAYS, inferMatchScheduleDay } from '../services/tournamentScheduleService';
-import type { MuskizScheduleDayLabel } from '../services/muskizScheduleSimulator';
+import { GroupStandingsResultsBlock } from './GroupStandingsResultsBlock';
 import {
     filterMatchesByTeamFilter,
     filterMatchesForManagerTeams,
-    groupManagerMatchesByDivision,
     hasPublishedScheduleForManager,
 } from '../utils/managerSchedule';
 import { downloadManagerScheduleExcel, printManagerSchedulePdf } from '../utils/managerScheduleExport';
 
-type PanelTab = 'results' | 'calendar';
+type PanelTab = 'calendar' | 'standings';
 
 interface ManagerSchedulePanelProps {
     managerTeams: Team[];
 }
 
+function teamGroupKey(team: Team): string {
+    const g = (team.competitionGroup ?? '').trim();
+    return g || 'A';
+}
+
+function matchesForTeam(matches: Match[], team: Team): Match[] {
+    return matches.filter((m) => m.teamA === team.name || m.teamB === team.name);
+}
+
 export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ managerTeams }) => {
     const { publicDisplayMatches, teams: allTeams, publicMatchesVisible } = useTournamentData();
-    const [panelTab, setPanelTab] = useState<PanelTab>('results');
-    const [teamFilterId, setTeamFilterId] = useState<'all' | string>('all');
-    const [calendarDay, setCalendarDay] = useState<MuskizScheduleDayLabel>('Viernes');
+    const [panelTab, setPanelTab] = useState<PanelTab>('calendar');
+    const [teamFilterId, setTeamFilterId] = useState<'all' | string>(
+        managerTeams.length === 1 ? managerTeams[0]!.id : 'all'
+    );
 
     const baseMatches = useMemo(
         () => filterMatchesForManagerTeams(publicDisplayMatches, managerTeams),
@@ -36,19 +42,11 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
         [baseMatches, managerTeams, teamFilterId]
     );
 
-    const byDivision = useMemo(
-        () => groupManagerMatchesByDivision(filteredMatches, managerTeams, allTeams),
-        [filteredMatches, managerTeams, allTeams]
-    );
-
-    const calendarDayMatches = useMemo(
-        () => filteredMatches.filter((m) => inferMatchScheduleDay(m) === calendarDay),
-        [filteredMatches, calendarDay]
-    );
-    const fridayPublishedCount = useMemo(
-        () => filteredMatches.filter((m) => inferMatchScheduleDay(m) === 'Viernes').length,
-        [filteredMatches]
-    );
+    const teamsToShow = useMemo(() => {
+        if (teamFilterId === 'all') return managerTeams;
+        const t = managerTeams.find((x) => x.id === teamFilterId);
+        return t ? [t] : managerTeams;
+    }, [managerTeams, teamFilterId]);
 
     const scheduleReady = hasPublishedScheduleForManager(publicDisplayMatches, managerTeams);
     const filterLabel =
@@ -92,26 +90,30 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
                 <div>
                     <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                         <span className="material-symbols-outlined text-primary">calendar_month</span>
-                        Mis horarios
+                        Mis equipos en competición
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">
                         {scheduleReady
-                            ? `${baseMatches.length} partido(s) publicados para tus equipos`
-                            : 'Calendario en preparación — algunos partidos pueden estar pendientes de hora'}
+                            ? `${baseMatches.length} partido(s) publicados · filtro: ${filterLabel}`
+                            : 'Calendario en preparación'}
                     </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400">Filtrar equipo</label>
+                    <label htmlFor="manager-team-filter" className="text-[10px] font-black uppercase text-slate-400">
+                        Mi equipo
+                    </label>
                     <select
+                        id="manager-team-filter"
                         value={teamFilterId}
                         onChange={(e) => setTeamFilterId(e.target.value as 'all' | string)}
-                        className="border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm font-semibold bg-slate-50 dark:bg-background-dark min-w-[200px]"
+                        className="border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm font-semibold bg-slate-50 dark:bg-background-dark min-w-[220px]"
                     >
                         <option value="all">Todos mis equipos ({managerTeams.length})</option>
                         {managerTeams.map((t) => (
                             <option key={t.id} value={t.id}>
                                 {t.name} — {t.division}
+                                {(t.competitionGroup ?? '').trim() ? ` · Gr. ${t.competitionGroup}` : ''}
                             </option>
                         ))}
                     </select>
@@ -135,25 +137,8 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
                     </button>
                 </div>
             </div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 font-semibold">
-                {fridayPublishedCount > 0
-                    ? `Tus equipos tienen ${fridayPublishedCount} partido(s) publicado(s) el viernes.`
-                    : 'Tus equipos todavía no tienen partidos publicados para el viernes.'}
-            </div>
 
             <div className="flex gap-1 bg-white dark:bg-surface-dark rounded-lg border border-slate-200 dark:border-white/10 p-1 w-fit">
-                <button
-                    type="button"
-                    onClick={() => setPanelTab('results')}
-                    className={`px-4 py-2 rounded-md text-xs font-bold flex items-center gap-1 ${
-                        panelTab === 'results'
-                            ? 'bg-primary text-background-dark shadow'
-                            : 'text-slate-600 hover:bg-slate-50 dark:hover:bg-white/5'
-                    }`}
-                >
-                    <span className="material-symbols-outlined text-sm">schedule</span>
-                    Horarios y resultados
-                </button>
                 <button
                     type="button"
                     onClick={() => setPanelTab('calendar')}
@@ -164,101 +149,63 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
                     }`}
                 >
                     <span className="material-symbols-outlined text-sm">grid_view</span>
-                    Calendario por día (campos)
+                    Calendario (cuadrícula)
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setPanelTab('standings')}
+                    className={`px-4 py-2 rounded-md text-xs font-bold flex items-center gap-1 ${
+                        panelTab === 'standings'
+                            ? 'bg-primary text-background-dark shadow'
+                            : 'text-slate-600 hover:bg-slate-50 dark:hover:bg-white/5'
+                    }`}
+                >
+                    <span className="material-symbols-outlined text-sm">leaderboard</span>
+                    Clasificación y resultados
                 </button>
             </div>
 
-            {panelTab === 'results' && (
-                <div className="space-y-8">
-                    {byDivision.length === 0 ? (
-                        <p className="text-sm text-slate-500 text-center py-8">No hay partidos con el filtro actual.</p>
-                    ) : (
-                        byDivision.map(({ division, teams: divTeams, matches: divMatches }) => (
-                            <section
-                                key={division}
-                                className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-surface-dark"
-                            >
-                                <div className="px-4 py-3 bg-slate-800 text-white flex flex-wrap items-center justify-between gap-2">
-                                    <div>
-                                        <h4 className="font-black text-sm uppercase tracking-wide">{division}</h4>
-                                        <p className="text-[11px] text-white/70 mt-0.5">
-                                            {divTeams.map((t) => t.name).join(' · ')}
-                                        </p>
-                                    </div>
-                                    <span className="text-[10px] font-bold bg-white/15 px-2 py-1 rounded-full">
-                                        {divMatches.length} partido{divMatches.length !== 1 ? 's' : ''}
-                                    </span>
-                                </div>
-                                <div className="p-4">
-                                    <CompetitionResultsTable
-                                        matches={divMatches}
-                                        previewMode="official"
-                                        hideActions
-                                        emptyMessage="Sin partidos en esta categoría."
-                                    />
-                                </div>
-                            </section>
-                        ))
-                    )}
+            {panelTab === 'calendar' && (
+                <div className="space-y-3">
+                    <p className="text-xs text-slate-500">
+                        Misma cuadrícula que el calendario oficial, con <strong>solo tus partidos</strong> ({filterLabel}).
+                    </p>
+                    <CompetitionCalendarViews
+                        matches={filteredMatches}
+                        teams={allTeams}
+                        readOnly
+                        readOnlyAudience="public"
+                        title={`Mis partidos — ${filterLabel}`}
+                        emptyMessage="No hay partidos publicados con el filtro actual."
+                    />
                 </div>
             )}
 
-            {panelTab === 'calendar' && (
-                <div className="space-y-4">
+            {panelTab === 'standings' && (
+                <div className="space-y-6">
                     <p className="text-xs text-slate-500">
-                        Cuadrícula por campos — solo se muestran los partidos de{' '}
-                        <strong>{filterLabel.toLowerCase()}</strong>.
+                        Clasificación de tu <strong>grupo</strong> (todos los equipos del cuadro) y debajo los{' '}
+                        <strong>horarios y resultados solo de {filterLabel.toLowerCase()}</strong>.
                     </p>
-
-                    <div className="flex flex-wrap gap-2">
-                        {WEEKEND_SCHEDULE_DAYS.map((day) => {
-                            const count = filteredMatches.filter((m) => inferMatchScheduleDay(m) === day).length;
-                            return (
-                                <button
-                                    key={day}
-                                    type="button"
-                                    onClick={() => setCalendarDay(day)}
-                                    className={`px-4 py-2 rounded-full text-xs font-bold ${
-                                        calendarDay === day
-                                            ? 'bg-teal-700 text-white shadow'
-                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                    }`}
-                                >
-                                    {day} ({count})
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    <div className="rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-surface-dark p-3">
-                        {calendarDayMatches.length === 0 ? (
-                            <p className="text-sm text-slate-400 text-center py-10">
-                                No tienes partidos publicados el {calendarDay}.
-                            </p>
-                        ) : (
-                            <SimulationScheduleGridTabs
-                                matches={calendarDayMatches}
-                                fixedDay={calendarDay}
-                                fillEmptySlots
-                                readOnly
-                            />
-                        )}
-                    </div>
-
-                    <details className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-surface-dark p-4">
-                        <summary className="text-xs font-bold text-slate-600 cursor-pointer">
-                            Vista ampliada por categoría (todos los días)
-                        </summary>
-                        <div className="mt-4">
-                            <CompetitionCalendarViews
-                                matches={filteredMatches}
+                    {teamsToShow.map((team) => {
+                        const gk = teamGroupKey(team);
+                        const teamMatches = matchesForTeam(baseMatches, team);
+                        return (
+                            <GroupStandingsResultsBlock
+                                key={team.id}
+                                division={team.division}
+                                groupKey={gk}
+                                matches={publicDisplayMatches}
                                 teams={allTeams}
-                                readOnly
-                                readOnlyAudience="public"
-                                emptyMessage="Sin partidos."
+                                resultsMatches={
+                                    teamFilterId === 'all' ? teamMatches : filteredMatches
+                                }
+                                highlightTeamName={team.name}
+                                standingsTitle={`${team.name} — ${team.division} · Grupo ${gk}`}
+                                resultsTitle={`Horarios y resultados — ${team.name}`}
                             />
-                        </div>
-                    </details>
+                        );
+                    })}
                 </div>
             )}
         </div>
