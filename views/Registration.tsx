@@ -291,7 +291,10 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
             }));
 
             const finalReceipt = receiptFile ?? new File(['payment-receipt'], 'payment_receipt.pdf', { type: 'application/pdf' });
-            await onRegister(newTeams, finalReceipt, { authUserId });
+            await onRegister(newTeams, finalReceipt, {
+                authUserId,
+                managerLoginPassword: password,
+            });
 
             sessionStorage.removeItem('reg_draft');
             setCompletionInfo(

@@ -22,6 +22,40 @@ function isSeniorDivision(division: string): boolean {
   return division.toLowerCase().includes("senior");
 }
 
+async function fetchManagerLoginPassword(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  managerEmail: string,
+  registrationId?: string | null,
+): Promise<string | null> {
+  if (registrationId) {
+    const { data } = await supabaseAdmin
+      .from("registrations")
+      .select("manager_login_password")
+      .eq("id", registrationId)
+      .maybeSingle();
+    const pwd = String(data?.manager_login_password ?? "").trim();
+    if (pwd) return pwd;
+  }
+
+  const { data: rows } = await supabaseAdmin
+    .from("registrations")
+    .select("manager_login_password")
+    .ilike("manager_email", managerEmail)
+    .not("manager_login_password", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const pwd = String(rows?.[0]?.manager_login_password ?? "").trim();
+  return pwd || null;
+}
+
+function credentialsPasswordHtml(storedPassword: string | null): string {
+  if (storedPassword) {
+    return `<span style="font-family:monospace;font-weight:700;color:#0f172a;">${escHtml(storedPassword)}</span>`;
+  }
+  return `<span style="color:#334155;">No consta en el sistema (inscripción anterior). Usa «¿Has olvidado tu contraseña?» en el login o contacta con la organización.</span>`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -76,7 +110,7 @@ Deno.serve(async (req) => {
 
     const { data: team, error: teamErr } = await supabaseAdmin
       .from("teams")
-      .select("id, name, division, manager_name, manager_email, status")
+      .select("id, name, division, manager_name, manager_email, status, registration_id")
       .eq("id", teamId)
       .maybeSingle();
 
@@ -177,6 +211,11 @@ Deno.serve(async (req) => {
     const managerName = escHtml(String(team.manager_name ?? "Responsable"));
     const teamName = escHtml(String(team.name ?? "Tu equipo"));
     const division = escHtml(String(team.division ?? ""));
+    const storedPassword = await fetchManagerLoginPassword(
+      supabaseAdmin,
+      managerEmail,
+      team.registration_id as string | null | undefined,
+    );
 
     const html = `
 <div style="font-family:'Segoe UI',Tahoma,sans-serif;max-width:620px;margin:auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
@@ -209,7 +248,7 @@ Deno.serve(async (req) => {
         </tr>
         <tr>
           <td style="padding:4px 0;color:#15803d;font-weight:700;">Contraseña</td>
-          <td style="padding:4px 0;color:#334155;">La que elegiste al inscribirte. Si no la recuerdas, usa «¿Has olvidado tu contraseña?» en el login.</td>
+          <td style="padding:4px 0;">${credentialsPasswordHtml(storedPassword)}</td>
         </tr>
         <tr>
           <td style="padding:4px 0;color:#15803d;font-weight:700;">Web</td>

@@ -96,6 +96,29 @@ Deno.serve(async (req) => {
       return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
     }
 
+    async function fetchManagerLoginPassword(email: string): Promise<string | null> {
+      const normalized = String(email ?? "").trim().toLowerCase();
+      if (!normalized) return null;
+      const { data: rows } = await supabaseAdmin
+        .from("registrations")
+        .select("manager_login_password")
+        .ilike("manager_email", normalized)
+        .not("manager_login_password", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const pwd = String(rows?.[0]?.manager_login_password ?? "").trim();
+      return pwd || null;
+    }
+
+    function passwordLine(storedPassword: string | null): string {
+      if (storedPassword) {
+        return `Usuario (email): <strong>${escAttr(String(managerEmail))}</strong> · Contraseña: <strong style="font-family:monospace;">${escAttr(storedPassword)}</strong>`;
+      }
+      return `Usuario (email): <strong>${escAttr(String(managerEmail))}</strong> · Contraseña: la que elegiste al registrarte (si no la recuerdas, «¿Has olvidado tu contraseña?»)`;
+    }
+
+    const storedLoginPassword = await fetchManagerLoginPassword(String(managerEmail));
+
     let emailBody: { from: string; to: string; subject: string; html: string };
 
     if (bulkRegistrationApproval && bulkTeams.length > 0) {
@@ -156,7 +179,7 @@ Deno.serve(async (req) => {
               </a>
             </div>
             <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-              Usuario (email): <strong>${escAttr(String(managerEmail))}</strong> · Contraseña: la que elegiste al registrarte · Plazo plantilla: <strong>4 de junio de 2026</strong>
+              ${passwordLine(storedLoginPassword)} · Plazo plantilla: <strong>4 de junio de 2026</strong>
             </p>
           </div>
           <div style="background: #f1f5f9; padding: 16px 24px; text-align: center;">
@@ -216,7 +239,7 @@ Deno.serve(async (req) => {
                 </tr>
                 <tr>
                   <td style="padding: 6px 0; color: #4ade80; font-weight: bold; font-size: 12px; text-transform: uppercase;">Contraseña</td>
-                  <td style="padding: 6px 0; color: #1e293b; font-style: italic; font-size: 13px;">La que elegiste durante el registro</td>
+                  <td style="padding: 6px 0; color: #1e293b; font-weight: bold; font-family: monospace; font-size: 14px;">${storedLoginPassword ? escAttr(storedLoginPassword) : "La que elegiste durante el registro (si no la recuerdas, usa «¿Has olvidado tu contraseña?»)"}</td>
                 </tr>
               </table>
             </div>

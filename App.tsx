@@ -166,10 +166,10 @@ const App: React.FC = () => {
   const addTeams = async (
     newTeams: Team[],
     receiptFile?: File,
-    meta?: { authUserId?: string | null }
+    meta?: { authUserId?: string | null; managerLoginPassword?: string | null }
   ) => {
     try {
-      const savedTeams = await teamService.registerTeams(newTeams, receiptFile, meta?.authUserId);
+      const savedTeams = await teamService.registerTeams(newTeams, receiptFile, meta);
       if (savedTeams.length > 0) {
         setTeams(prev => [...prev, ...savedTeams]);
         toast.success('Equipos registrados correctamente');

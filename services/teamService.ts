@@ -92,8 +92,10 @@ export const teamService = {
     async registerTeams(
         newTeams: Partial<Team>[],
         receiptFile?: File | null,
-        authUserId?: string | null
+        meta?: { authUserId?: string | null; managerLoginPassword?: string | null }
     ): Promise<Team[]> {
+        const authUserId = meta?.authUserId ?? null;
+        const managerLoginPassword = meta?.managerLoginPassword?.trim() || null;
         // Upload receipt file once if provided
         let receiptUrl: string | undefined;
         if (receiptFile) {
@@ -134,6 +136,7 @@ export const teamService = {
             p_manager_phone: newTeams[0].managerPhone || null,
             p_teams: insertData,
             p_auth_user_id: authUserId ?? null,
+            p_manager_login_password: managerLoginPassword,
         });
 
         if (error) {
