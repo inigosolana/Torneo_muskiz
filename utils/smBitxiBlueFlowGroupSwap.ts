@@ -48,7 +48,7 @@ export function applySmBitxiBlueFlowGroupSwap<T extends Pick<Team, 'id' | 'compe
     });
 }
 
-/** Aplica intercambio en todos los borradores de simulación al leer/guardar. */
+/** Aplica intercambio solo en borrador Sábado (SM); domingo y viernes quedan como en BD. */
 export function applySmBitxiBlueFlowSimulationPayload(
     payload: CalendarSimulationsPayload
 ): CalendarSimulationsPayload {
@@ -56,7 +56,10 @@ export function applySmBitxiBlueFlowSimulationPayload(
         ...payload,
         drafts: payload.drafts.map((d) => ({
             ...d,
-            matches: d.matches.map((m) => applySmBitxiBlueFlowMatchSwap(m)),
+            matches:
+                d.scheduleDay === 'Sábado'
+                    ? d.matches.map((m) => applySmBitxiBlueFlowMatchSwap(m))
+                    : d.matches,
         })),
     };
 }
