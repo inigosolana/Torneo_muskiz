@@ -18,7 +18,7 @@
  * El simulador intenta que cada equipo juegue ≥4 partidos reales; si no cabe, baja a ≥3.
  * Los partidos sin hueco aparecen con hora PENDIENTE (no se bloquea la generación).
  * Las fases de grupos/cuartos se programan antes que semis/finales.
- * Domingo: finales a las 14:25. Resto de días: finales en las últimas franjas del día.
+ * Domingo: descanso 14:15–14:25 y finales a las 14:25 (sin tocar borradores guardados).
  * Orden estricto: todos los grupos → cuartos → semis → finales (sin mezclar fases).
  * Entre fases se usa un snapshot de maxAssignedEndMin antes de cada lote (no nextPhaseSlotMin dinámico).
  * Máximo 2 partidos consecutivos por equipo; nunca 3 seguidos (rechazo duro en scoreSlot).
@@ -55,7 +55,9 @@ export type DivisionMinMatchesMap = Partial<Record<Team['division'], number>>;
 const SATURDAY_LUNCH_START = '14:15';
 const SATURDAY_LUNCH_DEFAULT_END = '15:45';
 
-/** Hora fija de las finales del domingo (Infantil Femenino + Infantil Masculino). */
+/** Descanso domingo entre última franja y finales (no se programan partidos aquí). */
+export const SUNDAY_BREAK_START = '14:15';
+/** Inicio de las finales del domingo. */
 export const SUNDAY_FINAL_START = '14:25';
 
 export interface MuskizBuildResult {
@@ -988,7 +990,14 @@ export function defaultConfigs(): Record<MuskizScheduleDayLabel, DayConfig> {
     return {
         Viernes: { label: 'Viernes', dayShort: 'Vie', playStart: '17:20', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6 },
         Sábado: { label: 'Sábado', dayShort: 'Sab', playStart: '09:35', playEndExclusive: '22:00', courts: DEFAULT_COURTS_6, lunch: { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END } },
-        Domingo: { label: 'Domingo', dayShort: 'Dom', playStart: '09:35', playEndExclusive: '15:35', courts: DEFAULT_COURTS_4 },
+        Domingo: {
+            label: 'Domingo',
+            dayShort: 'Dom',
+            playStart: '09:35',
+            playEndExclusive: '15:35',
+            courts: DEFAULT_COURTS_4,
+            lunch: { start: SUNDAY_BREAK_START, end: SUNDAY_FINAL_START },
+        },
     };
 }
 
@@ -1003,12 +1012,20 @@ export function getDayScheduleConfig(
             lunch: { start: SATURDAY_LUNCH_START, end: SATURDAY_LUNCH_DEFAULT_END },
         };
     }
+    if (day === 'Domingo') {
+        configs.Domingo = {
+            ...configs.Domingo,
+            lunch: { start: SUNDAY_BREAK_START, end: SUNDAY_FINAL_START },
+        };
+    }
     return configs[day];
 }
 
-function mergeSundayGridTimes(times: string[]): string[] {
-    if (times.includes(SUNDAY_FINAL_START)) return times;
-    return [...times, SUNDAY_FINAL_START].sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
+/** Cuadrícula domingo: franja 14:15 (fin de semis) + descanso hasta 14:25 + finales. */
+function sundayDisplayTimeSlots(slotTimes: string[]): string[] {
+    const out = slotTimes.filter((t) => t !== '14:50');
+    if (!out.includes(SUNDAY_BREAK_START)) out.push(SUNDAY_BREAK_START);
+    return out.sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
 }
 
 export function buildFullDayTimeSlots(
@@ -1018,7 +1035,7 @@ export function buildFullDayTimeSlots(
 ): string[] {
     const cfg = getDayScheduleConfig(day, options);
     const times = generateSlotStarts(cfg.playStart, cfg.playEndExclusive, slotMins, cfg.lunch).map(minutesToTime);
-    return day === 'Domingo' ? mergeSundayGridTimes(times) : times;
+    return day === 'Domingo' ? sundayDisplayTimeSlots(times) : times;
 }
 
 // ─── Planificador greedy ───────────────────────────────────────────────────
@@ -2659,24 +2676,7 @@ export function syncInfantilMasculinoSemisInSundayDraft(
     return { matches: merged, changed: true };
 }
 
-/** Partido final del domingo (IF/IM u otras), no semifinal. */
-export function isSundayFinalMatch(m: Pick<Match, 'round'>): boolean {
-    const r = (m.round ?? '');
-    return /\bFinal\b/i.test(r) && !/\bSemi\b/i.test(r);
-}
-
-/** Ajusta hora de finales del domingo al cierre acordado (14:25). */
-export function syncSundayFinalStartTimes(matches: Match[]): { matches: Match[]; changed: boolean } {
-    let changed = false;
-    const next = matches.map((m) => {
-        if (!isSundayFinalMatch(m) || m.time === SUNDAY_FINAL_START) return m;
-        changed = true;
-        return { ...m, time: SUNDAY_FINAL_START };
-    });
-    return { matches: next, changed };
-}
-
-/** Parches del borrador del domingo (semis IM, finales 14:25, etc.). */
+/** Parches del borrador del domingo (solo estructura IM; no modifica horarios guardados). */
 export function patchSundaySimulationDraft(
     teams: Team[],
     sundayMatches: Match[],
@@ -2689,12 +2689,6 @@ export function patchSundaySimulationDraft(
     if (semis.changed) {
         matches = semis.matches;
         notes.push('semifinales Infantil Masculino');
-    }
-
-    const finalsTime = syncSundayFinalStartTimes(matches);
-    if (finalsTime.changed) {
-        matches = finalsTime.matches;
-        notes.push(`finales a las ${SUNDAY_FINAL_START}`);
     }
 
     return { matches, changed: notes.length > 0, notes };
