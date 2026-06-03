@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getEdgeFunctionErrorMessage } from './invokeEdgeFunction';
 import {
     clearManagerRecoveryPending,
     isManagerRecoveryPending,
@@ -153,4 +154,59 @@ export async function bootstrapManagerPasswordRecovery(
         }
         return { status: 'error', message: msg };
     }
+}
+
+/**
+ * Solicita recuperación de contraseña: primero Edge Function (Resend + validación),
+ * si falla el envío usa Supabase Auth (funciona sin redesplegar la función).
+ */
+export async function requestManagerPasswordRecovery(
+    supabase: SupabaseClient,
+    managerEmail: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+    const email = managerEmail.trim().toLowerCase();
+    if (!email) {
+        return { ok: false, error: 'Introduce tu correo electrónico.' };
+    }
+
+    const redirectTo =
+        typeof window !== 'undefined'
+            ? `${window.location.origin}${MANAGER_PASSWORD_RESET_PATH}`
+            : `https://torneomuskizbmplaya.es${MANAGER_PASSWORD_RESET_PATH}`;
+
+    const { data, error: invokeError } = await supabase.functions.invoke(
+        'request-manager-password-reset',
+        { body: { email } }
+    );
+
+    if (!invokeError && data && typeof data === 'object' && !('error' in data && (data as { error?: string }).error)) {
+        return { ok: true };
+    }
+
+    const edgeMsg = invokeError
+        ? await getEdgeFunctionErrorMessage(invokeError, data)
+        : data && typeof data === 'object' && 'error' in data
+          ? String((data as { error: string }).error)
+          : '';
+
+    if (/No hay ninguna inscripción|No existe cuenta/i.test(edgeMsg)) {
+        return { ok: false, error: edgeMsg };
+    }
+
+    const { error: authErr } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (!authErr) {
+        return { ok: true };
+    }
+
+    const yahooHint = /@(yahoo\.|ymail\.|rocketmail\.)/i.test(email)
+        ? ' Revisa también spam y «Correo no deseado» en Yahoo.'
+        : '';
+
+    return {
+        ok: false,
+        error:
+            edgeMsg && !/No se pudo enviar el correo/i.test(edgeMsg)
+                ? edgeMsg
+                : `No se pudo enviar el correo.${yahooHint} Prueba de nuevo o escribe a torneomuskizbmplaya@gmail.com.`,
+    };
 }
