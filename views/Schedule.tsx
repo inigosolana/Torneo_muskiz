@@ -3,6 +3,7 @@ import { searchRules } from '../services/geminiService';
 import { Team } from '../types';
 import { useTournamentData } from '../context/TournamentDataContext';
 import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews';
+import { CompetitionPublicResultsSection } from '../components/CompetitionPublicResultsSection';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 
 export const Schedule: React.FC = () => {
@@ -282,31 +283,7 @@ export const Schedule: React.FC = () => {
                         )}
 
                         {activeTab === 'results' && (
-                            <div className="grid gap-4 md:grid-cols-2 animate-in fade-in">
-                                {publicMatches.length === 0 ? (
-                                    <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 dark:bg-white/5 px-6 py-12 text-center text-slate-600 dark:text-slate-300">
-                                        <p className="text-lg font-black text-slate-800 dark:text-white mb-2">Resultados en preparación</p>
-                                        <p className="text-sm leading-relaxed max-w-md mx-auto">
-                                            El calendario oficial se publicará próximamente.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    publicMatches
-                                        .filter((m) => m.status === 'FINISHED')
-                                        .map((match) => (
-                                            <div
-                                                key={match.id}
-                                                className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-white/10 p-4 rounded-xl flex justify-between items-center"
-                                            >
-                                                <span className="font-bold">{match.teamA}</span>
-                                                <div className="bg-slate-100 dark:bg-white/10 px-3 py-1 rounded font-black">
-                                                    {match.scoreA}-{match.scoreB}
-                                                </div>
-                                                <span className="font-bold">{match.teamB}</span>
-                                            </div>
-                                        ))
-                                )}
-                            </div>
+                            <CompetitionPublicResultsSection matches={publicMatches} teams={teams} />
                         )}
 
                         {activeTab === 'standings' && (

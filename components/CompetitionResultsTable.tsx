@@ -180,7 +180,8 @@ export const CompetitionResultsTable: React.FC<CompetitionResultsTableProps> = (
                     </tbody>
                 </table>
                 <p className="text-[10px] text-slate-400 px-3 py-2 bg-slate-50 border-t border-slate-100">
-                    Marcador = sets ganados (2:0, 2:1, 0:2, 1:2). Pulsa para introducir cada set y shootout. Orden:{' '}
+                    Marcador = sets ganados (2:0, 2:1, 0:2, 1:2).
+                    {!hideActions && ' Pulsa para introducir cada set y shootout.'} Orden:{' '}
                     {WEEKEND_SCHEDULE_DAYS.join(' → ')}.
                 </p>
             </div>
