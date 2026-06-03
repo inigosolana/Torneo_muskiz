@@ -256,6 +256,8 @@ export const Schedule: React.FC = () => {
                                 <CompetitionCalendarViews
                                     matches={publicMatches}
                                     teams={teams}
+                                    readOnly
+                                    readOnlyAudience="public"
                                     title="Calendario oficial (Viernes · Sábado · Domingo)"
                                     emptyMessage="El calendario oficial se publicará próximamente."
                                 />

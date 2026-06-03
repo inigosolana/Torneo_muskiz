@@ -240,6 +240,7 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
                                 matches={calendarDayMatches}
                                 fixedDay={calendarDay}
                                 fillEmptySlots
+                                readOnly
                             />
                         )}
                     </div>
@@ -252,6 +253,8 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
                             <CompetitionCalendarViews
                                 matches={filteredMatches}
                                 teams={allTeams}
+                                readOnly
+                                readOnlyAudience="public"
                                 emptyMessage="Sin partidos."
                             />
                         </div>

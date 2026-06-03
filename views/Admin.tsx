@@ -3930,6 +3930,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     <p className="font-black text-base">{officialCalendarStatus.headline}</p>
                                                     <p className="mt-1 leading-relaxed">{officialCalendarStatus.sub}</p>
                                                 </div>
+                                                <p className="text-xs text-blue-800 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 flex items-start gap-2">
+                                                    <span className="material-symbols-outlined text-base shrink-0">lock</span>
+                                                    La cuadrícula del calendario <strong>oficial es solo lectura</strong>. Arrastra y edita partidos en{' '}
+                                                    <strong>Simulación</strong> y publícalos cuando estén listos.
+                                                </p>
                                                 <div className="flex flex-wrap gap-2">
                                                     {matches.length > 0 && (
                                                         <>
@@ -3965,10 +3970,14 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                         <CompetitionCalendarViews
                                             matches={compDisplayMatches}
                                             teams={teams}
+                                            readOnly={compArenaMode === 'official'}
                                             showDayExport={compArenaMode === 'simulation'}
                                             exportFileNamePrefix="calendario_simulacion"
-                                            onDownloadCategoryActas={(division, catMatches) =>
-                                                void handleDownloadCategoryActas(division, catMatches)
+                                            onDownloadCategoryActas={
+                                                compArenaMode === 'official'
+                                                    ? (division, catMatches) =>
+                                                          void handleDownloadCategoryActas(division, catMatches)
+                                                    : undefined
                                             }
                                             actasExporting={actaExporting}
                                             title={

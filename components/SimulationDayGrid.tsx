@@ -92,7 +92,9 @@ interface SimulationDayGridProps {
     fixedDay?: Match['scheduleDay'];
     /** Cuadrícula completa del día (huecos vacíos hasta el cierre) para mover partidos. */
     fillEmptySlots?: boolean;
-    /** Callback cuando el usuario edita o arrastra un partido */
+    /** Si true, no arrastrar ni editar (oficial / web). Ignora onUpdateMatch. */
+    readOnly?: boolean;
+    /** Callback cuando el usuario edita o arrastra un partido (solo modo Simulación). */
     onUpdateMatch?: (matchId: string, patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>) => void;
 }
 
@@ -101,8 +103,10 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
     matches,
     fixedDay,
     fillEmptySlots = true,
+    readOnly = false,
     onUpdateMatch,
 }) => {
+    const editable = !readOnly && Boolean(onUpdateMatch);
     const SLOT_MINS = 35;
     const [day, setDay] = useState<MuskizScheduleDayLabel>(fixedDay ?? 'Sábado');
     const viewDay = fixedDay ?? day;
@@ -174,10 +178,15 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
             {fixedDay && (
                 <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase text-teal-800">Cuadrícula · {fixedDay}</span>
-                    {onUpdateMatch && (
+                    {editable ? (
                         <span className="text-[10px] text-slate-400 flex items-center gap-1 max-w-md text-right">
                             <span className="material-symbols-outlined text-sm">drag_indicator</span>
                             Arrastra o edita. No se permite el mismo equipo a la misma hora.
+                        </span>
+                    ) : (
+                        <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-sm">visibility</span>
+                            Solo lectura
                         </span>
                     )}
                 </div>
@@ -259,14 +268,14 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                             return (
                                                 <td
                                                     key={c}
-                                                    className={`border border-slate-200 align-top p-0.5 min-h-[48px] h-[48px] max-w-[140px] transition-colors ${isDropTarget ? 'bg-teal-100 border-2 border-teal-400' : m ? colors.cell : onUpdateMatch ? 'bg-slate-50/80' : ''}`}
+                                                    className={`border border-slate-200 align-top p-0.5 min-h-[48px] h-[48px] max-w-[140px] transition-colors ${isDropTarget ? 'bg-teal-100 border-2 border-teal-400' : m ? colors.cell : editable ? 'bg-slate-50/80' : ''}`}
                                                     onDragEnter={(e) => {
-                                                        if (!onUpdateMatch) return;
+                                                        if (!editable) return;
                                                         e.preventDefault();
                                                         setDropTarget({ time: t, court: c });
                                                     }}
                                                     onDragOver={(e) => {
-                                                        if (!onUpdateMatch) return;
+                                                        if (!editable) return;
                                                         e.preventDefault();
                                                         e.dataTransfer.dropEffect = 'move';
                                                         setDropTarget({ time: t, court: c });
@@ -285,14 +294,14 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                                         const draggedId =
                                                             e.dataTransfer.getData(MATCH_DRAG_MIME) ||
                                                             dragMatchId.current;
-                                                        if (!onUpdateMatch || !draggedId) return;
+                                                        if (!editable || !onUpdateMatch || !draggedId) return;
                                                         onUpdateMatch(draggedId, { time: t, court: c });
                                                         dragMatchId.current = null;
                                                     }}
                                                 >
                                                     {m ? (
                                                         <div
-                                                            draggable={!!onUpdateMatch}
+                                                            draggable={editable}
                                                             onDragStart={(e) => {
                                                                 dragMatchId.current = m.id;
                                                                 e.dataTransfer.setData(MATCH_DRAG_MIME, m.id);
@@ -302,8 +311,8 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                                                 dragMatchId.current = null;
                                                                 setDropTarget(null);
                                                             }}
-                                                            onClick={() => onUpdateMatch && setEditingMatch(m)}
-                                                            className={`rounded leading-tight p-1 h-full min-h-[44px] ${onUpdateMatch ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} ${colors.cell} border ${colors.drag} select-none`}
+                                                            onClick={() => editable && setEditingMatch(m)}
+                                                            className={`rounded leading-tight p-1 h-full min-h-[44px] ${editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} ${colors.cell} border ${editable ? colors.drag : 'border-transparent'} select-none`}
                                                         >
                                                             <div className="text-[9px] font-semibold text-slate-800 line-clamp-2">
                                                                 {m.teamA} <span className="text-slate-400">vs</span> {m.teamB}
@@ -311,14 +320,14 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
                                                             <div className="mt-0.5 text-[8px] text-slate-500 truncate" title={m.round}>
                                                                 {(m.round ?? '').split('·').slice(2).join('·').trim()}
                                                             </div>
-                                                            {onUpdateMatch && (
+                                                            {editable && (
                                                                 <div className="mt-0.5 text-[7px] text-slate-400 flex items-center gap-0.5">
                                                                     <span className="material-symbols-outlined" style={{ fontSize: 9 }}>edit</span> editar
                                                                 </div>
                                                             )}
                                                         </div>
                                                     ) : (
-                                                        onUpdateMatch && (
+                                                        editable && (
                                                             <div
                                                                 className="min-h-[44px] h-full w-full rounded border border-dashed border-slate-300/80 bg-transparent pointer-events-none"
                                                                 aria-hidden
@@ -337,7 +346,7 @@ export const SimulationScheduleGridTabs: React.FC<SimulationDayGridProps> = ({
             )}
 
             {/* Modal edición */}
-            {editingMatch && onUpdateMatch && (
+            {editingMatch && editable && onUpdateMatch && (
                 <EditMatchModal
                     match={editingMatch}
                     availableTimes={allTimes}

@@ -21,6 +21,10 @@ interface CompetitionCalendarViewsProps {
     teams: Team[];
     /** Etiqueta del contexto (borrador, oficial, etc.) */
     title?: string;
+    /** Cuadrícula sin arrastrar ni editar (oficial publicado y web). */
+    readOnly?: boolean;
+    /** Texto del aviso de solo lectura (staff vs visitantes). */
+    readOnlyAudience?: 'staff' | 'public';
     onUpdateMatch?: (matchId: string, patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>) => void;
     /** Descarga ZIP de actas DOCX de todos los partidos de una categoría. */
     onDownloadCategoryActas?: (division: Team['division'], matches: Match[]) => void;
@@ -76,6 +80,8 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
     matches,
     teams,
     title,
+    readOnly = false,
+    readOnlyAudience = 'staff',
     onUpdateMatch,
     onDownloadCategoryActas,
     actasExporting,
@@ -84,6 +90,7 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
     emptyMessage = 'No hay partidos para mostrar.',
 }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('day');
+    const gridReadOnly = readOnly || !onUpdateMatch;
 
     const byDay = useMemo(() => groupByDay(matches), [matches]);
     const byCategory = useMemo(() => groupByCategory(matches, teams), [matches, teams]);
@@ -99,6 +106,19 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
 
     return (
         <div className="space-y-4">
+            {gridReadOnly && (
+                <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base text-slate-500">lock</span>
+                    {readOnlyAudience === 'public' ? (
+                        <>Calendario publicado en <strong>solo lectura</strong>.</>
+                    ) : (
+                        <>
+                            Cuadrícula en <strong>solo lectura</strong>. Para mover partidos, usa{' '}
+                            <strong>Competición → Simulación</strong> (no Oficial).
+                        </>
+                    )}
+                </p>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 {title && <h4 className="text-sm font-black uppercase text-slate-600">{title}</h4>}
                 <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 p-1 ml-auto">
@@ -182,7 +202,8 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                         matches={dayMatches}
                                         fixedDay={day}
                                         fillEmptySlots
-                                        onUpdateMatch={onUpdateMatch}
+                                        readOnly={gridReadOnly}
+                                        onUpdateMatch={gridReadOnly ? undefined : onUpdateMatch}
                                     />
                                     {dayMatches.length === 0 && (
                                         <p className="text-xs text-slate-400 text-center mt-2">
