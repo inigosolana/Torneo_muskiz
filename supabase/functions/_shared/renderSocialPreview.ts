@@ -1,139 +1,166 @@
 /**
- * Genera imagen JPEG de vista previa para Instagram (Telegram).
+ * Vista previa JPEG para Instagram (Telegram). Diseño simple y robusto en Edge.
  */
 
 import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 
-const FONT_URL =
-  "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/version_2_37/ttf/DejaVuSans-Bold.ttf";
+const FONT_URLS = [
+  "https://cdn.jsdelivr.net/gh/dejavu-fonts/dejavu-fonts@version_2_37/ttf/DejaVuSans-Bold.ttf",
+  "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/version_2_37/ttf/DejaVuSans-Bold.ttf",
+];
 
 let cachedFont: Uint8Array | null = null;
 
 async function loadFont(): Promise<Uint8Array> {
   if (cachedFont) return cachedFont;
-  const res = await fetch(FONT_URL);
-  if (!res.ok) throw new Error("Font load failed");
-  cachedFont = new Uint8Array(await res.arrayBuffer());
-  return cachedFont;
-}
-
-async function fetchImage(url: string, maxSize: number): Promise<Image | null> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    let img = await Image.decode(bytes);
-    if (img.width > maxSize || img.height > maxSize) {
-      const scale = maxSize / Math.max(img.width, img.height);
-      img = img.resize(Math.round(img.width * scale), Math.round(img.height * scale));
+  let lastErr = "Font load failed";
+  for (const url of FONT_URLS) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+      if (!res.ok) continue;
+      cachedFont = new Uint8Array(await res.arrayBuffer());
+      if (cachedFont.length > 1000) return cachedFont;
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : String(e);
     }
-    return img;
-  } catch {
-    return null;
   }
-}
-
-async function drawText(
-  img: Image,
-  font: Uint8Array,
-  size: number,
-  text: string,
-  x: number,
-  y: number,
-  color = 0xffffffff,
-): Promise<number> {
-  const line = text.slice(0, 48);
-  const t = await Image.renderText(font, size, line, color);
-  img.composite(t, x, y);
-  return t.height;
+  throw new Error(lastErr);
 }
 
 function targetSize(payload: Record<string, unknown>): { w: number; h: number } {
   const fmt = payload.format as { width?: number; height?: number } | undefined;
-  const w = fmt?.width ?? 1080;
-  const h = fmt?.height ?? 1920;
-  return { w, h };
+  return { w: fmt?.width ?? 1080, h: fmt?.height ?? 1920 };
+}
+
+function buildBodyText(payload: Record<string, unknown>): string {
+  const stitch = payload.stitch as Record<string, unknown> | undefined;
+  const lines: string[] = [];
+
+  const rows = stitch?.rows as { pos?: string; team?: string; pts?: string; line1?: string; line2?: string }[] | undefined;
+  if (rows?.length) {
+    for (const row of rows) {
+      if (row.line2) {
+        lines.push(String(row.line1 ?? ""));
+        lines.push(String(row.line2 ?? ""));
+      } else if (row.team) {
+        lines.push(`${row.pos ?? ""}. ${row.team} (${row.pts ?? "0"} pts)`);
+      } else if (row.line1) {
+        lines.push(String(row.line1));
+      }
+    }
+  }
+
+  const groupBlocks = payload.groupBlocks as { group: string; lines: string[] }[] | undefined;
+  if (groupBlocks?.length) {
+    for (const b of groupBlocks) {
+      lines.push(`GRUPO ${b.group}`);
+      for (const ln of b.lines) lines.push(ln);
+      lines.push("");
+    }
+  }
+
+  if (stitch?.teamA && stitch?.teamB) {
+    lines.push(String(stitch.teamA));
+    lines.push(String(stitch.score ?? ""));
+    lines.push(String(stitch.teamB));
+    if (stitch.meta) lines.push(String(stitch.meta));
+  }
+
+  return lines.join("\n").slice(0, 1200);
+}
+
+async function encodeJpeg(img: Image): Promise<Uint8Array> {
+  try {
+    return await img.encodeJPEG(82);
+  } catch {
+    return await img.encode(1);
+  }
+}
+
+/** Imagen mínima sin fuente (si falla renderText). */
+async function renderMinimal(payload: Record<string, unknown>): Promise<Uint8Array> {
+  const { w, h } = targetSize(payload);
+  const canvas = new Image(w, h, 0x0b0f14ff);
+  const bar = new Image(w, 100, 0x0df2f2ff);
+  canvas.composite(bar, 0, h - 100);
+  return await encodeJpeg(canvas);
 }
 
 export async function renderPayloadPreviewImage(
   payload: Record<string, unknown>,
 ): Promise<Uint8Array> {
   const { w, h } = targetSize(payload);
-  const font = await loadFont();
-  const brand = payload.brand as { logoUrl?: string; title?: string } | undefined;
+  const brand = payload.brand as { logoUrl?: string; instagramHandle?: string } | undefined;
   const stitch = payload.stitch as Record<string, unknown> | undefined;
 
   let canvas = new Image(w, h, 0x0b0f14ff);
-  const accent = new Image(w, 12, 0x0df2f2ff);
-  canvas.composite(accent, 0, 0);
+  canvas.composite(new Image(w, 14, 0x0df2f2ff), 0, 0);
 
-  const logoUrl = String(brand?.logoUrl ?? "https://torneomuskizbmplaya.es/logo_kolosaurios.png");
-  const logo = await fetchImage(logoUrl, 140);
-  let y = 40;
-  if (logo) {
-    const lx = Math.round((w - logo.width) / 2);
-    canvas.composite(logo, lx, y);
-    y += logo.height + 24;
+  let y = 36;
+
+  try {
+    const logoUrl = String(brand?.logoUrl ?? "https://torneomuskizbmplaya.es/logo_kolosaurios.png");
+    const res = await fetch(logoUrl, { signal: AbortSignal.timeout(6000) });
+    if (res.ok) {
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      let logo = await Image.decode(bytes);
+      const max = 120;
+      if (logo.width > max || logo.height > max) {
+        const s = max / Math.max(logo.width, logo.height);
+        logo = logo.resize(Math.round(logo.width * s), Math.round(logo.height * s));
+      }
+      canvas.composite(logo, Math.round((w - logo.width) / 2), y);
+      y += logo.height + 20;
+    }
+  } catch {
+    /* sin logo */
   }
 
-  const title = String(stitch?.title ?? payload.headline ?? "Torneo Muskiz");
+  const font = await loadFont();
+  const title = String(stitch?.title ?? payload.headline ?? "TORNEO MUSKIZ").toUpperCase();
   const subtitle = String(stitch?.subtitle ?? payload.subheadline ?? "");
 
-  y += await drawText(canvas, font, 46, title.toUpperCase(), 48, y, 0x0df2f2ff);
+  const titleImg = await Image.renderText(font, 42, title.slice(0, 40), 0x0df2f2ff);
+  canvas.composite(titleImg, 48, y);
+  y += titleImg.height + 12;
+
   if (subtitle) {
-    y += 8;
-    y += await drawText(canvas, font, 32, subtitle, 48, y, 0xffffffff);
-  }
-  y += 28;
-
-  const rows = stitch?.rows as { pos?: string; team?: string; pts?: string; line1?: string; line2?: string }[] | undefined;
-  if (rows?.length) {
-    for (const row of rows.slice(0, h > 1200 ? 10 : 7)) {
-      let line: string;
-      if (row.line2) {
-        line = `${row.line1 ?? ""}`;
-        y += await drawText(canvas, font, 26, line, 56, y, 0x94a3b8ff);
-        line = String(row.line2);
-        y += await drawText(canvas, font, 30, line, 56, y, 0xffffffff);
-        y += 14;
-      } else if (row.team) {
-        line = `${row.pos ?? ""}. ${row.team} — ${row.pts ?? "0"} pts`;
-        y += await drawText(canvas, font, 30, line, 56, y, 0xffffffff);
-        y += 10;
-      } else {
-        line = String(row.line1 ?? "");
-        y += await drawText(canvas, font, 28, line, 56, y, 0xffffffff);
-        y += 12;
-      }
-      if (y > h - 120) break;
-    }
+    const subImg = await Image.renderText(font, 28, subtitle.slice(0, 50), 0xffffffff);
+    canvas.composite(subImg, 48, y);
+    y += subImg.height + 20;
   }
 
-  const groupBlocks = payload.groupBlocks as { group: string; lines: string[] }[] | undefined;
-  if (groupBlocks?.length && !rows?.length) {
-    for (const block of groupBlocks.slice(0, 8)) {
-      y += await drawText(canvas, font, 34, `GRUPO ${block.group}`, 48, y, 0x0df2f2ff);
-      for (const ln of block.lines.slice(0, 4)) {
-        y += await drawText(canvas, font, 28, ln, 56, y + 4, 0xffffffff);
-        y += 8;
-      }
-      y += 16;
+  const body = buildBodyText(payload);
+  if (body) {
+    const chunks = body.split("\n");
+    const fontSize = h > 1200 ? 26 : 24;
+    for (const chunk of chunks.slice(0, 14)) {
       if (y > h - 100) break;
+      const line = chunk.slice(0, 52);
+      if (!line.trim()) {
+        y += 10;
+        continue;
+      }
+      const t = await Image.renderText(font, fontSize, line, 0xffffffff);
+      canvas.composite(t, 52, y);
+      y += t.height + 6;
     }
   }
 
-  if (stitch?.teamA && stitch?.teamB) {
-    y += await drawText(canvas, font, 36, String(stitch.teamA), 48, y, 0xffffffff);
-    y += 16;
-    y += await drawText(canvas, font, 56, String(stitch.score ?? ""), 48, y, 0x0df2f2ff);
-    y += 16;
-    y += await drawText(canvas, font, 36, String(stitch.teamB), 48, y, 0xffffffff);
-    const meta = String(stitch.meta ?? "");
-    if (meta) y += await drawText(canvas, font, 26, meta, 48, y + 12, 0x94a3b8ff);
+  const handle = String(brand?.instagramHandle ?? "@kolosaurios_muskiz");
+  const foot = await Image.renderText(font, 22, handle, 0x94a3b8ff);
+  canvas.composite(foot, 48, h - foot.height - 40);
+
+  return await encodeJpeg(canvas);
+}
+
+export async function renderPayloadPreviewSafe(
+  payload: Record<string, unknown>,
+): Promise<{ bytes: Uint8Array; mode: "full" | "minimal" }> {
+  try {
+    return { bytes: await renderPayloadPreviewImage(payload), mode: "full" };
+  } catch (e) {
+    console.error("renderPayloadPreviewImage failed:", e);
+    return { bytes: await renderMinimal(payload), mode: "minimal" };
   }
-
-  const handle = String((brand as { instagramHandle?: string })?.instagramHandle ?? "@kolosaurios_muskiz");
-  await drawText(canvas, font, 24, handle, 48, h - 72, 0x94a3b8ff);
-
-  return await canvas.encodeJPEG(90);
 }

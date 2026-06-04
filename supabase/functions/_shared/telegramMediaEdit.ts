@@ -137,23 +137,41 @@ export async function compositeImageWithText(
 
 export async function sendTelegramPhoto(
   chatId: string,
-  jpegBytes: Uint8Array,
+  imageBytes: Uint8Array,
   caption?: string,
   replyMarkup?: { inline_keyboard: { text: string; callback_data: string }[][] },
 ): Promise<boolean> {
   const token = BOT_TOKEN();
   if (!token) return false;
 
+  const isPng = imageBytes[0] === 0x89 && imageBytes[1] === 0x50;
+  const mime = isPng ? "image/png" : "image/jpeg";
+  const name = isPng ? "torneo-preview.png" : "torneo-preview.jpg";
+
   const form = new FormData();
   form.append("chat_id", chatId);
-  form.append("photo", new Blob([jpegBytes], { type: "image/jpeg" }), "torneo-preview.jpg");
+  const blob = new Blob([imageBytes], { type: mime });
+  form.append("photo", blob, name);
   if (caption?.trim()) form.append("caption", caption.slice(0, 900));
   if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
 
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+  let res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
     method: "POST",
     body: form,
   });
-  const data = await res.json().catch(() => ({})) as { ok?: boolean };
+  let data = await res.json().catch(() => ({})) as { ok?: boolean; description?: string };
+  if (data.ok) return true;
+
+  console.error("sendPhoto failed:", data.description ?? res.status);
+
+  const form2 = new FormData();
+  form2.append("chat_id", chatId);
+  form2.append("document", blob, name);
+  if (caption?.trim()) form2.append("caption", caption.slice(0, 900));
+  res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+    method: "POST",
+    body: form2,
+  });
+  data = await res.json().catch(() => ({})) as { ok?: boolean };
   return !!data.ok;
 }

@@ -1,7 +1,7 @@
 /** Envío de borradores Instagram al bot de revisión Telegram */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { renderPayloadPreviewImage } from "./renderSocialPreview.ts";
+import { renderPayloadPreviewSafe } from "./renderSocialPreview.ts";
 import { sendTelegramPhoto } from "./telegramMediaEdit.ts";
 
 export const SOCIAL_REVIEW_STATE_KEY = "social_review_state";
@@ -238,33 +238,33 @@ export async function notifyDraftUpdated(
 ): Promise<boolean> {
   const keyboard = draftKeyboard(draft.id);
   const fmt = draft.payload.format as { label?: string } | undefined;
-  const photoCaption = [
-    "📸 Vista previa para publicar",
-    fmt?.label ?? "",
-    "",
-    draft.caption.slice(0, 700),
-  ].filter(Boolean).join("\n");
+  const shortCaption = `📸 Listo para publicar · ${fmt?.label ?? "Instagram"} · ID ${draft.id}`;
 
   let anyOk = false;
   for (const chatId of chatIds) {
+    let photoSent = false;
     try {
-      const jpeg = await renderPayloadPreviewImage(draft.payload);
-      const photoOk = await sendTelegramPhoto(chatId, jpeg, photoCaption, keyboard);
-      if (photoOk) {
-        anyOk = true;
-        continue;
+      const { bytes, mode } = await renderPayloadPreviewSafe(draft.payload);
+      const cap = mode === "minimal"
+        ? `${shortCaption}\n(vista previa simplificada)`
+        : shortCaption;
+      photoSent = await sendTelegramPhoto(chatId, bytes, cap);
+      if (!photoSent) {
+        photoSent = await sendTelegramPhoto(chatId, bytes, undefined);
       }
     } catch (e) {
-      console.error("renderPayloadPreviewImage", e);
+      console.error("notifyDraftUpdated photo", e);
     }
-    const text = formatReviewTelegramText(draft);
+
+    const text = formatReviewTelegramText(draft) +
+      (photoSent ? "\n\n👆 Imagen lista para guardar y subir a Instagram." : "\n\n⚠️ No se pudo enviar la imagen; solo texto.");
     const r = await tgApi("sendMessage", {
       chat_id: chatId,
-      text: text + "\n\n⚠️ No se pudo generar la imagen; solo texto.",
+      text,
       reply_markup: keyboard,
       disable_web_page_preview: true,
     });
-    if (r.ok) anyOk = true;
+    if (r.ok || photoSent) anyOk = true;
   }
   return anyOk;
 }
