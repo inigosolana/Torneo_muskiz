@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Resultado — Feed</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 1080px; height: 1080px;
+      font-family: system-ui, sans-serif;
+      background: #0b0f14;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 64px;
+    }
+    .badge { background: #0df2f2; color: #0b0f14; font-weight: 900; padding: 12px 28px; border-radius: 999px; font-size: 28px; margin-bottom: 40px; }
+    .team { font-size: 56px; font-weight: 900; line-height: 1.1; max-width: 900px; }
+    .score { font-size: 120px; font-weight: 900; color: #0df2f2; margin: 32px 0; }
+    .meta { font-size: 28px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="badge">RESULTADO</div>
+  <div class="team">{{teamA}}</div>
+  <div class="score">{{score}}</div>
+  <div class="team">{{teamB}}</div>
+  <p class="meta">{{meta}}</p>
+</body>
+</html>

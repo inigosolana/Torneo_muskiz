@@ -7,6 +7,7 @@ export type AdminMainTab =
     | 'competition'
     | 'teams'
     | 'sponsors'
+    | 'social'
     | 'categories';
 export type AdminCompSubTab = 'structure' | 'simulations' | 'calendar' | 'results' | 'standings';
 export type AdminPreviewMode = 'official' | 'simulation';

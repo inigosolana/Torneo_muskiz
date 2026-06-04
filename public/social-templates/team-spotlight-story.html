@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Equipo — Story</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 1080px; height: 1920px;
+      font-family: system-ui, sans-serif;
+      background: #0b0f14;
+      color: #fff;
+      padding: 64px 48px;
+      display: flex;
+      flex-direction: column;
+    }
+    h1 { font-size: 52px; font-weight: 900; }
+    .sub { font-size: 30px; color: #0df2f2; margin: 16px 0 40px; }
+    .player { font-size: 26px; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .meta { margin-top: auto; font-size: 22px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <h1>{{title}}</h1>
+  <p class="sub">{{subtitle}}</p>
+  <div class="player">{{playerLine}}</div>
+  <p class="meta">{{meta}}</p>
+</body>
+</html>

@@ -20,6 +20,9 @@ supabase secrets set RESEND_API_KEY="tu_clave"
 | Variable | Origen |
 |----------|--------|
 | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) |
+| `N8N_SOCIAL_WH_URL` | n8n → Webhook del workflow «Torneo Instagram» (opcional; si no existe, usa `N8N_WH_URL`) |
+| `TELEGRAM_SOCIAL_REVIEW_BOT_TOKEN` | [@BotFather](https://t.me/BotFather) — bot solo para revisar posts IG |
+| `TELEGRAM_SOCIAL_REVIEW_CHAT_IDS` | Tu `chat_id` (opcional; si no, envía `/start` al bot y se guarda solo) |
 | `RESEND_API_KEY` | [Resend](https://resend.com/api-keys) → API Keys |
 | `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Supabase → **Project Settings → API** (solo en `.env` local, ver `.env.example`) |
 

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Clasificación — Story</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 1080px; height: 1920px;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      background: linear-gradient(165deg, #0b0f14 0%, #132028 45%, #0a3d3d 100%);
+      color: #fff;
+      padding: 72px 56px;
+      display: flex;
+      flex-direction: column;
+    }
+    .logo { width: 120px; margin-bottom: 32px; }
+    h1 { font-size: 52px; font-weight: 900; text-transform: uppercase; line-height: 1.05; }
+    h2 { font-size: 36px; color: #0df2f2; margin: 12px 0 48px; font-weight: 800; }
+    table { width: 100%; border-collapse: collapse; font-size: 34px; }
+    th { text-align: left; color: #94a3b8; font-size: 22px; padding-bottom: 16px; }
+    td { padding: 18px 8px; border-bottom: 1px solid rgba(255,255,255,.12); }
+    .pos { width: 56px; color: #0df2f2; font-weight: 900; }
+    .pts { text-align: right; font-weight: 900; color: #0df2f2; }
+    .foot { margin-top: auto; font-size: 24px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <img class="logo" src="{{logoUrl}}" alt="Logo" />
+  <h1>{{title}}</h1>
+  <h2>{{subtitle}}</h2>
+  <table>
+    <thead><tr><th>#</th><th>Equipo</th><th class="pts">PTS</th></tr></thead>
+    <tbody>
+      <!-- Repetir fila en Stitch/n8n: {{#rows}} -->
+      <tr><td class="pos">{{pos}}</td><td>{{team}}</td><td class="pts">{{pts}}</td></tr>
+    </tbody>
+  </table>
+  <p class="foot">{{instagramHandle}} · {{webUrl}}</p>
+</body>
+</html>

@@ -10,6 +10,7 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
 const CONFIGURE_SECRET = Deno.env.get("CONFIGURE_TG_WEBHOOK_SECRET")?.trim() ?? "";
 const PLAYER_DOCS_TOKEN = Deno.env.get("PLAYER_DOCS_TELEGRAM_BOT_TOKEN")?.trim() ?? "";
 const TEAMS_TOKEN = Deno.env.get("TELEGRAM_NOTIFICATIONS_BOT_TOKEN")?.trim() ?? "";
+const SOCIAL_REVIEW_TOKEN = Deno.env.get("TELEGRAM_SOCIAL_REVIEW_BOT_TOKEN")?.trim() ?? "";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -67,10 +68,12 @@ Deno.serve(async (req) => {
 
   const playerWebhookUrl = `${SUPABASE_URL}/functions/v1/telegram-player-docs-bot-webhook`;
   const teamsWebhookUrl = `${SUPABASE_URL}/functions/v1/telegram-bot-webhook`;
+  const socialReviewWebhookUrl = `${SUPABASE_URL}/functions/v1/telegram-social-review-webhook`;
 
   const out: Record<string, unknown> = {
     playerWebhookUrl,
     teamsWebhookUrl,
+    socialReviewWebhookUrl,
   };
 
   if (PLAYER_DOCS_TOKEN) {
@@ -85,6 +88,13 @@ Deno.serve(async (req) => {
     out.teams_getWebhookInfo = await tgGetWebhookInfo(TEAMS_TOKEN);
   } else {
     out.teams_setWebhook = { skipped: true, reason: "TELEGRAM_NOTIFICATIONS_BOT_TOKEN missing" };
+  }
+
+  if (SOCIAL_REVIEW_TOKEN) {
+    out.social_review_setWebhook = await tgSetWebhook(SOCIAL_REVIEW_TOKEN, socialReviewWebhookUrl);
+    out.social_review_getWebhookInfo = await tgGetWebhookInfo(SOCIAL_REVIEW_TOKEN);
+  } else {
+    out.social_review_setWebhook = { skipped: true, reason: "TELEGRAM_SOCIAL_REVIEW_BOT_TOKEN missing" };
   }
 
   return new Response(JSON.stringify({ ok: true, ...out }), {

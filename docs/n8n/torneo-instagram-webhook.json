@@ -1,0 +1,134 @@
+{
+  "name": "Torneo Muskiz — Instagram (webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "torneo-instagram",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-in",
+      "name": "Webhook Torneo",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "torneo-instagram"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.template }}",
+                    "rightValue": "standings_group_story",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "standings_story"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.template }}",
+                    "rightValue": "results_day_story",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "results_day"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.template }}",
+                    "rightValue": "match_result_feed",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "match_feed"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "switch-template",
+      "name": "Por template",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "caption",
+              "name": "caption",
+              "value": "={{ $json.captionDraft }}",
+              "type": "string"
+            },
+            {
+              "id": "stitch",
+              "name": "stitch",
+              "value": "={{ $json.stitch }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prep-stitch",
+      "name": "Preparar Stitch",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [720, 200]
+    },
+    {
+      "parameters": {
+        "content": "## Siguiente paso\nConecta aquí tu nodo **Stitch** o **HTML to Image** usando `stitch` y `brand`.\nLuego Instagram Graph API o envío a Telegram como borrador.",
+        "height": 200,
+        "width": 400
+      },
+      "id": "note-stitch",
+      "name": "Nota Stitch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [960, 160]
+    }
+  ],
+  "connections": {
+    "Webhook Torneo": {
+      "main": [[{ "node": "Por template", "type": "main", "index": 0 }]]
+    },
+    "Por template": {
+      "main": [
+        [{ "node": "Preparar Stitch", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Stitch", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Stitch", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "torneo-muskiz" }]
+}

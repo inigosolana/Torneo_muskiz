@@ -9,6 +9,9 @@ import blcbuShield from '../assets/escudos/blcbu.png';
 import thunderShield from '../assets/escudos/thunder.png';
 import blueFlowShield from '../assets/escudos/blue-flow.png';
 import astilleroBluesShield from '../assets/escudos/astillero-blues.png';
+import roseCamargoShield from '../assets/escudos/rose-camargo.png';
+import arangoitiIkastolaShield from '../assets/escudos/arangoiti-ikastola.png';
+import calasancioShield from '../assets/escudos/calasancio.png';
 
 type ShieldMatcher = { test: (normalized: string) => boolean; src: string };
 
@@ -39,6 +42,29 @@ const TEAM_SHIELD_MATCHERS: ShieldMatcher[] = [
     { test: (n) => /\bmekema\b/.test(n), src: mekemaShield },
     { test: (n) => /\bblcbu\b/.test(n) || /\bbicbu\b/.test(n), src: blcbuShield },
     { test: (n) => /\bthunder\b/.test(n), src: thunderShield },
+    {
+        test: (n) =>
+            /\barangoiti\b/.test(n) ||
+            /\barangoiti\s*ikastola\b/.test(n) ||
+            /\bikastola\s*arangoiti\b/.test(n),
+        src: arangoitiIkastolaShield,
+    },
+    {
+        test: (n) =>
+            /\bcalasancio\b/.test(n) ||
+            /\bclarasancio\b/.test(n) ||
+            /\bc\.?\s*p\.?\s*calasancio\b/.test(n),
+        src: calasancioShield,
+    },
+    {
+        test: (n) =>
+            /\brose\s*camargo\b/.test(n) ||
+            /\brosé\s*camargo\b/.test(n) ||
+            (/\bcamargo\b/.test(n) && /\brose\b/.test(n)) ||
+            /\brose\s*camargo\s*beach\b/.test(n) ||
+            /\brosé\s*camargo\s*beach\b/.test(n),
+        src: roseCamargoShield,
+    },
     {
         test: (n) =>
             /\bastillero\s*blues\b/.test(n) ||

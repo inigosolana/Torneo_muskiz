@@ -71,6 +71,7 @@ import { buildInitialDigitalReportStats } from '../utils/actaBuildContext';
 import { downloadActaDocx, downloadActasZip, printActaHtml } from '../services/actaExportService';
 import { MatchReportSheet } from '../components/MatchReportSheet';
 import { CompetitionGroupManager } from '../components/CompetitionGroupManager';
+import { AdminSocialContentPanel } from '../components/AdminSocialContentPanel';
 import {
     getGroupDistributionForDivision,
     getTeamsInDivisionGroup,
@@ -100,6 +101,7 @@ const ADMIN_MAIN_NAV: { id: AdminMainTab; label: string; shortLabel: string; ico
     { id: 'teams', label: 'Pagos e inscripciones', shortLabel: 'Pagos', icon: 'payments' },
     { id: 'competition', label: 'Competición', shortLabel: 'Comp', icon: 'trophy' },
     { id: 'sponsors', label: 'Patrocinadores', shortLabel: 'Patroc', icon: 'handshake' },
+    { id: 'social', label: 'Instagram / n8n', shortLabel: 'IG', icon: 'photo_camera' },
     { id: 'categories', label: 'Configuración', shortLabel: 'Config', icon: 'settings_suggest' },
 ];
 
@@ -4459,6 +4461,10 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 </div>
                             </div>
                         </div>
+                    )}
+
+                    {activeTab === 'social' && (
+                        <AdminSocialContentPanel teams={teams} matches={matches} />
                     )}
 
                     {/* --- CATEGORIES TAB --- */}
