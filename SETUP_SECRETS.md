@@ -31,3 +31,51 @@ cp .env.example .env
 ```
 
 `.env` está en `.gitignore` y no debe commitearse nunca.
+
+## Servidor (VPS / Docker)
+
+El archivo debe llamarse **`.env`** (con punto) en la misma carpeta que `docker-compose.yml`.
+
+### Editar viendo lo que escribes
+
+`nano` muestra el texto al escribir (no oculta caracteres):
+
+```bash
+cd ~/Torneo_muskiz
+cp .env.example .env
+nano .env
+```
+
+Pega o escribe las líneas, guarda (`Ctrl+O`, Enter) y sal (`Ctrl+X`).
+
+### Ver exactamente lo que guardaste
+
+```bash
+cat .env
+```
+
+O el script del repo (muestra el archivo entero + comprueba que Docker lo leerá):
+
+```bash
+bash scripts/verify-server-env.sh
+```
+
+### Si no se ven bien las claves (espacios o saltos raros)
+
+```bash
+cat -A .env
+```
+
+No debe haber `^M` al final de las líneas. Cada variable en una sola línea, sin comillas rotas:
+
+```env
+VITE_SUPABASE_URL=https://jwixdjmbwfnfwmtsmsau.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_xxxxxxxx
+```
+
+### Build con esas variables
+
+```bash
+docker compose build --no-cache app
+docker compose up -d app
+```
