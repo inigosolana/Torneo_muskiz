@@ -24,6 +24,9 @@ dist-ssr
 *.sw?
 
 .env
+.env.local
+.env.*.local
+!.env.example
 supabase/.temp/
 
 # MCP / local one-off artifacts (no secrets in repo)
