@@ -8,6 +8,7 @@ import mekemaShield from '../assets/escudos/mekema.png';
 import blcbuShield from '../assets/escudos/blcbu.png';
 import thunderShield from '../assets/escudos/thunder.png';
 import blueFlowShield from '../assets/escudos/blue-flow.png';
+import astilleroBluesShield from '../assets/escudos/astillero-blues.png';
 
 type ShieldMatcher = { test: (normalized: string) => boolean; src: string };
 
@@ -24,7 +25,7 @@ const KOLOSAURIOS_SHIELD = '/logo_kolosaurios.png';
 
 /** Escudos oficiales del torneo (empaquetados en build). */
 const TEAM_SHIELD_MATCHERS: ShieldMatcher[] = [
-    { test: (n) => /\bkolosaurios?\b/.test(n), src: KOLOSAURIOS_SHIELD },
+    { test: (n) => /\bkolosauri[oa]s?\b/.test(n), src: KOLOSAURIOS_SHIELD },
     { test: (n) => /\bsinfin\b/.test(n), src: sinfinShield },
     { test: (n) => /\babuelos\b/.test(n), src: abuelosShield },
     { test: (n) => /\bbitxipare\b/.test(n) || /\bbitxi\s*pare\b/.test(n), src: bitxipareShield },
@@ -38,6 +39,14 @@ const TEAM_SHIELD_MATCHERS: ShieldMatcher[] = [
     { test: (n) => /\bmekema\b/.test(n), src: mekemaShield },
     { test: (n) => /\bblcbu\b/.test(n) || /\bbicbu\b/.test(n), src: blcbuShield },
     { test: (n) => /\bthunder\b/.test(n), src: thunderShield },
+    {
+        test: (n) =>
+            /\bastillero\s*blues\b/.test(n) ||
+            /\bblues\s*astillero\b/.test(n) ||
+            /\bs\.?\s*d\.?\s*c\.?\s*astillero\b/.test(n) ||
+            /\bastillero\b/.test(n),
+        src: astilleroBluesShield,
+    },
 ];
 
 export function resolveBuiltinTeamShield(teamName: string): string | undefined {

@@ -2,6 +2,7 @@ import React from 'react';
 import { resolveTeamShield } from '../constants/teamShields';
 
 const SIZE_CLASS = {
+    xs: 'size-3.5',
     sm: 'size-6',
     md: 'size-8',
 } as const;
@@ -38,7 +39,7 @@ interface TeamNameWithShieldProps {
     nameClassName?: string;
 }
 
-/** Nombre de equipo con escudo (clasificación / resultados; no usar en calendario). */
+/** Nombre de equipo con escudo (clasificación y resultados; no usar en cuadrícula de calendario). */
 export const TeamNameWithShield: React.FC<TeamNameWithShieldProps> = ({
     teamName,
     logoUrl,
