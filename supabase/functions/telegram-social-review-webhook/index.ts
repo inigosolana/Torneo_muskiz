@@ -1,4 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+/** Referencia explícita para incluir la fuente en el deploy de Supabase. */
+const _previewFontAsset = new URL("./fonts/DejaVuSans-Bold.ttf", import.meta.url);
+void _previewFontAsset;
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import {
   answerCallback,

@@ -244,10 +244,8 @@ export async function notifyDraftUpdated(
   for (const chatId of chatIds) {
     let photoSent = false;
     try {
-      const { bytes, mode } = await renderPayloadPreviewSafe(draft.payload);
-      const cap = mode === "minimal"
-        ? `${shortCaption}\n(vista previa simplificada)`
-        : shortCaption;
+      const { bytes } = await renderPayloadPreviewSafe(draft.payload);
+      const cap = shortCaption;
       photoSent = await sendTelegramPhoto(chatId, bytes, cap);
       if (!photoSent) {
         photoSent = await sendTelegramPhoto(chatId, bytes, undefined);

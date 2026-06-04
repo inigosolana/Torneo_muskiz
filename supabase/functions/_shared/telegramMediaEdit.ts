@@ -6,18 +6,7 @@ import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 
 const BOT_TOKEN = () => Deno.env.get("TELEGRAM_SOCIAL_REVIEW_BOT_TOKEN")?.trim() ?? "";
 
-const FONT_URL =
-  "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/version_2_37/ttf/DejaVuSans-Bold.ttf";
-
-let cachedFont: Uint8Array | null = null;
-
-async function loadFont(): Promise<Uint8Array> {
-  if (cachedFont) return cachedFont;
-  const res = await fetch(FONT_URL);
-  if (!res.ok) throw new Error("No se pudo cargar la fuente para el texto");
-  cachedFont = new Uint8Array(await res.arrayBuffer());
-  return cachedFont;
-}
+import { loadPreviewFont } from "./loadPreviewFont.ts";
 
 export type MediaFormat = "story" | "feed";
 
@@ -104,7 +93,7 @@ export async function compositeImageWithText(
   let img = await Image.decode(imageBytes);
   img = img.cover(targetW, targetH);
 
-  const font = await loadFont();
+  const font = await loadPreviewFont();
   const lines = wrapLines(text, format === "story" ? 28 : 32, format === "story" ? 5 : 4);
   const fontSize = format === "story" ? (lines.length > 3 ? 42 : 48) : (lines.length > 3 ? 38 : 44);
   const lineHeight = Math.round(fontSize * 1.35);
