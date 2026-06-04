@@ -35,8 +35,8 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
     );
 
     const baseMatches = useMemo(
-        () => filterMatchesForManagerTeams(publicDisplayMatches, managerTeams),
-        [publicDisplayMatches, managerTeams]
+        () => filterMatchesForManagerTeams(publicDisplayMatches, managerTeams, allTeams),
+        [publicDisplayMatches, managerTeams, allTeams]
     );
 
     const filteredMatches = useMemo(
@@ -56,20 +56,13 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
         return [...set].sort((a, b) => a.localeCompare(b, 'es'));
     }, [teamsToShow]);
 
-    const scheduleReady = hasPublishedScheduleForManager(publicDisplayMatches, managerTeams);
+    const scheduleReady = hasPublishedScheduleForManager(publicDisplayMatches, managerTeams, allTeams);
     const filterLabel =
         teamFilterId === 'all'
             ? 'Todos mis equipos'
             : managerTeams.find((t) => t.id === teamFilterId)?.name ?? 'Equipo';
 
     const exportBaseName = `horarios_muskiz_${filterLabel.replace(/\s+/g, '_').slice(0, 40)}`;
-
-    const highlightTeamNames = useMemo(() => teamsToShow.map((t) => t.name), [teamsToShow]);
-
-    const fullDayGridMatches = useMemo(
-        () => publicDisplayMatches.filter((m) => m.isPublic),
-        [publicDisplayMatches]
-    );
 
     const handleExportExcel = () => {
         if (filteredMatches.length === 0) return;
@@ -195,21 +188,19 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
             {panelTab === 'calendar' && (
                 <div className="space-y-3">
                     <p className="text-xs text-slate-500">
-                        Cuadrícula oficial del torneo (todos los campos). Tus partidos van con{' '}
-                        <strong>borde verde</strong>; en cada celda verás la <strong>fase o ronda</strong>. Puedes
-                        descargar cada día en Excel ({filterLabel}).
+                        Solo <strong>tus partidos</strong> y las fases finales que puede jugar tu grupo ({filterLabel}).
+                        Misma cuadrícula que el oficial, sin el resto de equipos.
                     </p>
                     <CompetitionCalendarViews
-                        matches={fullDayGridMatches}
+                        matches={filteredMatches}
                         teams={allTeams}
                         readOnly
                         readOnlyAudience="public"
-                        title={`Calendario — ${filterLabel}`}
-                        highlightTeamNames={highlightTeamNames}
-                        onlyDaysWithHighlightTeams
+                        compactGrid
+                        title={`Mis partidos — ${filterLabel}`}
                         showDayExport
                         exportFileNamePrefix={exportBaseName}
-                        emptyMessage="No hay calendario publicado para tus equipos."
+                        emptyMessage="No hay partidos publicados con el filtro actual."
                     />
                 </div>
             )}
@@ -271,22 +262,20 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
                         );
                     })}
 
-                    {divisionsForFinals.map((div) => (
-                        <FinalPhaseBracketView
-                            key={div}
-                            division={div}
-                            matches={publicDisplayMatches}
-                            teams={allTeams}
-                            focusTeam={
-                                teamFilterId === 'all'
-                                    ? teamsToShow.find((t) => t.division === div) ?? null
-                                    : teamsToShow[0]?.division === div
-                                      ? teamsToShow[0]
-                                      : null
-                            }
-                            showTeamPaths={teamFilterId !== 'all'}
-                        />
-                    ))}
+                    {divisionsForFinals.map((div) => {
+                        const divTeams = teamsToShow.filter((t) => t.division === div);
+                        return (
+                            <FinalPhaseBracketView
+                                key={div}
+                                division={div}
+                                matches={baseMatches}
+                                teams={allTeams}
+                                focusTeams={divTeams}
+                                onlyRelevantSlots
+                                showTeamPaths
+                            />
+                        );
+                    })}
                 </div>
             )}
         </div>

@@ -16,6 +16,10 @@ interface FinalPhaseBracketViewProps {
     teams: Team[];
     /** Resalta posibilidades de un equipo concreto (panel responsables). */
     focusTeam?: Team | null;
+    /** Varios equipos del responsable en la misma categoría. */
+    focusTeams?: Team[];
+    /** Oculta cruces de otros grupos (solo huecos alcanzables desde tus grupos). */
+    onlyRelevantSlots?: boolean;
     showTeamPaths?: boolean;
 }
 
@@ -55,15 +59,38 @@ export const FinalPhaseBracketView: React.FC<FinalPhaseBracketViewProps> = ({
     matches,
     teams,
     focusTeam,
+    focusTeams,
+    onlyRelevantSlots = false,
     showTeamPaths = false,
 }) => {
-    const slots = useMemo(() => getEliminationSlotsForDivision(teams, division), [teams, division]);
+    const resolvedFocusTeams = useMemo(() => {
+        if (focusTeams?.length) return focusTeams.filter((t) => t.division === division);
+        if (focusTeam?.division === division) return [focusTeam];
+        return [];
+    }, [focusTeam, focusTeams, division]);
+
+    const allSlots = useMemo(() => getEliminationSlotsForDivision(teams, division), [teams, division]);
+
+    const slots = useMemo(() => {
+        if (!onlyRelevantSlots || resolvedFocusTeams.length === 0) return allSlots;
+        const labels = new Set<string>();
+        for (const t of resolvedFocusTeams) {
+            for (const p of getTeamFinalPhasePaths(t, teams, matches)) {
+                labels.add(p.slot.roundLabel);
+            }
+        }
+        return allSlots.filter((s) => labels.has(s.roundLabel));
+    }, [allSlots, onlyRelevantSlots, resolvedFocusTeams, teams, matches]);
+
     const byPhase = useMemo(() => groupSlotsByPhase(slots), [slots]);
 
     const focusPaths = useMemo(() => {
-        if (!focusTeam || focusTeam.division !== division) return [];
-        return getTeamFinalPhasePaths(focusTeam, teams, matches);
-    }, [focusTeam, division, teams, matches]);
+        const paths: ReturnType<typeof getTeamFinalPhasePaths> = [];
+        for (const t of resolvedFocusTeams) {
+            paths.push(...getTeamFinalPhasePaths(t, teams, matches));
+        }
+        return paths;
+    }, [resolvedFocusTeams, teams, matches]);
 
     if (slots.length === 0) {
         return (
@@ -83,19 +110,32 @@ export const FinalPhaseBracketView: React.FC<FinalPhaseBracketViewProps> = ({
 
     return (
         <div className="space-y-6">
-            {showTeamPaths && focusTeam && focusPaths.length > 0 && (
-                <TeamPathsCard team={focusTeam} paths={focusPaths} />
-            )}
+            {showTeamPaths &&
+                resolvedFocusTeams.map((team) => {
+                    const paths = getTeamFinalPhasePaths(team, teams, matches);
+                    if (paths.length === 0) return null;
+                    return <TeamPathsCard key={team.id} team={team} paths={paths} />;
+                })}
 
-            {showTeamPaths && !focusTeam && (
+            {showTeamPaths && resolvedFocusTeams.length === 0 && (
                 <p className="text-xs text-slate-500">
                     Elige un equipo en el filtro superior para ver sus posibles accesos a la fase final.
                 </p>
             )}
 
+            {onlyRelevantSlots && slots.length === 0 && (
+                <p className="text-sm text-slate-500 text-center py-6 border border-dashed rounded-xl">
+                    No hay cruces de fase final previstos para tu grupo en {division}.
+                </p>
+            )}
+
+            {slots.length > 0 && (
             <div className="rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-surface-dark">
                 <div className="px-4 py-3 bg-slate-800 text-white">
-                    <h3 className="text-sm font-black uppercase tracking-wide">Cuadro fase final — {division}</h3>
+                    <h3 className="text-sm font-black uppercase tracking-wide">
+                        Fase final — {division}
+                        {onlyRelevantSlots ? ' (solo tus grupos)' : ''}
+                    </h3>
                 </div>
                 <div className="p-4 space-y-6">
                     {phaseSequence.map((phase) => {
@@ -155,6 +195,7 @@ export const FinalPhaseBracketView: React.FC<FinalPhaseBracketViewProps> = ({
                     })}
                 </div>
             </div>
+            )}
         </div>
     );
 };

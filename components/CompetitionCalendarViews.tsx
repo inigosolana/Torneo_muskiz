@@ -38,6 +38,8 @@ interface CompetitionCalendarViewsProps {
     highlightTeamNames?: string[];
     /** Solo muestra días donde hay al menos un partido de highlightTeamNames (si está definido). */
     onlyDaysWithHighlightTeams?: boolean;
+    /** Solo celdas con partidos (sin cuadrícula vacía del día completo). Panel responsables. */
+    compactGrid?: boolean;
     emptyMessage?: string;
 }
 
@@ -95,6 +97,7 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
     exportFileNamePrefix = 'calendario_simulacion',
     highlightTeamNames,
     onlyDaysWithHighlightTeams = false,
+    compactGrid = false,
     emptyMessage = 'No hay partidos para mostrar.',
 }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('day');
@@ -163,11 +166,17 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                 </div>
             </div>
 
-            {highlightSet.size > 0 && (
+            {highlightSet.size > 0 && !compactGrid && (
                 <p className="text-[11px] text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 flex items-center gap-2">
                     <span className="material-symbols-outlined text-sm">info</span>
                     Partidos con <strong>borde verde</strong> son de tus equipos. La línea inferior indica la{' '}
                     <strong>fase o ronda</strong> (grupos, semifinal, final…).
+                </p>
+            )}
+            {compactGrid && (
+                <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    Solo aparecen <strong>tus partidos</strong> y las eliminatorias/finales que tu grupo puede
+                    disputar.
                 </p>
             )}
 
@@ -227,9 +236,9 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                     <SimulationScheduleGridTabs
                                         matches={dayMatches}
                                         fixedDay={day}
-                                        fillEmptySlots
+                                        fillEmptySlots={!compactGrid}
                                         readOnly={gridReadOnly}
-                                        highlightTeamNames={highlightTeamNames}
+                                        highlightTeamNames={compactGrid ? undefined : highlightTeamNames}
                                         onUpdateMatch={gridReadOnly ? undefined : onUpdateMatch}
                                     />
                                     {highlightSet.size > 0 &&

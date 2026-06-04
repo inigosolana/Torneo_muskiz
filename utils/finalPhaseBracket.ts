@@ -106,9 +106,48 @@ export function getEliminationSlotsForDivision(
 
 function slotReferencesGroup(slot: DivisionEliminationSlot, groupKey: string): boolean {
     const blob = `${slot.teamA} ${slot.teamB} ${slot.roundLabel}`;
+    return matchTextReferencesGroup(blob, groupKey);
+}
+
+/** Si el texto del partido (equipos + ronda) menciona un grupo concreto. */
+export function matchTextReferencesGroup(text: string, groupKey: string): boolean {
+    const blob = text;
     const g = groupKey.trim();
     if (!g) return false;
-    return new RegExp(`Gr\\.\\s*${g}\\b`, 'i').test(blob) || new RegExp(`1º${g}|2º${g}|3º${g}`, 'i').test(blob);
+    return (
+        new RegExp(`Gr\\.\\s*${g}\\b`, 'i').test(blob) ||
+        new RegExp(`Grupos\\s*·\\s*[A-Z]{2}-${g}\\b`, 'i').test(blob) ||
+        new RegExp(`1º\\s*Gr\\.?\\s*${g}|2º\\s*Gr\\.?\\s*${g}|3º\\s*Gr\\.?\\s*${g}`, 'i').test(blob) ||
+        new RegExp(`Gan\\.?\\s*Semi[^·]*${g}|Semi[^·]*Gr\\.?\\s*${g}`, 'i').test(blob)
+    );
+}
+
+export function matchReferencesManagerGroup(
+    m: Match,
+    groupKey: string,
+    division: Team['division'],
+    teams: Team[]
+): boolean {
+    if (resolveMatchDivision(m, teams) !== division) return false;
+    const blob = `${m.teamA} ${m.teamB} ${m.round ?? ''}`;
+    return matchTextReferencesGroup(blob, groupKey);
+}
+
+/** Huecos de eliminatoria que puede alcanzar un equipo según su grupo. */
+export function getRelevantEliminationSlotsForTeam(
+    team: Team,
+    teams: Team[],
+    matches: Match[]
+): DivisionEliminationSlot[] {
+    const paths = getTeamFinalPhasePaths(team, teams, matches);
+    const seen = new Set<string>();
+    const out: DivisionEliminationSlot[] = [];
+    for (const p of paths) {
+        if (seen.has(p.slot.roundLabel)) continue;
+        seen.add(p.slot.roundLabel);
+        out.push(p.slot);
+    }
+    return out;
 }
 
 /** Posibles accesos a fase final desde el grupo del equipo (todas las opciones del formato). */
