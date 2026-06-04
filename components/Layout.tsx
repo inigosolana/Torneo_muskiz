@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { siteContent } from '../constants/siteContent';
 import { isTeamRegistrationClosed } from '../constants/registrationDeadlines';
 import { RegistrationUrgencyBanner } from './RegistrationUrgencyBanner';
+import { RotatingSponsorSpotlight } from './RotatingSponsorSpotlight';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -116,10 +117,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <span className="material-symbols-outlined text-lg">arrow_forward</span>
                 </Link>
               ) : (
-                <span className="hidden sm:inline-flex items-center gap-2 bg-white/10 text-slate-300 px-5 py-2.5 rounded-lg font-bold text-sm cursor-default">
-                  <span className="material-symbols-outlined text-lg">event_busy</span>
-                  Inscripciones cerradas
-                </span>
+                <div className="hidden sm:flex items-center justify-center min-w-[140px]">
+                  <RotatingSponsorSpotlight variant="compact" />
+                </div>
               )}
 
               {!isAdminRoute ? (
@@ -165,7 +165,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         )}
       </header>
 
-      {!isAdminRoute && <RegistrationUrgencyBanner variant="strip" />}
+      {!isAdminRoute &&
+        (registrationClosed ? (
+          <RotatingSponsorSpotlight variant="strip" />
+        ) : (
+          <RegistrationUrgencyBanner variant="strip" />
+        ))}
 
       <main className="flex-grow">
         {children}

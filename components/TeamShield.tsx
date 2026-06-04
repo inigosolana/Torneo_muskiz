@@ -5,6 +5,7 @@ const SIZE_CLASS = {
     xs: 'size-3.5',
     sm: 'size-6',
     md: 'size-8',
+    lg: 'size-20',
 } as const;
 
 interface TeamShieldProps {
