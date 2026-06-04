@@ -1,5 +1,5 @@
 import { SiteContent } from '../types';
-import { SPONSOR_LOGO_BY_NAME } from './sponsorLogos';
+import { OFFICIAL_SPONSORS_2026 } from './officialSponsors';
 
 export const siteContent: SiteContent = {
   heroTitle: "II Torneo Muskizko Udala",
@@ -44,50 +44,8 @@ export const siteContent: SiteContent = {
   contactEmail: "torneo@muskiz.com",
   isScheduleActive: false,
 
-  // Sponsors (fallback estático; la web usa public.sponsors en Supabase)
-  sponsors: [
-    {
-      id: 's1',
-      name: 'Ayuntamiento de Muskiz',
-      logoUrl: SPONSOR_LOGO_BY_NAME['Ayuntamiento de Muskiz'],
-      tier: 'Platinum',
-      websiteUrl: 'https://www.muskiz.eus/',
-    },
-    {
-      id: 's2',
-      name: 'Petronor',
-      logoUrl: SPONSOR_LOGO_BY_NAME.Petronor,
-      tier: 'Platinum',
-      websiteUrl: 'https://www.petronor.eus/',
-    },
-    {
-      id: 's-delcoi',
-      name: 'DELCOI S.A.',
-      logoUrl: SPONSOR_LOGO_BY_NAME['DELCOI S.A.'],
-      tier: 'Gold',
-      websiteUrl: 'https://www.delcoi.biz/',
-    },
-    {
-      id: 's-itxas-mendi',
-      name: 'Itxas Mendi (Montemar) Bar',
-      logoUrl: SPONSOR_LOGO_BY_NAME['Itxas Mendi (Montemar) Bar'],
-      tier: 'Gold',
-      websiteUrl: 'https://www.disfrutabizkaia.com/establecimiento/itxas-mendi-montemar-bar/',
-    },
-    {
-      id: 's-xbotgo',
-      name: 'XbotGo',
-      logoUrl: SPONSOR_LOGO_BY_NAME.XbotGo,
-      tier: 'Gold',
-      websiteUrl: 'https://www.xbotgo.com/',
-    },
-    {
-      id: 's-baratza',
-      name: 'Baratza',
-      logoUrl: SPONSOR_LOGO_BY_NAME.Baratza,
-      tier: 'Gold',
-    },
-  ],
+  // Patrocinadores oficiales 2026 (fallback; Supabase debe coincidir — ver officialSponsors.ts)
+  sponsors: OFFICIAL_SPONSORS_2026,
 
   // Gallery
   gallery: [

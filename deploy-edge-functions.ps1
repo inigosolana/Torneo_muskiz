@@ -43,7 +43,8 @@ $noJwt = @(
   "social-content-export",
   "generate-social-post",
   "trigger-n8n-social",
-  "telegram-social-review-webhook"
+  "telegram-social-review-webhook",
+  "send-telegram-image"
 )
 foreach ($name in $noJwt) {
   npx --yes supabase@latest functions deploy $name --project-ref $ProjectRef --no-verify-jwt

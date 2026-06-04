@@ -19,6 +19,7 @@ import {
     maxPlayersForDivision,
     playerRoleLabel,
 } from '../utils/squadLimits';
+import { normalizeDniInput, resolveDniStatusFromNumber } from '../utils/dniValidation';
 import { ManagerSchedulePanel } from '../components/ManagerSchedulePanel';
 
 interface TeamManagerProps {
@@ -137,6 +138,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             return;
         }
 
+        const dniNumber = normalizeDniInput(manualPlayer.dniNumber) || undefined;
         const newPlayer: Player = {
             id: `p-${Date.now()}`,
             teamId: selectedTeam.id,
@@ -145,8 +147,8 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             position: manualPlayer.position || 'Universal',
             role,
             verified: false,
-            dniNumber: manualPlayer.dniNumber?.trim() || undefined,
-            dniStatus: manualPlayer.dniNumber?.trim() ? 'PENDING' : 'EMPTY',
+            dniNumber,
+            dniStatus: resolveDniStatusFromNumber(dniNumber),
             insuranceStatus: 'EMPTY'
         };
 
@@ -180,16 +182,17 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
         const currentDni = playerToUpdate.dniNumber ?? '';
         const nextDniRaw = window.prompt('Introduce el número de DNI/NIE del jugador:', currentDni);
         if (nextDniRaw === null) return;
-        const nextDni = nextDniRaw.trim().toUpperCase();
+        const nextDni = normalizeDniInput(nextDniRaw);
         if (!nextDni) {
             toast.error('El DNI no puede estar vacío');
             return;
         }
 
+        const dniStatus = resolveDniStatusFromNumber(nextDni, playerToUpdate.dniStatus);
         const updatedPlayerObj: Player = {
             ...playerToUpdate,
             dniNumber: nextDni,
-            dniStatus: 'PENDING',
+            dniStatus,
             dniUrl: undefined
         };
 
@@ -197,7 +200,11 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
             await teamService.updatePlayer(updatedPlayerObj);
             const updatedPlayers = selectedTeam.players.map(p => p.id === playerId ? updatedPlayerObj : p);
             onUpdateTeam({ ...selectedTeam, players: updatedPlayers });
-            toast.success('DNI actualizado correctamente');
+            toast.success(
+                dniStatus === 'APPROVED'
+                    ? 'DNI válido: aceptado automáticamente'
+                    : 'DNI guardado (pendiente de revisión: formato incompleto o letra incorrecta)',
+            );
         } catch (err: any) {
             toast.error(`Error al guardar DNI: ${err.message || err}`);
         }

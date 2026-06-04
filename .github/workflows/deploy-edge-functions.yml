@@ -56,6 +56,7 @@ jobs:
             generate-social-post
             trigger-n8n-social
             telegram-social-review-webhook
+            send-telegram-image
           )
 
           for name in "${NO_JWT[@]}"; do

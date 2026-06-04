@@ -4,6 +4,7 @@ import { siteContent } from '../constants/siteContent';
 import { isTeamRegistrationClosed } from '../constants/registrationDeadlines';
 import { useTournamentData } from '../context/TournamentDataContext';
 import { supabase } from '../services/supabaseClient';
+import { getOfficialSponsorsSorted, isOfficialSponsorName, sortSponsorsByTier } from '../constants/officialSponsors';
 import { normalizeSponsor } from '../utils/sponsorDisplay';
 import { RegistrationUrgencyBanner } from '../components/RegistrationUrgencyBanner';
 import { RotatingSponsorSpotlight } from '../components/RotatingSponsorSpotlight';
@@ -23,18 +24,18 @@ export const Home: React.FC = () => {
   };
 
   const [homeSponsors, setHomeSponsors] = useState(() =>
-    siteContent.sponsors.filter((s) => s.tier === 'Platinum' || s.tier === 'Gold'),
+    getOfficialSponsorsSorted().filter((s) => s.tier === 'Platinum' || s.tier === 'Gold'),
   );
 
   useEffect(() => {
     void (async () => {
       const { data } = await supabase.from('sponsors').select('*');
       if (!data?.length) return;
-      const tierOrder: Record<string, number> = { Platinum: 0, Gold: 1 };
-      const sorted = data
-        .map(normalizeSponsor)
-        .filter((s) => s.tier === 'Platinum' || s.tier === 'Gold')
-        .sort((a, b) => (tierOrder[a.tier] ?? 9) - (tierOrder[b.tier] ?? 9));
+      const sorted = sortSponsorsByTier(
+        data
+          .map(normalizeSponsor)
+          .filter((s) => isOfficialSponsorName(s.name) && (s.tier === 'Platinum' || s.tier === 'Gold')),
+      );
       if (sorted.length > 0) setHomeSponsors(sorted);
     })();
   }, []);

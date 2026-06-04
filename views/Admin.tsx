@@ -68,10 +68,12 @@ import {
     playersListedOnActa,
 } from '../utils/squadLimits';
 import { buildInitialDigitalReportStats } from '../utils/actaBuildContext';
+import { normalizeDniInput, resolveDniStatusFromNumber } from '../utils/dniValidation';
 import { downloadActaDocx, downloadActasZip, printActaHtml } from '../services/actaExportService';
 import { MatchReportSheet } from '../components/MatchReportSheet';
 import { CompetitionGroupManager } from '../components/CompetitionGroupManager';
 import { AdminSocialContentPanel } from '../components/AdminSocialContentPanel';
+import { SocialPostGenerator } from '../components/SocialPostGenerator';
 import {
     getGroupDistributionForDivision,
     getTeamsInDivisionGroup,
@@ -232,6 +234,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     // Social Media Post State
     const [socialPostModal, setSocialPostModal] = useState<{ show: boolean, content: string, generating: boolean }>({ show: false, content: '', generating: false });
+    const [showSocialGenerator, setShowSocialGenerator] = useState(false);
 
     // Edit Team Modal
     const [editingTeam, setEditingTeam] = useState<Team | null>(null);
@@ -1055,7 +1058,13 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     const handleSavePlayerEdit = async () => {
         if (!editingPlayerContext) return;
-        const { team, player } = editingPlayerContext;
+        const { team, player: raw } = editingPlayerContext;
+        const dniNumber = normalizeDniInput(raw.dniNumber) || undefined;
+        const player: Player = {
+            ...raw,
+            dniNumber,
+            dniStatus: resolveDniStatusFromNumber(dniNumber, raw.dniStatus),
+        };
         try {
             await teamService.updatePlayer(player);
             const updatedPlayers = team.players.map(p => (p.id === player.id ? player : p));
@@ -2183,7 +2192,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                             <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
                                     <h3 className="font-bold text-lg text-slate-800">Verificación de Documentos</h3>
-                                    <p className="text-xs text-slate-500 mt-1">Valida DNI de todos y seguro solo de jugadores (entrenadores/oficiales no llevan seguro).</p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        El DNI con formato completo (8 números + letra o NIE válido) se aprueba solo. El seguro sigue requiriendo revisión manual en jugadores.
+                                    </p>
                                 </div>
                                 
                                 {/* Filter Bar for Verification */}
@@ -4464,7 +4475,26 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                     )}
 
                     {activeTab === 'social' && (
-                        <AdminSocialContentPanel teams={teams} matches={matches} />
+                        <div className="space-y-4">
+                            <div className="flex flex-wrap justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSocialGenerator(true)}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-background-dark font-bold text-sm hover:bg-primary/90"
+                                >
+                                    <span className="material-symbols-outlined text-sm">photo_camera</span>
+                                    Crear publicación
+                                </button>
+                            </div>
+                            <AdminSocialContentPanel teams={teams} matches={matches} />
+                            {showSocialGenerator && (
+                                <SocialPostGenerator
+                                    onClose={() => setShowSocialGenerator(false)}
+                                    teams={teams}
+                                    sponsors={sponsors}
+                                />
+                            )}
+                        </div>
                     )}
 
                     {/* --- CATEGORIES TAB --- */}

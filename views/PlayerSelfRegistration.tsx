@@ -3,6 +3,7 @@ import { Team, Player } from '../types';
 import SignatureCanvas from 'react-signature-canvas';
 import { useNavigate } from 'react-router-dom';
 import { useTournamentData } from '../context/TournamentDataContext';
+import { normalizeDniInput, resolveDniStatusFromNumber } from '../utils/dniValidation';
 import { canAddSquadMember, countSquadPlayers, maxPlayersForDivision } from '../utils/squadLimits';
 import { toast } from 'sonner';
 import {
@@ -77,12 +78,13 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
         }
         setIsSubmitting(true);
         setTimeout(() => {
+            const dniNumber = normalizeDniInput(form.dniNumber) || undefined;
             const newPlayer: Player = {
                 id: Date.now().toString(),
                 teamId: team.id,
                 name: `${form.name} ${form.surnames}`,
                 surnames: form.surnames,
-                dniNumber: form.dniNumber,
+                dniNumber,
                 birthDate: form.birthDate,
                 number: parseInt(form.number),
                 position: form.position,
@@ -90,7 +92,7 @@ export const PlayerSelfRegistration: React.FC<PlayerSelfRegistrationProps> = ({ 
                 signatureUrl: sigCanvas.current?.isEmpty() ? undefined : sigCanvas.current?.getTrimmedCanvas().toDataURL('image/png'),
                 verified: false,
                 insuranceUrl: form.insuranceUrl,
-                dniStatus: form.dniNumber.trim() ? 'PENDING' : 'EMPTY',
+                dniStatus: resolveDniStatusFromNumber(dniNumber),
                 insuranceStatus: form.insuranceUrl ? 'PENDING' : 'EMPTY'
             };
 

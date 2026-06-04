@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { isOfficialSponsorName, sortSponsorsByTier } from '../constants/officialSponsors';
 import { normalizeSponsor } from '../utils/sponsorDisplay';
 
 export const Sponsors: React.FC = () => {
@@ -9,7 +10,9 @@ export const Sponsors: React.FC = () => {
   useEffect(() => {
     const fetchSponsors = async () => {
       const { data } = await supabase.from('sponsors').select('*');
-      if (data) setSponsors(data.map(normalizeSponsor));
+      if (data) {
+        setSponsors(sortSponsorsByTier(data.map(normalizeSponsor).filter((s) => isOfficialSponsorName(s.name))));
+      }
       setLoading(false);
     };
     fetchSponsors();

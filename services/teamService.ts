@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { Team, Player, Match } from '../types';
 import { applySmBitxiBlueFlowGroupSwap } from '../utils/smBitxiBlueFlowGroupSwap';
+import { normalizeDniInput, resolveDniStatusFromNumber } from '../utils/dniValidation';
 import { databaseRowToMatch, matchToDatabaseRow } from './matchDbMapper';
 
 export const teamService = {
@@ -191,17 +192,19 @@ export const teamService = {
     },
 
     async addPlayer(teamId: string, player: Partial<Player>): Promise<Player> {
+        const dniNumber = normalizeDniInput(player.dniNumber) || null;
+        const dni_status = resolveDniStatusFromNumber(dniNumber, player.dniStatus);
         const { data, error } = await supabase
             .from('players')
             .insert([{
                 team_id: teamId,
                 name: player.name,
                 surnames: player.surnames,
-                dni_number: player.dniNumber || null,
+                dni_number: dniNumber,
                 birth_date: player.birthDate || null,
                 number: player.number,
                 position: player.position,
-                dni_status: player.dniStatus || 'EMPTY',
+                dni_status,
                 insurance_status: player.insuranceStatus || 'EMPTY',
                 role: player.role || 'PLAYER',
             }])
@@ -234,17 +237,34 @@ export const teamService = {
     },
 
     async updatePlayer(player: Player): Promise<void> {
+        const { data: existing } = await supabase
+            .from('players')
+            .select('dni_number, dni_status')
+            .eq('id', player.id)
+            .maybeSingle();
+
+        const dni_number = normalizeDniInput(player.dniNumber) || null;
+        const prevDni = existing?.dni_number ?? null;
+        const dniUnchanged = dni_number === normalizeDniInput(prevDni);
+        const manualReview =
+            dniUnchanged &&
+            (player.dniStatus === 'REJECTED' || player.dniStatus === 'APPROVED') &&
+            player.dniStatus !== existing?.dni_status;
+
+        const dni_status: Player['dniStatus'] = manualReview
+            ? player.dniStatus
+            : resolveDniStatusFromNumber(dni_number, existing?.dni_status, prevDni);
         const { error } = await supabase
             .from('players')
             .update({
                 name: player.name,
                 surnames: player.surnames,
-                dni_number: player.dniNumber,
+                dni_number,
                 birth_date: player.birthDate,
                 number: player.number,
                 position: player.position,
                 verified: player.verified,
-                dni_status: player.dniStatus,
+                dni_status,
                 insurance_status: player.insuranceStatus,
                 dni_url: player.dniUrl,
                 insurance_url: player.insuranceUrl,
