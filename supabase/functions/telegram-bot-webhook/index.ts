@@ -6,6 +6,7 @@ const BOT_TOKEN = Deno.env.get("TELEGRAM_NOTIFICATIONS_BOT_TOKEN")?.trim();
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const REVIEW_ACTION_SECRET = Deno.env.get("REVIEW_ACTION_SECRET");
 const TELEGRAM_ADMIN_CHAT_IDS = Deno.env.get("TELEGRAM_ADMIN_CHAT_IDS");
+const TELEGRAM_VIEWER_CHAT_IDS = Deno.env.get("TELEGRAM_VIEWER_CHAT_IDS");
 
 const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -22,6 +23,17 @@ const encoder = new TextEncoder();
 function parseChatIds(value?: string | null): string[] {
   if (!value) return [];
   return value.split(",").map((v) => v.trim()).filter(Boolean);
+}
+
+function isStaffTelegramChat(chatId: number, userId: number): boolean {
+  const ids = [...parseChatIds(TELEGRAM_ADMIN_CHAT_IDS), ...parseChatIds(TELEGRAM_VIEWER_CHAT_IDS)];
+  if (ids.length === 0) return false;
+  return ids.includes(String(chatId)) || ids.includes(String(userId));
+}
+
+function isPublicHelpCommand(text: string): boolean {
+  const q = text.trim().toLowerCase();
+  return q === "/start" || q === "/help" || q === "help" || q === "ayuda" || q.startsWith("/help ");
 }
 
 function internalFnHeaders(): Record<string, string> {
@@ -717,6 +729,24 @@ Deno.serve(async (req) => {
       });
     }
 
+    const staffChat = isStaffTelegramChat(chatId, userId);
+    if (!(isPublicHelpCommand(text) && staffChat)) {
+      const fanRes = await fetch(`${SUPABASE_URL}/functions/v1/telegram-fan-query`, {
+        method: "POST",
+        headers: internalFnHeaders(),
+        body: JSON.stringify({ text }),
+      });
+      const fanJson: Record<string, unknown> = await fanRes.json().catch(() => ({}));
+      if (fanRes.ok && fanJson.handled === true) {
+        const fanReply = String(fanJson.message ?? "No pude procesar la consulta.");
+        await sendTelegramMessage(chatId, fanReply);
+        return new Response(JSON.stringify({ ok: true, type: "fan_query" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const queryRes = await fetch(`${SUPABASE_URL}/functions/v1/telegram-admin-query`, {
       method: "POST",
       headers: internalFnHeaders(),
@@ -740,6 +770,8 @@ Deno.serve(async (req) => {
 
     const reply = queryRes.ok
       ? String(queryJson?.message ?? queryJson?.error ?? "No pude procesar la consulta.")
+      : queryRes.status === 403 && !staffChat
+      ? "No entendí la consulta. Escribe /help para ver resultados, clasificación y próximo partido."
       : queryRes.status === 403
       ? String(queryJson?.message ?? "No autorizado para consultas.")
       : queryRes.status === 401

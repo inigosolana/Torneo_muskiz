@@ -113,13 +113,18 @@ Deno.serve(async (req) => {
     if (query === "/help" || query === "help" || query === "ayuda" || query === "/start") {
       return new Response(JSON.stringify({
         message: [
-          "Consultas disponibles:",
+          "Consultas staff (este chat):",
           "- /inscripciones",
           "- /categorias",
           "- /equipo NOMBRE",
           "- /jugadores NOMBRE_EQUIPO",
           "- /plantilla NOMBRE_EQUIPO",
           "- /estado NOMBRE_EQUIPO",
+          "",
+          "Público (cualquier usuario en el bot):",
+          "- /resultados CATEGORIA",
+          "- /clasificacion CATEGORIA",
+          "- /siguiente partido NOMBRE_EQUIPO",
         ].join("\n"),
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
