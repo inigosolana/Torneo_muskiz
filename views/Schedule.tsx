@@ -7,8 +7,7 @@ import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews
 import { CompetitionPublicResultsSection } from '../components/CompetitionPublicResultsSection';
 import { CompetitionPublicStandingsSection } from '../components/CompetitionPublicStandingsSection';
 import { CompetitionPublicFinalPhaseSection } from '../components/CompetitionPublicFinalPhaseSection';
-import { TournamentLiveStreamLink } from '../components/TournamentLiveStreamLink';
-import { getTournamentLiveStreamsForDay } from '../constants/tournamentLiveStreams';
+import { TournamentLiveStreamPlayer } from '../components/TournamentLiveStreamPlayer';
 
 type ScheduleTab = 'info' | 'calendar' | 'results' | 'standings' | 'finals';
 
@@ -32,8 +31,6 @@ export const Schedule: React.FC = () => {
     const [infoSubTab, setInfoSubTab] = useState<'general' | 'rules'>('general');
 
     const publicMatches = publicDisplayMatches;
-    const fridayLiveStreams = getTournamentLiveStreamsForDay('Viernes');
-    const saturdayLiveStreams = getTournamentLiveStreamsForDay('Sábado');
 
     const [showMapModal, setShowMapModal] = useState(false);
     const [mapQuery, setMapQuery] = useState('');
@@ -107,7 +104,7 @@ export const Schedule: React.FC = () => {
 
                                 {infoSubTab === 'general' ? (
                                     <div className="animate-in slide-in-from-left-4 fade-in duration-300 space-y-8">
-                                        <TournamentLiveStreamLink variant="banner" />
+                                        <TournamentLiveStreamPlayer variant="banner" />
 
                                         {/* Horarios */}
                                         <div className="grid md:grid-cols-3 gap-4">
@@ -123,20 +120,6 @@ export const Schedule: React.FC = () => {
                                                 <div className="bg-primary/10 rounded-lg px-3 py-2 text-center">
                                                     <span className="text-sm font-bold text-slate-800 dark:text-slate-200">🏐 Cadete (M/F)</span>
                                                 </div>
-                                                {fridayLiveStreams.map((stream) => (
-                                                    <a
-                                                        key={stream.url}
-                                                        href={stream.url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-500 px-3 py-2 text-xs font-bold text-white transition-colors"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">live_tv</span>
-                                                        {stream.fromTime && stream.toTime
-                                                            ? `Directo ${stream.fromTime}–${stream.toTime}`
-                                                            : 'Directo YouTube'}
-                                                    </a>
-                                                ))}
                                             </div>
 
                                             {/* Sábado */}
@@ -156,20 +139,6 @@ export const Schedule: React.FC = () => {
                                                         <span className="text-sm font-bold text-slate-800 dark:text-slate-200">🏐 Senior (M/F)</span>
                                                     </div>
                                                 </div>
-                                                {saturdayLiveStreams.map((stream) => (
-                                                    <a
-                                                        key={stream.url}
-                                                        href={stream.url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-500 px-3 py-2 text-xs font-bold text-white transition-colors"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">live_tv</span>
-                                                        {stream.fromTime && stream.toTime
-                                                            ? `Directo ${stream.fromTime}–${stream.toTime}`
-                                                            : 'Directo YouTube'}
-                                                    </a>
-                                                ))}
                                             </div>
 
                                             {/* Domingo */}

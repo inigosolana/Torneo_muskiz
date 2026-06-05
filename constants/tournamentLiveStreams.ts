@@ -96,6 +96,30 @@ function toSlot(stream: TournamentLiveStream, status: 'live' | 'upcoming'): Tour
     };
 }
 
+/** ID de vídeo YouTube para iframe embed (live, watch o youtu.be). */
+export function youtubeVideoIdFromUrl(url: string): string | null {
+    try {
+        const u = new URL(url);
+        const liveMatch = u.pathname.match(/\/live\/([^/?]+)/);
+        if (liveMatch?.[1]) return liveMatch[1];
+        const watchId = u.searchParams.get('v');
+        if (watchId) return watchId;
+        if (u.hostname.includes('youtu.be')) {
+            const id = u.pathname.replace(/^\//, '').split('/')[0];
+            return id || null;
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
+export function youtubeEmbedUrlFromStream(url: string): string | null {
+    const id = youtubeVideoIdFromUrl(url);
+    if (!id) return null;
+    return `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1`;
+}
+
 /** Directo en curso o siguiente del fin de semana; rota solo según la hora. */
 export function getTournamentLiveStreamForNow(now = new Date()): TournamentLiveStreamNow | null {
     if (!isTournamentWeekendDay(now)) return null;
