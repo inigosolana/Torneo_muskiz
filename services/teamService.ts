@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient';
 import { Team, Player, Match } from '../types';
 import { applySmBitxiBlueFlowGroupSwap } from '../utils/smBitxiBlueFlowGroupSwap';
 import { normalizeDniInput, resolveDniStatusFromNumber } from '../utils/dniValidation';
-import { databaseRowToMatch, matchToDatabaseRow } from './matchDbMapper';
+import { databaseRowToMatch, enrichMatchGoalsFromSetScores, matchToDatabaseRow } from './matchDbMapper';
 
 export const teamService = {
     async getTeams(): Promise<Team[]> {
@@ -308,7 +308,7 @@ export const matchService = {
             return [];
         }
 
-        return (data ?? []).map((m: Record<string, unknown>) => mapSupabaseMatchRow(m));
+        return (data ?? []).map((m: Record<string, unknown>) => enrichMatchGoalsFromSetScores(mapSupabaseMatchRow(m)));
     },
 
     async getMatchById(id: string): Promise<Match | null> {
@@ -324,7 +324,7 @@ export const matchService = {
         }
         if (!data) return null;
 
-        return mapSupabaseMatchRow(data as Record<string, unknown>);
+        return enrichMatchGoalsFromSetScores(mapSupabaseMatchRow(data as Record<string, unknown>));
     },
 
     async saveMatches(matches: Match[]): Promise<void> {

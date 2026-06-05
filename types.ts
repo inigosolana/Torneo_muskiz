@@ -108,6 +108,10 @@ export interface Match {
   teamB: string;
   scoreA: number | null;
   scoreB: number | null;
+  /** Goles totales equipo A (persistido en BD; visible en clasificación pública). */
+  goalsForA?: number | null;
+  /** Goles totales equipo B (persistido en BD; visible en clasificación pública). */
+  goalsForB?: number | null;
   status: 'SCHEDULED' | 'LIVE' | 'FINISHED';
   round?: string;
   report?: MatchReport; // New field for the Acta

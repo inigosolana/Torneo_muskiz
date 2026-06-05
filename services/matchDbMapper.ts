@@ -1,4 +1,5 @@
 import type { BeachSetScores, Match, Team } from '../types';
+import { getMatchGoalTotals, sumGoalsFromSetScores } from '../utils/beachSetScoring';
 import { inferMatchScheduleDay } from './tournamentScheduleService';
 import {
     divisionFromMatchRound,
@@ -61,11 +62,25 @@ export function matchToDatabaseRow(
         row.report_type = m.report.type;
         row.report_image_uri = m.report.imageUri ?? null;
         row.report_observations = m.report.observations ?? null;
-        if (m.report.setScores) {
-            row.set_scores = m.report.setScores;
-        }
+    }
+    if (m.report?.setScores) {
+        row.set_scores = m.report.setScores;
+    }
+    const { goalsA, goalsB } = getMatchGoalTotals(m);
+    if (m.report?.setScores || (m.goalsForA != null && m.goalsForB != null)) {
+        row.goals_for_a = m.goalsForA ?? goalsA;
+        row.goals_for_b = m.goalsForB ?? goalsB;
     }
     return row;
+}
+
+/** Rellena goalsForA/B desde set_scores si la BD aún no tiene goals_for_* */
+export function enrichMatchGoalsFromSetScores(match: Match): Match {
+    if (match.goalsForA != null && match.goalsForB != null) return match;
+    const s = match.report?.setScores;
+    if (!s) return match;
+    const { goalsA, goalsB } = sumGoalsFromSetScores(s);
+    return { ...match, goalsForA: goalsA, goalsForB: goalsB };
 }
 
 export function databaseRowToMatch(row: Record<string, unknown>): Match {
@@ -102,6 +117,8 @@ export function databaseRowToMatch(row: Record<string, unknown>): Match {
         teamB,
         scoreA: r.score_a ?? r.scoreA ?? null,
         scoreB: r.score_b ?? r.scoreB ?? null,
+        goalsForA: numOrNull(r.goals_for_a ?? r.goalsForA),
+        goalsForB: numOrNull(r.goals_for_b ?? r.goalsForB),
         status: (r.status as Match['status']) ?? 'SCHEDULED',
         round: r.round ?? undefined,
         report,

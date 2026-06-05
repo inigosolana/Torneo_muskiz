@@ -87,11 +87,7 @@ export function isValidSetsPair(setsA: number, setsB: number): boolean {
 
 /** Marcador a mostrar en tabla (solo sets; usa detalle o scoreA/scoreB legacy). */
 /** Goles totales de cada equipo (suma de sets; shootout solo si hubo 1-1 en sets). */
-export function getMatchGoalTotals(match: Match): { goalsA: number; goalsB: number } {
-    const s = match.report?.setScores;
-    if (!s) {
-        return { goalsA: 0, goalsB: 0 };
-    }
+export function sumGoalsFromSetScores(s: BeachSetScores): { goalsA: number; goalsB: number } {
     let goalsA = (s.set1A ?? 0) + (s.set2A ?? 0);
     let goalsB = (s.set1B ?? 0) + (s.set2B ?? 0);
     const computed = computeSetsResultFromDetail(s);
@@ -100,6 +96,15 @@ export function getMatchGoalTotals(match: Match): { goalsA: number; goalsB: numb
         goalsB += s.shootoutB ?? 0;
     }
     return { goalsA, goalsB };
+}
+
+export function getMatchGoalTotals(match: Match): { goalsA: number; goalsB: number } {
+    const s = match.report?.setScores;
+    if (s) return sumGoalsFromSetScores(s);
+    if (match.goalsForA != null && match.goalsForB != null) {
+        return { goalsA: match.goalsForA, goalsB: match.goalsForB };
+    }
+    return { goalsA: 0, goalsB: 0 };
 }
 
 export function getMatchSetsDisplay(match: Match): string {
@@ -128,21 +133,26 @@ export function applySetScoresToMatch(match: Match, setScores: BeachSetScores): 
         setScores,
     };
 
+    const withReport = { ...match, report };
+    const { goalsA, goalsB } = sumGoalsFromSetScores(setScores);
+
     if (computed?.finished && computed.validDisplay) {
         return {
-            ...match,
+            ...withReport,
             scoreA: computed.setsA,
             scoreB: computed.setsB,
+            goalsForA: goalsA,
+            goalsForB: goalsB,
             status: 'FINISHED',
-            report,
         };
     }
 
     return {
-        ...match,
+        ...withReport,
         scoreA: null,
         scoreB: null,
+        goalsForA: null,
+        goalsForB: null,
         status: 'SCHEDULED',
-        report,
     };
 }
