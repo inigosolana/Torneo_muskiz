@@ -6,7 +6,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const FROM_EMAIL = "Torneo Muskiz <admin@torneomuskizbmplaya.es>";
 const MANAGER_LOGIN_URL = "https://torneomuskizbmplaya.es/manager-login";
-const LICENSE_LAST_DAY = "4 de junio de 2026 a las 17:00";
+const LICENSE_LAST_DAY = "5 de junio de 2026 a las 17:00";
 const MIN_PLAYERS = 6;
 
 const corsHeaders = {

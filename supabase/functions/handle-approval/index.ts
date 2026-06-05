@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
               </a>
             </div>
             <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-              ${passwordLine(storedLoginPassword)} · Plazo plantilla: <strong>4 de junio de 2026</strong>
+              ${passwordLine(storedLoginPassword)} · Plazo plantilla: <strong>5 de junio de 2026 a las 17:00</strong>
             </p>
           </div>
           <div style="background: #f1f5f9; padding: 16px 24px; text-align: center;">
@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
             <div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #d97706; border-radius: 10px; padding: 16px 18px; margin: 20px 0;">
               <h4 style="margin: 0 0 8px; color: #92400e; font-size: 14px;">📅 Plazo para la plantilla</h4>
               <p style="margin: 0; color: #78350f; font-size: 14px; line-height: 1.65;">
-                El <strong>último día para tener subidos todos los jugadores y licencias en el sistema es el 4 de junio de 2026</strong>.
+                El <strong>último día para tener subidos todos los jugadores y licencias en el sistema es el 5 de junio de 2026 a las 17:00</strong>.
                 <strong>No se harán excepciones</strong> pasada esa fecha: no se admitirán altas ni cambios de plantilla fuera de lo que marque la organización.
               </p>
             </div>
@@ -292,7 +292,7 @@ Deno.serve(async (req) => {
                 <li>Completa la ficha del equipo y <strong>registra jugadores</strong> (nombre, dorsal, posición) poco a poco.</li>
                 <li>Sube <strong>DNI y seguro</strong> de cada jugador y espera la validación del organizador.</li>
                 <li>Añade <strong>1 entrenador</strong> y <strong>1 oficial</strong> con sus roles; no ocupan plaza de jugador.</li>
-                <li>Respeta el <strong>mínimo 6</strong> y el <strong>máximo ${maxJugadores}</strong> jugadores para tu categoría, y el plazo del <strong>4 de junio de 2026</strong>.</li>
+                <li>Respeta el <strong>mínimo 6</strong> y el <strong>máximo ${maxJugadores}</strong> jugadores para tu categoría, y el plazo del <strong>5 de junio de 2026 a las 17:00</strong>.</li>
               </ol>
             </div>
           </div>

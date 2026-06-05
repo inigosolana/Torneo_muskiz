@@ -6,8 +6,8 @@ export const TEAM_REGISTRATION_LAST_DAY = '1 de junio';
 export const TEAM_REGISTRATION_FORCE_CLOSED = true;
 
 /** Alta de jugadores en plantilla (responsables + autoinscripción). Hora local del navegador. */
-export const PLAYER_LICENSE_CLOSE_AT = '2026-06-04T17:00:00';
-export const PLAYER_LICENSE_LAST_DAY = '4 de junio a las 17:00';
+export const PLAYER_LICENSE_CLOSE_AT = '2026-06-05T17:00:00';
+export const PLAYER_LICENSE_LAST_DAY = '5 de junio a las 17:00';
 
 export function isPastDeadline(closeAtIso: string): boolean {
   return Date.now() > new Date(closeAtIso).getTime();
