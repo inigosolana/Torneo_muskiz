@@ -7,8 +7,8 @@ import { supabase } from '../services/supabaseClient';
 import { getOfficialSponsorsSorted, isOfficialSponsorName, sortSponsorsByTier } from '../constants/officialSponsors';
 import { normalizeSponsor } from '../utils/sponsorDisplay';
 import { HomeTournamentLivePanel } from '../components/HomeTournamentLivePanel';
-import { RotatingSponsorSpotlight } from '../components/RotatingSponsorSpotlight';
-import { RotatingTeamSpotlight } from '../components/RotatingTeamSpotlight';
+import { TournamentLiveStreamPlayer } from '../components/TournamentLiveStreamPlayer';
+import { isTournamentWeekendDay } from '../constants/tournamentDates';
 import { totalParticipantPlayers } from '../utils/squadLimits';
 
 export const Home: React.FC = () => {
@@ -49,6 +49,7 @@ export const Home: React.FC = () => {
     [teams],
   );
   const participantPlayerCount = useMemo(() => totalParticipantPlayers(teams), [teams]);
+  const showLivePlayer = isTournamentWeekendDay();
 
   return (
     <div className="animate-in fade-in duration-500">
@@ -74,7 +75,11 @@ export const Home: React.FC = () => {
         <div className="relative z-10 w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-20">
           <div className="grid lg:grid-cols-12 gap-8 items-end">
             {/* Hero Text */}
-            <div className="lg:col-span-12 xl:col-span-7 flex flex-col gap-6 mb-8 lg:mb-0">
+            <div
+              className={`lg:col-span-12 flex flex-col gap-6 mb-8 lg:mb-0 ${
+                showLivePlayer ? 'xl:col-span-7' : 'xl:col-span-12'
+              }`}
+            >
               <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black text-white leading-[0.9] tracking-tighter uppercase drop-shadow-lg">
                 {siteContent.heroTitle}
               </h1>
@@ -111,41 +116,11 @@ export const Home: React.FC = () => {
               </div>
             </div>
 
-            {/* Patrocinadores + equipos participantes */}
-            <div className="xl:col-span-5 w-full">
-              <div className="bg-surface-dark/40 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex flex-col h-full min-h-[320px] overflow-hidden">
-                <div className="border-b border-white/10 bg-white/5 px-6 py-5 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mb-3">
-                    Patrocinadores oficiales
-                  </p>
-                  <RotatingSponsorSpotlight variant="hero" />
-                </div>
-
-                <div className="flex-1 flex flex-col items-center justify-center px-6 py-6 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4">
-                    Equipos participantes
-                  </p>
-                  <RotatingTeamSpotlight teams={teams} className="flex-1" />
-                </div>
-
-                <div className="border-t border-white/10 px-6 py-4 flex flex-col sm:flex-row gap-3 justify-center">
-                  {!registrationClosed && (
-                    <button
-                      onClick={() => navigate('/registration')}
-                      className="bg-primary hover:bg-primary/90 text-background-dark px-6 py-3 rounded-xl font-bold text-sm transition-all w-full sm:w-auto"
-                    >
-                      Inscribir equipo
-                    </button>
-                  )}
-                  <button
-                    onClick={() => navigate('/team-manager')}
-                    className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold text-sm transition-all w-full sm:w-auto"
-                  >
-                    Acceder a mi equipo
-                  </button>
-                </div>
+            {showLivePlayer && (
+              <div className="xl:col-span-5 w-full">
+                <TournamentLiveStreamPlayer variant="hero" className="w-full min-h-[320px]" />
               </div>
-            </div>
+            )}
           </div>
         </div>
       </section>

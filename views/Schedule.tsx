@@ -7,7 +7,6 @@ import { CompetitionCalendarViews } from '../components/CompetitionCalendarViews
 import { CompetitionPublicResultsSection } from '../components/CompetitionPublicResultsSection';
 import { CompetitionPublicStandingsSection } from '../components/CompetitionPublicStandingsSection';
 import { CompetitionPublicFinalPhaseSection } from '../components/CompetitionPublicFinalPhaseSection';
-import { TournamentLiveStreamPlayer } from '../components/TournamentLiveStreamPlayer';
 
 type ScheduleTab = 'info' | 'calendar' | 'results' | 'standings' | 'finals';
 
@@ -104,8 +103,6 @@ export const Schedule: React.FC = () => {
 
                                 {infoSubTab === 'general' ? (
                                     <div className="animate-in slide-in-from-left-4 fade-in duration-300 space-y-8">
-                                        <TournamentLiveStreamPlayer variant="banner" />
-
                                         {/* Horarios */}
                                         <div className="grid md:grid-cols-3 gap-4">
                                             {/* Viernes */}

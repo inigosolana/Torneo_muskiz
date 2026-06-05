@@ -14,7 +14,6 @@ import {
 } from '../utils/homeLiveMatches';
 import { resolveTeamShield } from '../constants/teamShields';
 import { TeamNameWithShield } from './TeamShield';
-import { TournamentLiveStreamPlayer } from './TournamentLiveStreamPlayer';
 
 interface HomeTournamentLivePanelProps {
     matches: Match[];
@@ -136,10 +135,6 @@ export const HomeTournamentLivePanel: React.FC<HomeTournamentLivePanelProps> = (
                             Ver calendario completo
                             <span className="material-symbols-outlined text-base">arrow_forward</span>
                         </Link>
-                    </div>
-
-                    <div className="border-b border-white/10 px-5 py-4 bg-black/25">
-                        <TournamentLiveStreamPlayer variant="panel" />
                     </div>
 
                     <div className="grid lg:grid-cols-2 gap-0 lg:divide-x divide-white/10">

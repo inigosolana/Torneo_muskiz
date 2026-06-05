@@ -5,7 +5,7 @@ import {
     type TournamentLiveStreamNow,
 } from '../constants/tournamentLiveStreams';
 
-type Variant = 'panel' | 'banner';
+type Variant = 'hero' | 'panel' | 'banner';
 
 interface TournamentLiveStreamPlayerProps {
     variant?: Variant;
@@ -30,6 +30,7 @@ export const TournamentLiveStreamPlayer: React.FC<TournamentLiveStreamPlayerProp
     if (!stream) return null;
 
     const isLive = stream.status === 'live' && !stream.isChannelFallback;
+    const isHero = variant === 'hero';
     const isCompact = variant === 'panel';
 
     const statusLine = isLive
@@ -38,19 +39,17 @@ export const TournamentLiveStreamPlayer: React.FC<TournamentLiveStreamPlayerProp
           ? `Directo a las ${stream.fromTime}`
           : 'Próxima retransmisión';
 
+    const shellClass = isHero
+        ? 'rounded-2xl border border-white/10 bg-surface-dark/40 backdrop-blur-xl shadow-2xl'
+        : isCompact
+          ? 'rounded-xl border border-white/10 bg-black/30'
+          : 'rounded-xl border border-red-500/25 bg-red-500/5 dark:bg-red-500/10';
+
+    const headerClass = isHero || isCompact ? 'bg-red-600/25' : 'bg-red-600/10';
+
     return (
-        <div
-            className={`overflow-hidden rounded-xl border ${
-                isCompact
-                    ? 'border-white/10 bg-black/30'
-                    : 'border-red-500/25 bg-red-500/5 dark:bg-red-500/10'
-            } ${className}`}
-        >
-            <div
-                className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 ${
-                    isCompact ? 'bg-red-600/20' : 'bg-red-600/10'
-                }`}
-            >
+        <div className={`overflow-hidden ${shellClass} ${className}`}>
+            <div className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 ${headerClass}`}>
                 <div className="flex items-center gap-2 min-w-0">
                     {isLive && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
@@ -60,23 +59,34 @@ export const TournamentLiveStreamPlayer: React.FC<TournamentLiveStreamPlayerProp
                     )}
                     <span
                         className={`text-xs font-bold truncate ${
-                            isCompact ? 'text-white' : 'text-slate-800 dark:text-slate-200'
+                            isHero || isCompact ? 'text-white' : 'text-slate-800 dark:text-slate-200'
                         }`}
                     >
-                        {statusLine}
+                        {isHero ? 'Torneo en directo' : statusLine}
                     </span>
                 </div>
                 <span
                     className={`text-[10px] font-semibold truncate ${
-                        isCompact ? 'text-slate-300' : 'text-slate-600 dark:text-slate-400'
+                        isHero || isCompact ? 'text-slate-300' : 'text-slate-600 dark:text-slate-400'
                     }`}
                 >
-                    {stream.label}
+                    {isHero ? statusLine : stream.label}
                 </span>
             </div>
+            {isHero && (
+                <p className="px-4 pb-2 text-[11px] text-slate-400 truncate">{stream.label}</p>
+            )}
 
             {embedUrl ? (
-                <div className={`relative w-full ${isCompact ? 'aspect-video max-h-44 sm:max-h-52' : 'aspect-video'}`}>
+                <div
+                    className={`relative w-full ${
+                        isHero
+                            ? 'aspect-video min-h-[220px]'
+                            : isCompact
+                              ? 'aspect-video max-h-44 sm:max-h-52'
+                              : 'aspect-video'
+                    }`}
+                >
                     <iframe
                         key={embedUrl}
                         src={embedUrl}
