@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     getTournamentLiveStreamForNow,
-    youtubeEmbedUrlFromStream,
+    youtubeThumbnailUrlFromStream,
     type TournamentLiveStreamNow,
 } from '../constants/tournamentLiveStreams';
 
@@ -25,7 +25,10 @@ export const TournamentLiveStreamPlayer: React.FC<TournamentLiveStreamPlayerProp
         return () => window.clearInterval(id);
     }, []);
 
-    const embedUrl = useMemo(() => (stream ? youtubeEmbedUrlFromStream(stream.url) : null), [stream]);
+    const thumbnailUrl = useMemo(
+        () => (stream ? youtubeThumbnailUrlFromStream(stream.url) : null),
+        [stream],
+    );
 
     if (!stream) return null;
 
@@ -46,6 +49,14 @@ export const TournamentLiveStreamPlayer: React.FC<TournamentLiveStreamPlayerProp
           : 'rounded-xl border border-red-500/25 bg-red-500/5 dark:bg-red-500/10';
 
     const headerClass = isHero || isCompact ? 'bg-red-600/25' : 'bg-red-600/10';
+
+    const bodyClass = isHero
+        ? 'aspect-video min-h-[180px] sm:min-h-[200px]'
+        : isCompact
+          ? 'aspect-video max-h-44 sm:max-h-52'
+          : 'aspect-video';
+
+    const ctaLabel = isLive ? 'Ver directo en YouTube' : 'Abrir en YouTube';
 
     return (
         <div className={`overflow-hidden ${shellClass} ${className}`}>
@@ -77,41 +88,30 @@ export const TournamentLiveStreamPlayer: React.FC<TournamentLiveStreamPlayerProp
                 <p className="px-4 pb-2 text-[11px] text-slate-400 truncate">{stream.label}</p>
             )}
 
-            {embedUrl ? (
-                <div
-                    className={`relative w-full ${
-                        isHero
-                            ? 'aspect-video min-h-[180px] sm:min-h-[200px]'
-                            : isCompact
-                              ? 'aspect-video max-h-44 sm:max-h-52'
-                              : 'aspect-video'
-                    }`}
-                >
-                    <iframe
-                        key={embedUrl}
-                        src={embedUrl}
-                        title={stream.label}
-                        className="absolute inset-0 h-full w-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                        loading="lazy"
-                        referrerPolicy="strict-origin-when-cross-origin"
+            <a
+                href={stream.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`group relative block w-full overflow-hidden bg-black ${bodyClass}`}
+                title={stream.label}
+            >
+                {thumbnailUrl ? (
+                    <img
+                        src={thumbnailUrl}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover opacity-90 transition-transform duration-300 group-hover:scale-105"
                     />
+                ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-red-900/80 to-slate-900" />
+                )}
+                <div className="absolute inset-0 bg-black/35 transition-colors group-hover:bg-black/25" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
+                    <span className="flex size-14 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-red-900/50 transition-transform group-hover:scale-110">
+                        <span className="material-symbols-outlined text-3xl ml-0.5">play_arrow</span>
+                    </span>
+                    <span className="text-sm font-bold text-white drop-shadow">{ctaLabel}</span>
                 </div>
-            ) : (
-                <div className={`px-4 py-6 text-center ${isCompact ? 'text-slate-300' : 'text-slate-600 dark:text-slate-400'}`}>
-                    <p className="text-sm font-semibold mb-3">Retransmisión en el canal de YouTube</p>
-                    <a
-                        href={stream.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 rounded-lg bg-red-600 hover:bg-red-500 px-4 py-2 text-sm font-bold text-white transition-colors"
-                    >
-                        <span className="material-symbols-outlined text-base">live_tv</span>
-                        Abrir YouTube
-                    </a>
-                </div>
-            )}
+            </a>
         </div>
     );
 };

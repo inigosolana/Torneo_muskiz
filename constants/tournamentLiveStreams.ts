@@ -120,6 +120,12 @@ export function youtubeEmbedUrlFromStream(url: string): string | null {
     return `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1`;
 }
 
+export function youtubeThumbnailUrlFromStream(url: string): string | null {
+    const id = youtubeVideoIdFromUrl(url);
+    if (!id) return null;
+    return `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
+}
+
 /** Directo en curso o siguiente del fin de semana; rota solo según la hora. */
 export function getTournamentLiveStreamForNow(now = new Date()): TournamentLiveStreamNow | null {
     if (!isTournamentWeekendDay(now)) return null;
