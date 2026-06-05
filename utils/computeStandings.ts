@@ -1,7 +1,12 @@
 import type { Match, Team } from '../types';
 import { resolveTeamShield } from '../constants/teamShields';
+import { getMatchGoalTotals } from './beachSetScoring';
 import { DIVISION_CODE, normalizeTeamLabel, resolveMatchDivision } from '../services/muskizScheduleSimulator';
 import { getTeamsInDivisionGroup } from './groupMatchSync';
+
+/** Puntos por victoria en fase de grupos (balonmano playa Muskiz). */
+export const STANDINGS_WIN_POINTS = 2;
+export const STANDINGS_LOSS_POINTS = 0;
 
 export interface StandingsRow {
     name: string;
@@ -9,9 +14,28 @@ export interface StandingsRow {
     played: number;
     won: number;
     lost: number;
+    /** Sets ganados (acumulado). */
+    setsWon: number;
+    /** Sets perdidos (acumulado). */
+    setsLost: number;
     gf: number;
     ga: number;
     points: number;
+}
+
+function emptyRow(name: string, logoUrl?: string): StandingsRow {
+    return {
+        name,
+        logoUrl,
+        played: 0,
+        won: 0,
+        lost: 0,
+        setsWon: 0,
+        setsLost: 0,
+        gf: 0,
+        ga: 0,
+        points: 0,
+    };
 }
 
 export interface ComputeStandingsOpts {
@@ -27,6 +51,7 @@ export interface ComputeStandingsOpts {
 /**
  * Clasificación por categoría y, opcionalmente, grupo de competición.
  * Solo cuenta partidos FINALIZADOS donde ambos equipos pertenecen al conjunto filtrado.
+ * Puntos: 2 victoria, 0 derrota. GF/GC = goles anotados/recibidos (detalle de sets).
  */
 export function computeStandings(
     teams: Team[],
@@ -46,68 +71,51 @@ export function computeStandings(
 
     const stats: Record<string, StandingsRow> = {};
     roster.forEach((t) => {
-        stats[t.name] = {
-            name: t.name,
-            logoUrl: resolveTeamShield(t.name, t.logoUrl),
-            played: 0,
-            won: 0,
-            lost: 0,
-            gf: 0,
-            ga: 0,
-            points: 0,
-        };
+        stats[t.name] = emptyRow(t.name, resolveTeamShield(t.name, t.logoUrl));
     });
 
     matches.forEach((m) => {
         if (m.status !== 'FINISHED' || m.scoreA === null || m.scoreB === null) return;
         if (!rosterNames.has(m.teamA) || !rosterNames.has(m.teamB)) return;
+        if (m.scoreA === m.scoreB) return;
 
         if (!stats[m.teamA])
-            stats[m.teamA] = {
-                name: m.teamA,
-                logoUrl: resolveTeamShield(m.teamA),
-                played: 0,
-                won: 0,
-                lost: 0,
-                gf: 0,
-                ga: 0,
-                points: 0,
-            };
+            stats[m.teamA] = emptyRow(m.teamA, resolveTeamShield(m.teamA));
         if (!stats[m.teamB])
-            stats[m.teamB] = {
-                name: m.teamB,
-                logoUrl: resolveTeamShield(m.teamB),
-                played: 0,
-                won: 0,
-                lost: 0,
-                gf: 0,
-                ga: 0,
-                points: 0,
-            };
+            stats[m.teamB] = emptyRow(m.teamB, resolveTeamShield(m.teamB));
+
+        const { goalsA, goalsB } = getMatchGoalTotals(m);
 
         stats[m.teamA].played += 1;
-        stats[m.teamA].gf += m.scoreA;
-        stats[m.teamA].ga += m.scoreB;
+        stats[m.teamA].setsWon += m.scoreA;
+        stats[m.teamA].setsLost += m.scoreB;
+        stats[m.teamA].gf += goalsA;
+        stats[m.teamA].ga += goalsB;
 
         stats[m.teamB].played += 1;
-        stats[m.teamB].gf += m.scoreB;
-        stats[m.teamB].ga += m.scoreA;
+        stats[m.teamB].setsWon += m.scoreB;
+        stats[m.teamB].setsLost += m.scoreA;
+        stats[m.teamB].gf += goalsB;
+        stats[m.teamB].ga += goalsA;
 
         if (m.scoreA > m.scoreB) {
             stats[m.teamA].won += 1;
-            stats[m.teamA].points += 3;
+            stats[m.teamA].points += STANDINGS_WIN_POINTS;
             stats[m.teamB].lost += 1;
-        } else if (m.scoreB > m.scoreA) {
-            stats[m.teamB].won += 1;
-            stats[m.teamB].points += 3;
-            stats[m.teamA].lost += 1;
         } else {
-            stats[m.teamA].points += 1;
-            stats[m.teamB].points += 1;
+            stats[m.teamB].won += 1;
+            stats[m.teamB].points += STANDINGS_WIN_POINTS;
+            stats[m.teamA].lost += 1;
         }
     });
 
-    return Object.values(stats).sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga));
+    return Object.values(stats).sort(
+        (a, b) =>
+            b.points - a.points ||
+            b.setsWon - a.setsLost - (a.setsWon - a.setsLost) ||
+            b.gf - b.ga - (a.gf - a.ga) ||
+            b.gf - a.gf
+    );
 }
 
 /** Partidos de una categoría y grupo (fase de grupos por round o ambos equipos del cuadro). */

@@ -191,15 +191,13 @@ export function computeStandings(roster: DbTeam[], matches: DbMatch[]): Standing
     a.ga += m.score_b;
     b.gf += m.score_b;
     b.ga += m.score_a;
+    if (m.score_a === m.score_b) continue;
     if (m.score_a > m.score_b) {
       a.won += 1;
-      a.points += 3;
-    } else if (m.score_b > m.score_a) {
-      b.won += 1;
-      b.points += 3;
+      a.points += 2;
     } else {
-      a.points += 1;
-      b.points += 1;
+      b.won += 1;
+      b.points += 2;
     }
   }
 

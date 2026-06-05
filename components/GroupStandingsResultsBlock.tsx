@@ -58,23 +58,24 @@ export const GroupStandingsResultsBlock: React.FC<GroupStandingsResultsBlockProp
                     {standingsTitle ?? `Clasificación — Grupo ${groupKey}`}
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left min-w-[520px]">
+                    <table className="w-full text-sm text-left min-w-[640px]">
                         <thead className="bg-slate-50 dark:bg-white/5 text-slate-500 font-bold uppercase text-xs">
                             <tr>
-                                <th className="px-6 py-4 w-10">Pos</th>
-                                <th className="px-6 py-4">Equipo</th>
-                                <th className="px-4 py-4 text-center">PJ</th>
-                                <th className="px-4 py-4 text-center">PG</th>
-                                <th className="px-4 py-4 text-center">GF</th>
-                                <th className="px-4 py-4 text-center">GC</th>
-                                <th className="px-4 py-4 text-center">DG</th>
-                                <th className="px-6 py-4 text-right font-black">PTS</th>
+                                <th className="px-4 py-4 w-10">Pos</th>
+                                <th className="px-4 py-4">Equipo</th>
+                                <th className="px-2 py-4 text-center">PJ</th>
+                                <th className="px-2 py-4 text-center">PG</th>
+                                <th className="px-2 py-4 text-center font-black">PTS</th>
+                                <th className="px-2 py-4 text-center">SG</th>
+                                <th className="px-2 py-4 text-center">SP</th>
+                                <th className="px-2 py-4 text-center">GF</th>
+                                <th className="px-2 py-4 text-center">GC</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                             {standings.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-8 text-center text-sm text-slate-400">
+                                    <td colSpan={9} className="px-6 py-8 text-center text-sm text-slate-400">
                                         No hay equipos en el Grupo {groupKey}.
                                     </td>
                                 </tr>
@@ -105,16 +106,15 @@ export const GroupStandingsResultsBlock: React.FC<GroupStandingsResultsBlockProp
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-4 text-center">{team.played}</td>
-                                            <td className="px-4 py-4 text-center font-medium text-green-600">{team.won}</td>
-                                            <td className="px-4 py-4 text-center text-slate-500">{team.gf}</td>
-                                            <td className="px-4 py-4 text-center text-slate-500">{team.ga}</td>
-                                            <td className="px-4 py-4 text-center font-mono text-slate-500">
-                                                {team.gf - team.ga}
-                                            </td>
-                                            <td className="px-6 py-4 text-right font-black text-lg text-slate-900 dark:text-white">
+                                            <td className="px-2 py-4 text-center">{team.played}</td>
+                                            <td className="px-2 py-4 text-center font-medium text-green-600">{team.won}</td>
+                                            <td className="px-2 py-4 text-center font-black text-slate-900 dark:text-white">
                                                 {team.points}
                                             </td>
+                                            <td className="px-2 py-4 text-center text-slate-600">{team.setsWon}</td>
+                                            <td className="px-2 py-4 text-center text-slate-500">{team.setsLost}</td>
+                                            <td className="px-2 py-4 text-center text-slate-500">{team.gf}</td>
+                                            <td className="px-2 py-4 text-center text-slate-500">{team.ga}</td>
                                         </tr>
                                     );
                                 })
