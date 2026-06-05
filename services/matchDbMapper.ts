@@ -1,10 +1,30 @@
-import type { Match, Team } from '../types';
+import type { BeachSetScores, Match, Team } from '../types';
 import { inferMatchScheduleDay } from './tournamentScheduleService';
 import {
     divisionFromMatchRound,
     findTeamInDivision,
     isPlaceholderTeamName,
 } from './muskizScheduleSimulator';
+
+function numOrNull(v: unknown): number | null {
+    if (v === null || v === undefined || v === '') return null;
+    const n = typeof v === 'number' ? v : parseInt(String(v), 10);
+    return Number.isNaN(n) ? null : n;
+}
+
+export function parseSetScoresFromDb(raw: unknown): BeachSetScores | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const o = raw as Record<string, unknown>;
+    const set1A = numOrNull(o.set1A ?? o.set1_a);
+    const set1B = numOrNull(o.set1B ?? o.set1_b);
+    const set2A = numOrNull(o.set2A ?? o.set2_a);
+    const set2B = numOrNull(o.set2B ?? o.set2_b);
+    const shootoutA = numOrNull(o.shootoutA ?? o.shootout_a);
+    const shootoutB = numOrNull(o.shootoutB ?? o.shootout_b);
+    const hasAny = [set1A, set1B, set2A, set2B, shootoutA, shootoutB].some((x) => x !== null);
+    if (!hasAny) return undefined;
+    return { set1A, set1B, set2A, set2B, shootoutA, shootoutB };
+}
 
 export function resolveTeamIdForMatchSide(
     teamName: string,
@@ -41,6 +61,9 @@ export function matchToDatabaseRow(
         row.report_type = m.report.type;
         row.report_image_uri = m.report.imageUri ?? null;
         row.report_observations = m.report.observations ?? null;
+        if (m.report.setScores) {
+            row.set_scores = m.report.setScores;
+        }
     }
     return row;
 }
@@ -56,13 +79,16 @@ export function databaseRowToMatch(row: Record<string, unknown>): Match {
         (r.team_b?.name != null && String(r.team_b.name).trim()) ||
         String(r.team_b ?? r.teamB ?? '');
 
+    const setScores = parseSetScoresFromDb(r.set_scores);
+
     let report: Match['report'] | undefined;
-    if (r.report_type || r.report_image_uri || r.report_observations) {
+    if (r.report_type || r.report_image_uri || r.report_observations || setScores) {
         report = {
             type: r.report_type ?? 'DIGITAL',
             imageUri: r.report_image_uri ?? undefined,
             observations: r.report_observations ?? undefined,
             playerStats: [],
+            ...(setScores ? { setScores } : {}),
         };
     } else if (r.report && typeof r.report === 'object') {
         report = r.report as Match['report'];
