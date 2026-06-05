@@ -12,7 +12,7 @@ import {
     getDivisionBaseColors,
     getMatchGridColors,
 } from '../utils/matchGridColors';
-import { downloadTournamentGridExcel, printTournamentGridPdf } from '../utils/tournamentGridExport';
+import { downloadCourtSheetsExcel, downloadTournamentGridExcel, printTournamentGridPdf } from '../utils/tournamentGridExport';
 import { getMatchPhaseDisplayLabel } from '../utils/matchPhaseLabel';
 import { isEliminationMatch } from '../utils/finalPhaseBracket';
 
@@ -194,6 +194,21 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                     <div className="flex flex-wrap items-center gap-2">
                                         {showDayExport && dayMatches.length > 0 && (
                                             <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        downloadCourtSheetsExcel(
+                                                            dayMatches,
+                                                            teams,
+                                                            `${exportFileNamePrefix}_${daySlug(day)}_anotadores_por_campo`
+                                                        )
+                                                    }
+                                                    className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1"
+                                                    title={`Descargar Excel de anotadores por campo (${day})`}
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">description</span>
+                                                    Excel campos
+                                                </button>
                                                 <button
                                                     type="button"
                                                     onClick={() =>

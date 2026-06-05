@@ -1,10 +1,12 @@
 import XLSX from 'xlsx-js-style';
-import type { Match } from '../types';
+import type { Match, Team } from '../types';
 import {
     getDayScheduleConfig,
+    resolveMatchDivision,
     groupMatchesForDayGrid,
     type MuskizScheduleDayLabel,
 } from '../services/muskizScheduleSimulator';
+import { inferMatchScheduleDay } from '../services/tournamentScheduleService';
 import { getMatchGridColors } from './matchGridColors';
 import {
     EXCEL_BORDER_RGB,
@@ -305,4 +307,70 @@ export function printTournamentGridPdf(
     }
     w.document.write(html);
     w.document.close();
+}
+
+const DAY_SORT_ORDER: Record<MuskizScheduleDayLabel, number> = {
+    Viernes: 1,
+    Sábado: 2,
+    Domingo: 3,
+};
+
+function sanitizeSheetName(name: string): string {
+    return name.replace(/[\\/*?:[\]]/g, '-').slice(0, 31) || 'Hoja';
+}
+
+function sortByTimeAndTeams(a: Match, b: Match): number {
+    if (a.time === 'PENDIENTE' && b.time !== 'PENDIENTE') return 1;
+    if (a.time !== 'PENDIENTE' && b.time === 'PENDIENTE') return -1;
+    if (a.time !== b.time) return a.time.localeCompare(b.time, 'es');
+    return `${a.teamA} vs ${a.teamB}`.localeCompare(`${b.teamA} vs ${b.teamB}`, 'es');
+}
+
+export function downloadCourtSheetsExcel(
+    matches: Match[],
+    teams: Team[],
+    filenameBase = 'calendario_anotadores'
+): void {
+    const wb = XLSX.utils.book_new();
+
+    const grouped = new Map<string, { day: MuskizScheduleDayLabel; court: string; list: Match[] }>();
+    for (const match of matches) {
+        const day = inferMatchScheduleDay(match);
+        if (!day) continue;
+        const court = (match.court || 'Sin campo').trim();
+        const key = `${day}__${court}`;
+        if (!grouped.has(key)) grouped.set(key, { day, court, list: [] });
+        grouped.get(key)!.list.push(match);
+    }
+
+    const groups = [...grouped.values()].sort((a, b) => {
+        const dayOrder = DAY_SORT_ORDER[a.day] - DAY_SORT_ORDER[b.day];
+        if (dayOrder !== 0) return dayOrder;
+        return a.court.localeCompare(b.court, 'es');
+    });
+
+    if (groups.length === 0) {
+        const ws = XLSX.utils.json_to_sheet(
+            [{ Horario: '', Categoría: '', Equipos: 'Sin partidos con día/campo asignado', Resultado: '' }],
+            { header: ['Horario', 'Categoría', 'Equipos', 'Resultado'] }
+        );
+        ws['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 52 }, { wch: 16 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Sin_partidos');
+        XLSX.writeFile(wb, `${filenameBase}.xlsx`);
+        return;
+    }
+
+    for (const group of groups) {
+        const rows = [...group.list].sort(sortByTimeAndTeams).map((m) => ({
+            Horario: m.time,
+            Categoría: resolveMatchDivision(m, teams) ?? '—',
+            Equipos: `${m.teamA} vs ${m.teamB}`,
+            Resultado: '',
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows, { header: ['Horario', 'Categoría', 'Equipos', 'Resultado'] });
+        ws['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 52 }, { wch: 16 }];
+        XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(`${group.day}-${group.court}`));
+    }
+
+    XLSX.writeFile(wb, `${filenameBase}.xlsx`);
 }
