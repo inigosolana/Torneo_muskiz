@@ -379,19 +379,22 @@ export function fillActaHtmlTemplate(html: string, ctx: ActaExportContext): stri
 export const ACTA_PDF_WIDTH_PX = 794;
 export const ACTA_PDF_HEIGHT_PX = 1123;
 
-/** Quita estilos de impresión/zoom y fija layout A4 para exportar PDF en el navegador. */
-export function prepareActaHtmlForPdfExport(html: string): string {
-    let out = html
+/** Prepara HTML para captura PDF: conserva layout 210mm de impresión, sin zoom CSS (usa transform en export). */
+export function prepareActaHtmlForPdfExport(html: string, _contentZoom = 1): string {
+    const out = html
         .replace(/<style id="acta-single-page">[\s\S]*?<\/style>/g, '')
-        .replace(/<style id="acta-print-base">[\s\S]*?<\/style>/g, '')
         .replace(/\bacta-compact\s*/g, '');
 
     const capture = `<style id="acta-pdf-capture">
-html,body{margin:0!important;padding:0!important;width:${ACTA_PDF_WIDTH_PX}px!important;background:#fff!important;display:block!important}
-body.doc-content,body.doc-content>div{width:${ACTA_PDF_WIDTH_PX}px!important;max-width:${ACTA_PDF_WIDTH_PX}px!important}
-table{width:${ACTA_PDF_WIDTH_PX}px!important;max-width:${ACTA_PDF_WIDTH_PX}px!important;border-collapse:collapse}
+html,body{margin:0!important;padding:0!important;background:#fff!important;overflow:visible!important}
+body.doc-content{width:${ACTA_PDF_WIDTH_PX}px!important;margin:0!important;padding:0!important}
+#acta-pdf-capture-surface{width:210mm!important;max-width:210mm!important;margin:0 auto!important}
+body.doc-content>div{width:210mm!important;max-width:210mm!important;margin:0 auto!important}
+table{width:100%!important;margin:0 auto!important;border-collapse:collapse!important}
+table td,table th{padding:0!important;vertical-align:top!important}
 body table td p{line-height:1.05!important;margin:0!important}
-p.c267{text-align:center!important}
+p.c267{text-align:center!important;margin:0 auto!important}
+p.c267 img{display:inline-block!important;vertical-align:middle!important;object-fit:contain!important}
 </style>`;
     return out.replace('</head>', `${capture}</head>`);
 }

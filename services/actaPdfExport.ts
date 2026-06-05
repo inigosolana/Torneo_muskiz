@@ -5,8 +5,12 @@ import { buildActaPrintHtmlAsync } from '../utils/actaPrintHtml';
 import {
     ACTA_PDF_HEIGHT_PX,
     ACTA_PDF_WIDTH_PX,
+    actaSinglePageZoom,
     prepareActaHtmlForPdfExport,
 } from './actaHtmlTemplateFill';
+
+const CAPTURE_ROOT_ID = 'acta-pdf-capture-root';
+const CAPTURE_SURFACE_ID = 'acta-pdf-capture-surface';
 
 function waitForImages(root: HTMLElement): Promise<void> {
     const imgs = [...root.querySelectorAll('img')];
@@ -32,17 +36,45 @@ function withDocumentBase(html: string): string {
     return html.replace('<head>', `<head><base href="${base}">`);
 }
 
-function applyFitZoom(body: HTMLElement, zoom: number): void {
-    body.style.zoom = String(zoom);
-    body.style.width = `${ACTA_PDF_WIDTH_PX}px`;
+function mountCaptureSurface(doc: Document): { root: HTMLElement; surface: HTMLElement } {
+    const body = doc.body;
+    const root = doc.createElement('div');
+    root.id = CAPTURE_ROOT_ID;
+    root.style.width = `${ACTA_PDF_WIDTH_PX}px`;
+    root.style.margin = '0';
+    root.style.padding = '0';
+    root.style.overflow = 'hidden';
+    root.style.background = '#ffffff';
+
+    const surface = doc.createElement('div');
+    surface.id = CAPTURE_SURFACE_ID;
+    surface.style.width = '210mm';
+    surface.style.margin = '0 auto';
+    surface.style.transformOrigin = 'top center';
+    surface.style.background = '#ffffff';
+
+    while (body.firstChild) {
+        surface.appendChild(body.firstChild);
+    }
+
+    root.appendChild(surface);
+    body.appendChild(root);
     body.style.margin = '0';
     body.style.padding = '0';
+    body.style.width = `${ACTA_PDF_WIDTH_PX}px`;
     body.style.background = '#ffffff';
+
+    return { root, surface };
+}
+
+function applyCaptureScale(surface: HTMLElement, scale: number): number {
+    surface.style.transform = `scale(${scale})`;
+    return Math.max(1, Math.ceil(surface.scrollHeight * scale));
 }
 
 /** Convierte el HTML del acta en un PDF A4 (1 página). */
-export async function actaHtmlToPdfBlob(html: string): Promise<Blob> {
-    const prepared = prepareActaHtmlForPdfExport(withDocumentBase(html));
+export async function actaHtmlToPdfBlob(html: string, contentZoom = 1): Promise<Blob> {
+    const prepared = prepareActaHtmlForPdfExport(withDocumentBase(html), contentZoom);
 
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
@@ -63,38 +95,69 @@ export async function actaHtmlToPdfBlob(html: string): Promise<Blob> {
     doc.write(prepared);
     doc.close();
 
-    const sheet = doc.body;
-
     try {
-        await waitForImages(sheet);
+        const { root, surface } = mountCaptureSurface(doc);
+
+        await waitForImages(surface);
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-        const naturalHeight = sheet.scrollHeight;
-        const fitZoom = Math.min(1, (ACTA_PDF_HEIGHT_PX / Math.max(naturalHeight, 1)) * 0.995);
-        applyFitZoom(sheet, fitZoom);
+        let scale = Math.min(1, contentZoom);
+        let visualHeight: number;
+        if (scale >= 0.999) {
+            surface.style.transform = 'none';
+            visualHeight = surface.scrollHeight;
+        } else {
+            visualHeight = applyCaptureScale(surface, scale);
+        }
+
+        if (visualHeight > ACTA_PDF_HEIGHT_PX) {
+            scale *= (ACTA_PDF_HEIGHT_PX / visualHeight) * 0.995;
+            visualHeight = applyCaptureScale(surface, scale);
+        }
+
+        root.style.height = `${Math.min(ACTA_PDF_HEIGHT_PX, visualHeight)}px`;
+        iframe.style.height = `${Math.min(ACTA_PDF_HEIGHT_PX, visualHeight)}px`;
 
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-        const captureHeight = Math.min(ACTA_PDF_HEIGHT_PX, Math.ceil(sheet.scrollHeight));
-        iframe.style.height = `${captureHeight}px`;
-
-        const canvas = await html2canvas(sheet, {
-            scale: 3,
+        const captureTarget = scale >= 0.999 ? surface : root;
+        const captureHeight = Math.min(ACTA_PDF_HEIGHT_PX, visualHeight);
+        const canvas = await html2canvas(captureTarget, {
+            scale: 2,
             useCORS: true,
             allowTaint: false,
             logging: false,
             backgroundColor: '#ffffff',
-            width: ACTA_PDF_WIDTH_PX,
-            height: captureHeight,
+            width: scale >= 0.999 ? undefined : ACTA_PDF_WIDTH_PX,
+            height: scale >= 0.999 ? undefined : captureHeight,
             windowWidth: ACTA_PDF_WIDTH_PX,
-            windowHeight: captureHeight,
+            windowHeight: visualHeight,
             imageTimeout: 20000,
+            letterRendering: true,
+            foreignObjectRendering: false,
+            onclone: (clonedDoc) => {
+                const clonedSurface = clonedDoc.getElementById(CAPTURE_SURFACE_ID);
+                if (clonedSurface) {
+                    const el = clonedSurface as HTMLElement;
+                    el.style.zoom = '1';
+                    el.style.webkitFontSmoothing = 'antialiased';
+                }
+            },
         });
 
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const pageW = pdf.internal.pageSize.getWidth();
         const pageH = pdf.internal.pageSize.getHeight();
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pageW, pageH, undefined, 'MEDIUM');
+        const ratio = canvas.width / canvas.height;
+        let drawW = pageW;
+        let drawH = drawW / ratio;
+        if (drawH > pageH) {
+            drawH = pageH;
+            drawW = drawH * ratio;
+        }
+        const x = (pageW - drawW) / 2;
+        const y = Math.max(0, (pageH - drawH) / 2);
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, drawW, drawH, undefined, 'FAST');
         return pdf.output('blob');
     } finally {
         document.body.removeChild(iframe);
@@ -103,5 +166,6 @@ export async function actaHtmlToPdfBlob(html: string): Promise<Blob> {
 
 export async function generateActaPdfBlob(ctx: ActaExportContext): Promise<Blob> {
     const html = await buildActaPrintHtmlAsync(ctx);
-    return actaHtmlToPdfBlob(html);
+    const contentZoom = actaSinglePageZoom(ctx.teamA.players.length, ctx.teamB.players.length);
+    return actaHtmlToPdfBlob(html, contentZoom);
 }
