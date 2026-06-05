@@ -6,7 +6,6 @@ import {
     groupMatchesForDayGrid,
     type MuskizScheduleDayLabel,
 } from '../services/muskizScheduleSimulator';
-import { inferMatchScheduleDay } from '../services/tournamentScheduleService';
 import { getMatchGridColors } from './matchGridColors';
 import {
     EXCEL_BORDER_RGB,
@@ -309,16 +308,6 @@ export function printTournamentGridPdf(
     w.document.close();
 }
 
-const DAY_SORT_ORDER: Record<MuskizScheduleDayLabel, number> = {
-    Viernes: 1,
-    Sábado: 2,
-    Domingo: 3,
-};
-
-function sanitizeSheetName(name: string): string {
-    return name.replace(/[\\/*?:[\]]/g, '-').slice(0, 31) || 'Hoja';
-}
-
 function sortByTimeAndTeams(a: Match, b: Match): number {
     if (a.time === 'PENDIENTE' && b.time !== 'PENDIENTE') return 1;
     if (a.time !== 'PENDIENTE' && b.time === 'PENDIENTE') return -1;
@@ -326,51 +315,87 @@ function sortByTimeAndTeams(a: Match, b: Match): number {
     return `${a.teamA} vs ${a.teamB}`.localeCompare(`${b.teamA} vs ${b.teamB}`, 'es');
 }
 
-export function downloadCourtSheetsExcel(
-    matches: Match[],
-    teams: Team[],
-    filenameBase = 'calendario_anotadores'
-): void {
-    const wb = XLSX.utils.book_new();
+function exportLabelPart(value: string): string {
+    return value
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '');
+}
 
-    const grouped = new Map<string, { day: MuskizScheduleDayLabel; court: string; list: Match[] }>();
-    for (const match of matches) {
-        const day = inferMatchScheduleDay(match);
-        if (!day) continue;
-        const court = (match.court || 'Sin campo').trim();
-        const key = `${day}__${court}`;
-        if (!grouped.has(key)) grouped.set(key, { day, court, list: [] });
-        grouped.get(key)!.list.push(match);
-    }
+/** Ej. Viernes + Campo 1 → VIERNES_CAMPO1 */
+export function courtScorerExportFilename(day: MuskizScheduleDayLabel, court: string): string {
+    return `${exportLabelPart(day)}_${exportLabelPart(court)}`;
+}
 
-    const groups = [...grouped.values()].sort((a, b) => {
-        const dayOrder = DAY_SORT_ORDER[a.day] - DAY_SORT_ORDER[b.day];
-        if (dayOrder !== 0) return dayOrder;
-        return a.court.localeCompare(b.court, 'es');
+const SCORER_TITLE_RGB = 'FFFF00';
+
+function buildCourtScorerSheet(matches: Match[], teams: Team[]): XLSX.WorkSheet {
+    const ws: XLSX.WorkSheet = {};
+    const headers = ['Horario', 'Categoría', 'Equipos', 'Resultado'];
+    const headerStyle = cellStyle(SCORER_TITLE_RGB, {
+        bold: true,
+        fontColor: '000000',
+        wrap: false,
+        fontSize: 12,
     });
 
-    if (groups.length === 0) {
-        const ws = XLSX.utils.json_to_sheet(
-            [{ Horario: '', Categoría: '', Equipos: 'Sin partidos con día/campo asignado', Resultado: '' }],
-            { header: ['Horario', 'Categoría', 'Equipos', 'Resultado'] }
-        );
-        ws['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 52 }, { wch: 16 }];
-        XLSX.utils.book_append_sheet(wb, ws, 'Sin_partidos');
-        XLSX.writeFile(wb, `${filenameBase}.xlsx`);
+    headers.forEach((header, col) => setCell(ws, 0, col, header, headerStyle));
+
+    const sorted = [...matches].sort(sortByTimeAndTeams);
+    sorted.forEach((match, index) => {
+        const row = index + 1;
+        const matchBg = tailwindBgToExcelRgb(getMatchGridColors(match.round).cell);
+        const categoryStyle = cellStyle(matchBg, { fontSize: 10 });
+        const teamsStyle = cellStyle(matchBg, { fontSize: 10 });
+        const timeStyle =
+            match.time === 'PENDIENTE'
+                ? cellStyle('FEF3C7', { bold: true, wrap: false })
+                : cellStyle(EXCEL_TIME_COL_RGB, { bold: true, wrap: false });
+        const resultStyle = cellStyle('FFFFFF', { wrap: false });
+
+        setCell(ws, row, 0, match.time, timeStyle);
+        setCell(ws, row, 1, resolveMatchDivision(match, teams) ?? '—', categoryStyle);
+        setCell(ws, row, 2, `${match.teamA} vs ${match.teamB}`, teamsStyle);
+        setCell(ws, row, 3, '', resultStyle);
+    });
+
+    const lastRow = Math.max(0, sorted.length);
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow, c: 3 } });
+    ws['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 52 }, { wch: 16 }];
+    ws['!rows'] = Array.from({ length: lastRow + 1 }, (_, rowIndex) => ({
+        hpt: rowIndex === 0 ? 36 : 38,
+    }));
+
+    return ws;
+}
+
+/** Un archivo .xlsx por campo del día, con colores del calendario (VIERNES_CAMPO1, …). */
+export function downloadCourtSheetsExcel(
+    day: MuskizScheduleDayLabel,
+    matches: Match[],
+    teams: Team[]
+): void {
+    const byCourt = new Map<string, Match[]>();
+    for (const match of matches) {
+        const court = (match.court || 'Sin campo').trim();
+        if (!byCourt.has(court)) byCourt.set(court, []);
+        byCourt.get(court)!.push(match);
+    }
+
+    const courts = [...byCourt.keys()].sort((a, b) => a.localeCompare(b, 'es'));
+    if (courts.length === 0) {
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, buildCourtScorerSheet([], teams), 'Anotadores');
+        XLSX.writeFile(wb, `${courtScorerExportFilename(day, 'SIN_CAMPO')}.xlsx`);
         return;
     }
 
-    for (const group of groups) {
-        const rows = [...group.list].sort(sortByTimeAndTeams).map((m) => ({
-            Horario: m.time,
-            Categoría: resolveMatchDivision(m, teams) ?? '—',
-            Equipos: `${m.teamA} vs ${m.teamB}`,
-            Resultado: '',
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows, { header: ['Horario', 'Categoría', 'Equipos', 'Resultado'] });
-        ws['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 52 }, { wch: 16 }];
-        XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(`${group.day}-${group.court}`));
-    }
-
-    XLSX.writeFile(wb, `${filenameBase}.xlsx`);
+    courts.forEach((court, index) => {
+        window.setTimeout(() => {
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, buildCourtScorerSheet(byCourt.get(court)!, teams), 'Anotadores');
+            XLSX.writeFile(wb, `${courtScorerExportFilename(day, court)}.xlsx`);
+        }, index * 350);
+    });
 }

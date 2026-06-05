@@ -196,15 +196,9 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                             <>
                                                 <button
                                                     type="button"
-                                                    onClick={() =>
-                                                        downloadCourtSheetsExcel(
-                                                            dayMatches,
-                                                            teams,
-                                                            `${exportFileNamePrefix}_${daySlug(day)}_anotadores_por_campo`
-                                                        )
-                                                    }
+                                                    onClick={() => downloadCourtSheetsExcel(day, dayMatches, teams)}
                                                     className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1"
-                                                    title={`Descargar Excel de anotadores por campo (${day})`}
+                                                    title={`Descargar un Excel por campo (${day}): VIERNES_CAMPO1, VIERNES_CAMPO2…`}
                                                 >
                                                     <span className="material-symbols-outlined text-sm">description</span>
                                                     Excel campos
