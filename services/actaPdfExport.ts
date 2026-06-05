@@ -4,6 +4,7 @@ import type { ActaExportContext } from '../utils/actaBuildContext';
 import { buildActaPrintHtmlAsync } from '../utils/actaPrintHtml';
 import {
     ACTA_PDF_HEIGHT_PX,
+    ACTA_PDF_SHIFT_UP_PX,
     ACTA_PDF_WIDTH_PX,
     actaSinglePageZoom,
     prepareActaHtmlForPdfExport,
@@ -52,7 +53,6 @@ function mountCaptureSurface(doc: Document): { root: HTMLElement; surface: HTMLE
     surface.style.margin = '0 auto';
     surface.style.transformOrigin = 'top center';
     surface.style.background = '#ffffff';
-
     while (body.firstChild) {
         surface.appendChild(body.firstChild);
     }
@@ -68,7 +68,8 @@ function mountCaptureSurface(doc: Document): { root: HTMLElement; surface: HTMLE
 }
 
 function applyCaptureScale(surface: HTMLElement, scale: number): number {
-    surface.style.transform = `scale(${scale})`;
+    surface.style.transform = `translateY(-${ACTA_PDF_SHIFT_UP_PX}px) scale(${scale})`;
+    surface.style.transformOrigin = 'top center';
     return Math.max(1, Math.ceil(surface.scrollHeight * scale));
 }
 
@@ -104,7 +105,8 @@ export async function actaHtmlToPdfBlob(html: string, contentZoom = 1): Promise<
         let scale = Math.min(1, contentZoom);
         let visualHeight: number;
         if (scale >= 0.999) {
-            surface.style.transform = 'none';
+            surface.style.transform = `translateY(-${ACTA_PDF_SHIFT_UP_PX}px)`;
+            surface.style.transformOrigin = 'top center';
             visualHeight = surface.scrollHeight;
         } else {
             visualHeight = applyCaptureScale(surface, scale);
@@ -149,15 +151,9 @@ export async function actaHtmlToPdfBlob(html: string, contentZoom = 1): Promise<
         const pageW = pdf.internal.pageSize.getWidth();
         const pageH = pdf.internal.pageSize.getHeight();
         const ratio = canvas.width / canvas.height;
-        let drawW = pageW;
-        let drawH = drawW / ratio;
-        if (drawH > pageH) {
-            drawH = pageH;
-            drawW = drawH * ratio;
-        }
-        const x = (pageW - drawW) / 2;
-        const y = Math.max(0, (pageH - drawH) / 2);
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, drawW, drawH, undefined, 'FAST');
+        const drawW = pageW;
+        const drawH = Math.min(pageH, drawW / ratio);
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, drawW, drawH, undefined, 'FAST');
         return pdf.output('blob');
     } finally {
         document.body.removeChild(iframe);

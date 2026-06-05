@@ -99,7 +99,7 @@ function setCellContent(
     const safe = escapeHtml(fitted);
     const pt = fontPt(fitted, kind);
     const align = opts?.center ? 'center' : 'left';
-    const inner = `<p class="c22" style="text-align:${align};margin:0;padding:0;line-height:1.05"><span class="c0" style="font-size:${pt}pt;color:#000000;font-family:Arial,sans-serif">${safe}</span></p>`;
+    const inner = `<p class="c22" style="text-align:${align};margin:0;padding:0;line-height:0.92"><span class="c0" style="font-size:${pt}pt;color:#000000;font-family:Arial,sans-serif;line-height:0.92;vertical-align:top">${safe}</span></p>`;
     return tdHtml.replace(/<td([^>]*)>[\s\S]*<\/td>/, `<td$1>${inner}</td>`);
 }
 
@@ -378,6 +378,8 @@ export function fillActaHtmlTemplate(html: string, ctx: ActaExportContext): stri
 /** Ancho/alto A4 en px (96 dpi) para captura fiable con html2canvas. */
 export const ACTA_PDF_WIDTH_PX = 794;
 export const ACTA_PDF_HEIGHT_PX = 1123;
+/** Subir contenido en captura PDF (html2canvas deja el texto un poco bajo en celdas). */
+export const ACTA_PDF_SHIFT_UP_PX = 22;
 
 /** Prepara HTML para captura PDF: conserva layout 210mm de impresión, sin zoom CSS (usa transform en export). */
 export function prepareActaHtmlForPdfExport(html: string, _contentZoom = 1): string {
@@ -391,9 +393,10 @@ body.doc-content{width:${ACTA_PDF_WIDTH_PX}px!important;margin:0!important;paddi
 #acta-pdf-capture-surface{width:210mm!important;max-width:210mm!important;margin:0 auto!important}
 body.doc-content>div{width:210mm!important;max-width:210mm!important;margin:0 auto!important}
 table{width:100%!important;margin:0 auto!important;border-collapse:collapse!important}
-table td,table th{padding:0!important;vertical-align:top!important}
-body table td p{line-height:1.05!important;margin:0!important}
-p.c267{text-align:center!important;margin:0 auto!important}
+table td,table th{padding:0!important;vertical-align:top!important;line-height:0.92!important}
+body table td p{line-height:0.92!important;margin:0!important;padding:0!important}
+body table td p span{line-height:0.92!important;vertical-align:top!important;display:inline-block;position:relative;top:-1px}
+p.c267{text-align:center!important;margin:0 auto!important;padding:0!important;line-height:1.1!important}
 p.c267 img{display:inline-block!important;vertical-align:middle!important;object-fit:contain!important}
 </style>`;
     return out.replace('</head>', `${capture}</head>`);
