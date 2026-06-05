@@ -1,5 +1,5 @@
 import type { BeachSetScores, Match, Team } from '../types';
-import { getMatchGoalTotals, sumGoalsFromSetScores } from '../utils/beachSetScoring';
+import { sumGoalsFromSetScores } from '../utils/beachSetScoring';
 import { inferMatchScheduleDay } from './tournamentScheduleService';
 import {
     divisionFromMatchRound,
@@ -65,18 +65,18 @@ export function matchToDatabaseRow(
     }
     if (m.report?.setScores) {
         row.set_scores = m.report.setScores;
-    }
-    const { goalsA, goalsB } = getMatchGoalTotals(m);
-    if (m.report?.setScores || (m.goalsForA != null && m.goalsForB != null)) {
-        row.goals_for_a = m.goalsForA ?? goalsA;
-        row.goals_for_b = m.goalsForB ?? goalsB;
+        const { goalsA, goalsB } = sumGoalsFromSetScores(m.report.setScores);
+        row.goals_for_a = goalsA;
+        row.goals_for_b = goalsB;
+    } else if (m.goalsForA != null && m.goalsForB != null) {
+        row.goals_for_a = m.goalsForA;
+        row.goals_for_b = m.goalsForB;
     }
     return row;
 }
 
-/** Rellena goalsForA/B desde set_scores si la BD aún no tiene goals_for_* */
+/** Recalcula goalsForA/B desde set_scores (solo sets 1 y 2, sin shootout). */
 export function enrichMatchGoalsFromSetScores(match: Match): Match {
-    if (match.goalsForA != null && match.goalsForB != null) return match;
     const s = match.report?.setScores;
     if (!s) return match;
     const { goalsA, goalsB } = sumGoalsFromSetScores(s);
