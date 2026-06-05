@@ -1,7 +1,7 @@
 import type { Match, Player, Team } from '../types';
 import { inferMatchScheduleDay, WEEKEND_SCHEDULE_DAYS } from '../services/tournamentScheduleService';
 import type { MuskizScheduleDayLabel } from '../services/muskizScheduleSimulator';
-import { playersListedOnActa } from '../utils/squadLimits';
+import { maxPlayersForDivision, playersListedOnActa } from '../utils/squadLimits';
 
 /** Filas del tanteo punto a punto según modelo acta playa (Kolosaurios / RFEBM). */
 export const MATCH_REPORT_GRID_ROWS = 44;
@@ -48,7 +48,8 @@ export function formatPlayerNameForActa(p: Player): string {
 
 function playersForActa(team: Team | undefined): Player[] {
     if (!team) return [];
-    return playersListedOnActa(team.players);
+    const cap = maxPlayersForDivision(team.division);
+    return playersListedOnActa(team.players).slice(0, cap);
 }
 
 export function buildActaRosterRows(team: Team | undefined, rowCount: number): { player: Player | null }[] {

@@ -28,7 +28,7 @@ interface CompetitionCalendarViewsProps {
     /** Texto del aviso de solo lectura (staff vs visitantes). */
     readOnlyAudience?: 'staff' | 'public';
     onUpdateMatch?: (matchId: string, patch: Partial<Pick<Match, 'time' | 'court' | 'teamA' | 'teamB'>>) => void;
-    /** Descarga ZIP de actas DOCX de todos los partidos de una categoría. */
+    /** Descarga ZIP de actas PDF de todos los partidos de una categoría. */
     onDownloadCategoryActas?: (division: Team['division'], matches: Match[]) => void;
     actasExporting?: boolean;
     /** Excel / PDF por día (simulación o responsables). */
@@ -361,7 +361,7 @@ export const CompetitionCalendarViews: React.FC<CompetitionCalendarViewsProps> =
                                                     disabled={actasExporting || catMatches.length === 0}
                                                     onClick={() => onDownloadCategoryActas(division, catMatches)}
                                                     className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-50 flex items-center gap-1"
-                                                    title="ZIP con un DOCX por partido de esta categoría"
+                                                    title="ZIP con un PDF por partido de esta categoría"
                                                 >
                                                     <span className="material-symbols-outlined text-sm">download</span>
                                                     Actas ({catMatches.length})

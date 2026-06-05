@@ -45,51 +45,100 @@ function splitRowCells(rowXml: string): { cells: string[]; starts: number[]; end
     return { cells, starts, ends };
 }
 
-const ACTA_CELL_FONT_HALF_POINTS = '12'; // 6 pt — compacto como el modelo impreso
+type ActaCellKind = 'meta' | 'team' | 'name' | 'number';
 
-function compactParagraph(text: string, center = false): string {
-    const safe = escapeXmlText(text);
-    const jc = center ? 'center' : 'left';
-    const run = `<w:r><w:rPr><w:sz w:val="${ACTA_CELL_FONT_HALF_POINTS}"/><w:szCs w:val="${ACTA_CELL_FONT_HALF_POINTS}"/><w:noWrap/></w:rPr><w:t xml:space="preserve">${safe}</w:t></w:r>`;
-    return `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="200" w:lineRule="exact"/><w:jc w:val="${jc}"/></w:pPr>${run}</w:p>`;
+const ACTA_CELL_LIMITS: Record<ActaCellKind, number> = {
+    meta: 48,
+    team: 52,
+    name: 42,
+    number: 3,
+};
+
+/** Tamaño en half-points (Word): 12=6pt … 16=8pt. Mínimo legible en pantalla. */
+function fontHalfPoints(text: string, kind: ActaCellKind): string {
+    const len = text.length;
+    if (kind === 'number') return '16';
+
+    if (kind === 'team') {
+        if (len > 35) return '18';
+        if (len > 25) return '20';
+        if (len > 18) return '22';
+        return '24';
+    }
+
+    if (kind === 'name') {
+        if (len > 36) return '11';
+        if (len > 28) return '12';
+        if (len > 22) return '13';
+        if (len > 16) return '14';
+        return '16';
+    }
+
+    if (len > 36) return '12';
+    if (len > 26) return '13';
+    if (len > 18) return '14';
+    return '16';
 }
 
-function setCellContent(tcXml: string, text: string, center = false): string {
+function fitCellText(text: string, kind: ActaCellKind): string {
+    const trimmed = text.trim();
+    const max = ACTA_CELL_LIMITS[kind];
+    if (trimmed.length <= max) return trimmed;
+    return `${trimmed.slice(0, max - 1)}…`;
+}
+
+function compactParagraph(text: string, opts?: { center?: boolean; kind?: ActaCellKind }): string {
+    const kind = opts?.kind ?? 'meta';
+    const fitted = fitCellText(text, kind);
+    const safe = escapeXmlText(fitted);
+    const jc = opts?.center ? 'center' : 'left';
+    const sz = fontHalfPoints(fitted, kind);
+    const run = `<w:r><w:rPr><w:color w:val="000000"/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${safe}</w:t></w:r>`;
+    return `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:lineRule="auto"/><w:jc w:val="${jc}"/></w:pPr>${run}</w:p>`;
+}
+
+function setCellContent(tcXml: string, text: string, opts?: { center?: boolean; kind?: ActaCellKind }): string {
     if (!text) return tcXml;
-    const paragraph = compactParagraph(text, center);
-    if (/<w:p[^>]*>/.test(tcXml)) {
-        return tcXml.replace(/<w:p[^>]*>[\s\S]*?<\/w:p>/, paragraph);
+    const paragraph = compactParagraph(text, opts);
+    const tcPrClose = tcXml.indexOf('</w:tcPr>');
+    if (tcPrClose >= 0) {
+        return `${tcXml.slice(0, tcPrClose + '</w:tcPr>'.length)}${paragraph}</w:tc>`;
     }
-    if (tcXml.includes('</w:tcPr>')) {
-        return tcXml.replace('</w:tcPr>', `</w:tcPr>${paragraph}`);
-    }
-    return tcXml.replace(/^(<w:tc[^>]*>)/, `$1${paragraph}`);
+    const open = tcXml.match(/^<w:tc(?:\s[^>]*)?>/)?.[0];
+    if (open) return `${open}${paragraph}</w:tc>`;
+    return tcXml;
 }
 
 function setPlayerRowCells(rowXml: string, number: string, name: string): string {
     const { cells, starts, ends } = splitRowCells(rowXml);
     let out = rowXml;
-    const patches: [number, string, boolean][] = [
-        [1, name, false],
-        [0, number, true],
+    const patches: [number, string, { center?: boolean; kind: ActaCellKind }][] = [
+        [1, name, { kind: 'name' }],
+        [0, number, { center: true, kind: 'number' }],
     ];
-    for (const [col, text, center] of patches) {
-        if (col >= cells.length) continue;
-        const updated = setCellContent(cells[col]!, text, center);
+    for (const [col, text, cellOpts] of patches) {
+        if (col >= cells.length || !text) continue;
+        const updated = setCellContent(cells[col]!, text, cellOpts);
         out = out.slice(0, starts[col]!) + updated + out.slice(ends[col]!);
     }
     return out;
 }
 
-function setRowCellTexts(rowXml: string, assignments: Record<number, string>): string {
+function setRowCellTexts(
+    rowXml: string,
+    assignments: Record<number, { text: string; kind?: ActaCellKind; center?: boolean } | string>
+): string {
     const { cells, starts, ends } = splitRowCells(rowXml);
     let out = rowXml;
     const ordered = Object.entries(assignments)
-        .map(([k, v]) => [Number(k), v] as const)
+        .map(([k, v]) => {
+            if (typeof v === 'string') return [Number(k), { text: v, kind: 'meta' as const }] as const;
+            return [Number(k), v] as const;
+        })
         .sort((a, b) => b[0] - a[0]);
-    for (const [col, text] of ordered) {
-        if (col < 0 || col >= cells.length) continue;
-        const updated = setCellContent(cells[col]!, text);
+    for (const [col, { text, kind, center }] of ordered) {
+        if (col < 0 || col >= cells.length || !text) continue;
+        const updated = setCellContent(cells[col]!, text, { kind: kind ?? 'meta', center });
         out = out.slice(0, starts[col]) + updated + out.slice(ends[col]!);
     }
     return out;
@@ -107,31 +156,57 @@ function joinTableRows(prefix: string, rows: string[]): string {
     return prefix + rows.map((r) => `<w:tr>${r}</w:tr>`).join('');
 }
 
-function padPlayers(players: ActaPlayerLine[]): ActaPlayerLine[] {
-    const list = [...players];
-    while (list.length < ACTA_TEMPLATE_PLAYER_ROWS) {
-        list.push({ number: '', name: '', docsOk: true });
+function blankPlayerRow(rowXml: string): string {
+    return setPlayerRowCells(rowXml, '', '');
+}
+
+function ensurePlayerRowSlots(
+    rows: string[],
+    firstRowIdx: number,
+    staffRowIdx: number,
+    playerCount: number,
+): number {
+    const slots = staffRowIdx - firstRowIdx;
+    if (playerCount <= slots) return staffRowIdx;
+    const templateRow = rows[staffRowIdx - 1] ?? rows[firstRowIdx];
+    if (!templateRow) return staffRowIdx;
+    for (let i = 0; i < playerCount - slots; i++) {
+        rows.splice(staffRowIdx, 0, blankPlayerRow(templateRow));
+        staffRowIdx++;
     }
-    return list.slice(0, ACTA_TEMPLATE_PLAYER_ROWS);
+    return staffRowIdx;
 }
 
 function teamDisplayName(block: ActaExportContext['teamA']): string {
-    const name = (block.name ?? '').trim();
-    const city = (block.city ?? '').trim();
-    if (!city) return name;
-    const full = `${name} · ${city}`;
-    return full.length > 38 ? name : full;
+    return (block.name ?? '').trim();
 }
 
-/** Evita que Word parta el acta en 2 páginas (columnas de sección / márgenes amplios). */
+/** Comprime filas y márgenes para que el acta quepa en 1 sola hoja A4. */
 function enforceSinglePageLayout(xml: string): string {
-    let out = xml.replace(/<w:cols[\s\S]*?<\/w:cols>/g, '');
+    let out = xml;
+
+    // El modelo trae 2 columnas de ~0,5″: Word parte el acta en 2 páginas y el texto no se lee.
+    out = out.replace(/<w:cols[\s\S]*?<\/w:cols>/g, '');
+
     out = out.replace(
         /<w:pgMar[^/>]*\/>/g,
-        '<w:pgMar w:bottom="200" w:top="360" w:left="480" w:right="480" w:header="280" w:footer="200"/>'
+        '<w:pgMar w:bottom="120" w:top="220" w:left="340" w:right="340" w:header="180" w:footer="120"/>'
     );
+
+    out = out.replace(/<w:trHeight w:val="(\d+)" w:hRule="(?:atLeast|exact)"\/>/g, (_m, raw) => {
+        const v = Math.max(120, Math.round(Number(raw) * 0.78));
+        return `<w:trHeight w:val="${v}" w:hRule="exact"/>`;
+    });
+
     out = out.replace(/<w:cantSplit w:val="0"\/>/g, '<w:cantSplit w:val="1"/>');
+
     return out;
+}
+
+function cleanupAfterTable(after: string): string {
+    return after
+        .replace(/<w:p[^>]*>[\s\S]*?<\/w:p>\s*(?=<w:sectPr)/, '')
+        .replace(/<w:sectPr><w:type w:val="continuous"[\s\S]*?<\/w:sectPr>/, '');
 }
 
 function fillDocumentTable(xml: string, ctx: ActaExportContext): string {
@@ -148,43 +223,51 @@ function fillDocumentTable(xml: string, ctx: ActaExportContext): string {
     const rows = splitTableRows(tableInner);
 
     rows[ROW.COMPETITION_VALUES] = setRowCellTexts(rows[ROW.COMPETITION_VALUES]!, {
-        0: ctx.competitionName,
-        1: ctx.category,
-        2: ctx.gender,
-        3: ctx.phase,
-        4: ctx.group,
-        // La plantilla tiene 5 celdas de datos para 6 cabeceras; jornada va en fecha del partido.
+        0: { text: ctx.competitionName, kind: 'meta' },
+        1: { text: ctx.category, kind: 'meta' },
+        2: { text: ctx.gender, kind: 'meta' },
+        3: { text: ctx.phase, kind: 'meta' },
+        4: { text: ctx.group, kind: 'meta', center: true },
     });
 
     rows[ROW.MATCH_VALUES] = setRowCellTexts(rows[ROW.MATCH_VALUES]!, {
-        1: ctx.scheduleDay,
-        2: ctx.time,
-        3: ctx.court,
+        1: { text: ctx.scheduleDay, kind: 'meta' },
+        2: { text: ctx.time, kind: 'meta', center: true },
+        3: { text: ctx.court, kind: 'meta' },
     });
 
     rows[ROW.TEAM_A_NAME] = setRowCellTexts(rows[ROW.TEAM_A_NAME]!, {
-        0: teamDisplayName(ctx.teamA),
-        3: teamDisplayName(ctx.teamB),
+        0: { text: teamDisplayName(ctx.teamA), kind: 'team' },
+        3: { text: teamDisplayName(ctx.teamB), kind: 'team' },
     });
 
-    const playersA = padPlayers(ctx.teamA.players);
-    const playersB = padPlayers(ctx.teamB.players);
+    const playersA = ctx.teamA.players;
+    const playersB = ctx.teamB.players;
 
-    for (let i = 0; i < ACTA_TEMPLATE_PLAYER_ROWS; i++) {
-        const a = playersA[i]!;
-        const b = playersB[i]!;
+    const TEAM_A_STAFF = 24;
+    const TEAM_B_STAFF = 31;
+    let staffAIdx = TEAM_A_STAFF;
+    staffAIdx = ensurePlayerRowSlots(rows, ROW.TEAM_A_PLAYER_FIRST, staffAIdx, playersA.length);
+    const shiftA = staffAIdx - TEAM_A_STAFF;
+
+    for (let i = 0; i < playersA.length; i++) {
         const rowA = ROW.TEAM_A_PLAYER_FIRST + i;
-        const rowB = ROW.TEAM_B_PLAYER_FIRST + i;
-        if (rows[rowA]) {
-            rows[rowA] = setPlayerRowCells(rows[rowA], a.number, a.name);
-        }
-        if (rows[rowB]) {
-            rows[rowB] = setPlayerRowCells(rows[rowB], b.number, b.name);
-        }
+        const p = playersA[i]!;
+        if (rows[rowA]) rows[rowA] = setPlayerRowCells(rows[rowA], p.number, p.name);
+    }
+
+    const teamBFirst = ROW.TEAM_B_PLAYER_FIRST + shiftA;
+    let staffBIdx = TEAM_B_STAFF + shiftA;
+    staffBIdx = ensurePlayerRowSlots(rows, teamBFirst, staffBIdx, playersB.length);
+
+    for (let i = 0; i < playersB.length; i++) {
+        const rowB = teamBFirst + i;
+        const p = playersB[i]!;
+        if (rows[rowB]) rows[rowB] = setPlayerRowCells(rows[rowB], p.number, p.name);
     }
 
     const filledTable = joinTableRows('<w:tbl>', rows) + '</w:tbl>';
-    return enforceSinglePageLayout(before + filledTable + after);
+    return enforceSinglePageLayout(before + filledTable + cleanupAfterTable(after));
 }
 
 function fillHeaderTitle(headerXml: string, title: string): string {
@@ -214,6 +297,18 @@ export async function fillActaTemplateBlob(ctx: ActaExportContext, templateBytes
         let headerXml = await headerFile.async('string');
         headerXml = fillHeaderTitle(headerXml, ctx.competitionName);
         zip.file('word/header1.xml', headerXml);
+    }
+
+    const settingsFile = zip.file('word/settings.xml');
+    if (settingsFile) {
+        let settingsXml = await settingsFile.async('string');
+        if (!settingsXml.includes('w:print')) {
+            settingsXml = settingsXml.replace(
+                '</w:settings>',
+                '<w:print><w:scalePaper w:val="95"/></w:print></w:settings>'
+            );
+        }
+        zip.file('word/settings.xml', settingsXml);
     }
 
     const out = await zip.generateAsync({

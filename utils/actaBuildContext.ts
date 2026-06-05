@@ -2,7 +2,7 @@ import type { Match, Team } from '../types';
 import { siteContent } from '../constants/siteContent';
 import { inferMatchScheduleDay } from '../services/tournamentScheduleService';
 import { inferGenderMixLabel, formatPlayerNameForActa } from './matchReportSheetUtils';
-import { playersListedOnActa } from './squadLimits';
+import { maxPlayersForDivision, playersListedOnActa } from './squadLimits';
 import { resolveMatchDivision, resolveTeamForMatchSide } from '../services/muskizScheduleSimulator';
 
 export interface ActaPlayerLine {
@@ -14,6 +14,7 @@ export interface ActaPlayerLine {
 export interface ActaTeamBlock {
     name: string;
     city?: string;
+    division?: Team['division'];
     players: ActaPlayerLine[];
 }
 
@@ -33,16 +34,20 @@ export interface ActaExportContext {
 }
 
 function teamBlock(team: Team | undefined, fallbackName: string): ActaTeamBlock {
+    const rosterCap = team?.division ? maxPlayersForDivision(team.division) : 14;
     const players: ActaPlayerLine[] = team
-        ? playersListedOnActa(team.players).map((p) => ({
-              number: String(p.number ?? ''),
-              name: formatPlayerNameForActa(p),
-              docsOk: p.dniStatus === 'APPROVED' && p.insuranceStatus === 'APPROVED',
-          }))
+        ? playersListedOnActa(team.players)
+              .slice(0, rosterCap)
+              .map((p) => ({
+                  number: String(p.number ?? ''),
+                  name: formatPlayerNameForActa(p),
+                  docsOk: p.dniStatus === 'APPROVED' && p.insuranceStatus === 'APPROVED',
+              }))
         : [];
     return {
         name: team?.name ?? fallbackName,
         city: team?.city,
+        division: team?.division,
         players,
     };
 }

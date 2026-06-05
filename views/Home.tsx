@@ -6,12 +6,12 @@ import { useTournamentData } from '../context/TournamentDataContext';
 import { supabase } from '../services/supabaseClient';
 import { getOfficialSponsorsSorted, isOfficialSponsorName, sortSponsorsByTier } from '../constants/officialSponsors';
 import { normalizeSponsor } from '../utils/sponsorDisplay';
-import { RegistrationUrgencyBanner } from '../components/RegistrationUrgencyBanner';
+import { HomeTournamentLivePanel } from '../components/HomeTournamentLivePanel';
 import { RotatingSponsorSpotlight } from '../components/RotatingSponsorSpotlight';
 import { RotatingTeamSpotlight } from '../components/RotatingTeamSpotlight';
 
 export const Home: React.FC = () => {
-  const { teams } = useTournamentData();
+  const { teams, publicDisplayMatches, publicMatchesVisible } = useTournamentData();
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
 
@@ -142,6 +142,12 @@ export const Home: React.FC = () => {
           </div>
         </div>
       </section>
+
+      <HomeTournamentLivePanel
+        matches={publicDisplayMatches}
+        teams={teams}
+        publicMatchesVisible={publicMatchesVisible}
+      />
 
       {/* Campos Section */}
       <section className="py-12 bg-white dark:bg-surface-dark border-b border-slate-200 dark:border-white/5">

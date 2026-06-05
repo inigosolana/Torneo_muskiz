@@ -57,6 +57,7 @@ import { TeamNameWithShield } from '../components/TeamShield';
 import { CompetitionDraftPicker } from '../components/CompetitionDraftPicker';
 import { saveBulkActasPayload } from '../utils/bulkActasSession';
 import { downloadTournamentGridExcel, printTournamentGridPdf } from '../utils/tournamentGridExport';
+import { downloadAllTournamentPlayersExcel } from '../utils/tournamentPlayersExport';
 import {
     isPlayerRole,
     isPlayerEligibleForMatch,
@@ -69,7 +70,7 @@ import {
 } from '../utils/squadLimits';
 import { buildInitialDigitalReportStats } from '../utils/actaBuildContext';
 import { normalizeDniInput, resolveDniStatusFromNumber } from '../utils/dniValidation';
-import { downloadActaDocx, downloadActasZip, printActaHtml } from '../services/actaExportService';
+import { downloadActaPdf, downloadActasZip, printActaHtml } from '../services/actaExportService';
 import { MatchReportSheet } from '../components/MatchReportSheet';
 import { CompetitionGroupManager } from '../components/CompetitionGroupManager';
 import { AdminSocialContentPanel } from '../components/AdminSocialContentPanel';
@@ -1816,8 +1817,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         }
         setActaExporting(true);
         try {
-            await downloadActasZip(division, catMatches, teams, 'docx');
-            toast.success(`${catMatches.length} actas DOCX descargadas (ZIP).`);
+            await downloadActasZip(division, catMatches, teams, 'pdf');
+            toast.success(`${catMatches.length} actas PDF descargadas (ZIP).`);
         } catch (e: unknown) {
             toast.error(e instanceof Error ? e.message : 'Error al generar actas.');
         } finally {
@@ -1840,8 +1841,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                     : 'oficial';
             const cat =
                 resultsDivisionFilter !== 'all' ? `_${resultsDivisionFilter.replace(/\s+/g, '_')}` : '';
-            await downloadActasZip(`${label}${cat}`, resultsFilteredMatches, teams, 'docx');
-            toast.success(`ZIP con ${resultsFilteredMatches.length} actas DOCX.`);
+            await downloadActasZip(`${label}${cat}`, resultsFilteredMatches, teams, 'pdf');
+            toast.success(`ZIP con ${resultsFilteredMatches.length} actas PDF.`);
         } catch (e: unknown) {
             toast.error(e instanceof Error ? e.message : 'Error al generar actas.');
         } finally {
@@ -2450,6 +2451,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 Volver
                                             </button>
                                         )}
+                                        <button
+                                            type="button"
+                                            onClick={() => downloadAllTournamentPlayersExcel(teams)}
+                                            className="text-xs font-bold px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 flex items-center gap-1"
+                                            title="Descargar Excel con todos los jugadores del torneo"
+                                        >
+                                            <span className="material-symbols-outlined text-sm">download</span>
+                                            Excel jugadores
+                                        </button>
                                         {!rosterTeam && (
                                             <input
                                                 type="text"
@@ -4088,10 +4098,10 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 className="px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50 bg-slate-800 hover:bg-slate-900 text-white"
                                             >
                                                 <span className="material-symbols-outlined text-lg">download</span>
-                                                Descargar todas (DOCX ZIP)
+                                                Descargar todas (PDF ZIP)
                                             </button>
                                             <a
-                                                href="/templates/acta-playa_kolosaurios.docx"
+                                                href="/templates/actaplaya_kolosaurios.html"
                                                 download
                                                 className="text-xs text-teal-700 font-semibold underline"
                                             >
@@ -4672,7 +4682,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 </div>
                                 <div className="mt-6 border-t border-slate-200 pt-4">
                                     <p className="text-xs font-bold uppercase text-slate-500 mb-1">Vista previa orientativa (pantalla)</p>
-                                    <p className="text-[11px] text-slate-500 mb-2">El <strong>DOCX</strong> usa la plantilla oficial Kolosaurios (logos, colores, 12 filas de jugador, shoot out).</p>
+                                    <p className="text-[11px] text-slate-500 mb-2">El <strong>PDF</strong> incluye equipos, dorsales y nombres en 1 página A4 (modelo acta playa Kolosaurios).</p>
                                     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 max-h-[280px] overflow-y-auto">
                                         <div className="origin-top-left scale-[0.55] w-[181%]">
                                             <MatchReportSheet match={selectedMatchForReport} teams={teams} />
@@ -4704,7 +4714,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                     type="button"
                                     onClick={() => {
                                         try {
-                                            printActaHtml(selectedMatchForReport, teams);
+                                            void printActaHtml(selectedMatchForReport, teams);
                                         } catch (e: unknown) {
                                             toast.error(e instanceof Error ? e.message : 'No se pudo imprimir.');
                                         }
@@ -4716,11 +4726,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => void downloadActaDocx(selectedMatchForReport, teams).then(() => toast.success('Acta DOCX descargada'))}
+                                    onClick={() => void downloadActaPdf(selectedMatchForReport, teams).then(() => toast.success('Acta PDF descargada'))}
                                     className="px-4 py-2 rounded-lg text-sm font-bold border border-slate-200 text-slate-800 bg-slate-50 hover:bg-slate-100 flex items-center gap-1"
                                 >
                                     <span className="material-symbols-outlined text-base">download</span>
-                                    Descargar DOCX
+                                    Descargar PDF
                                 </button>
                             </div>
                             <div className="flex gap-3 ml-auto">
