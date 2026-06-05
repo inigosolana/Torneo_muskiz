@@ -502,7 +502,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         </div>
 
                         <p className="text-xs text-slate-500">
-                            Patrocinadores en imagen: Muskiz, Petronor, DELCOI, Itxas Mendi, XbotGo, Baratza (edición
+                            Patrocinadores en imagen: Muskiz, Petronor, DELCOI, Itxas Mendi, XbotGo, Baratza, Texmo, Pan Menesa (edición
                             2026).
                             <br />
                             {itemsForAllTournament.length} publicaciones (1 por grupo y categoría con equipos asignados).

@@ -32,10 +32,10 @@ function SponsorLogo({ logoUrl, name, variant }: { logoUrl: string; name: string
 export const RotatingSponsorSpotlight: React.FC<RotatingSponsorSpotlightProps> = ({
     variant = 'hero',
     className = '',
-    intervalMs = 5000,
+    intervalMs = 3000,
 }) => {
     const sponsors = useTournamentSponsors();
-    const index = useRotatingIndex(sponsors.length, intervalMs);
+    const index = useRotatingIndex(sponsors.length, intervalMs, true);
     const current = sponsors[index];
 
     if (!current) {

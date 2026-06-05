@@ -9,6 +9,8 @@ export const OFFICIAL_SPONSOR_NAMES = [
     'Itxas Mendi (Montemar) Bar',
     'XbotGo',
     'Baratza',
+    'Texmo',
+    'Pan Menesa',
 ] as const;
 
 const TIER_ORDER: Record<Sponsor['tier'], number> = {
@@ -59,6 +61,19 @@ export const OFFICIAL_SPONSORS_2026: Sponsor[] = [
         id: 's-baratza',
         name: 'Baratza',
         logoUrl: SPONSOR_LOGO_BY_NAME.Baratza,
+        tier: 'Gold',
+    },
+    {
+        id: 's-texmo',
+        name: 'Texmo',
+        logoUrl: SPONSOR_LOGO_BY_NAME.Texmo,
+        tier: 'Gold',
+        websiteUrl: 'https://www.texmoindustrial.com/',
+    },
+    {
+        id: 's-pan-menesa',
+        name: 'Pan Menesa',
+        logoUrl: SPONSOR_LOGO_BY_NAME['Pan Menesa'],
         tier: 'Gold',
     },
 ];

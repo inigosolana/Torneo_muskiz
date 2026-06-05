@@ -36,6 +36,7 @@ import {
 import { matchesForPublicSchedule } from './utils/matchPublicView';
 
 const App: React.FC = () => {
+  const normalizeEmail = (value?: string | null) => String(value ?? '').trim().toLowerCase();
   // Category Limits (Admin controlled)
   const [categoryLimits, setCategoryLimits] = useState<CategoryLimits>({
     'Infantil Femenino': 8,
@@ -257,8 +258,9 @@ const App: React.FC = () => {
     return matchesForPublicSchedule(publicSimulationMatches);
   }, [matches, publicSimulationMatches]);
 
+  const managerEmail = normalizeEmail(user?.email);
   const hasApprovedTeam = teams.some(
-    (t) => t.managerEmail === user?.email && t.status === 'approved'
+    (t) => normalizeEmail(t.managerEmail) === managerEmail && t.status === 'approved'
   );
 
   const adminUnauthorized = (
@@ -391,7 +393,7 @@ const App: React.FC = () => {
                       </button>
                     </div>
                     <TeamManager
-                      teams={teams.filter((t) => t.managerEmail === user?.email && t.status === 'approved')}
+                      teams={teams.filter((t) => normalizeEmail(t.managerEmail) === managerEmail && t.status === 'approved')}
                       onUpdateTeam={updateTeam}
                     />
                   </div>

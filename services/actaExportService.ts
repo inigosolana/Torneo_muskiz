@@ -1,242 +1,31 @@
-import {
-    Document,
-    Packer,
-    Paragraph,
-    Table,
-    TableCell,
-    TableRow,
-    TextRun,
-    WidthType,
-    AlignmentType,
-    BorderStyle,
-    VerticalAlign,
-} from 'docx';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
 import type { Match, Team } from '../types';
-import { MATCH_REPORT_GRID_ROWS } from '../utils/matchReportSheetUtils';
 import { buildActaExportContext, type ActaExportContext } from '../utils/actaBuildContext';
 import { sortMatchesForActas } from '../utils/matchReportSheetUtils';
+import {
+    ACTA_TEMPLATE_PLAYER_ROWS,
+    ACTA_TEMPLATE_URL,
+    fetchActaTemplateBytes,
+    fillActaTemplateBlob,
+} from './actaTemplateFill';
 
-const thinBorder = { style: BorderStyle.SINGLE, size: 1, color: '000000' };
-const cellBorders = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
-
-function cell(
-    text: string,
-    opts?: { bold?: boolean; width?: number; center?: boolean; colSpan?: number }
-): TableCell {
-    return new TableCell({
-        borders: cellBorders,
-        verticalAlign: VerticalAlign.CENTER,
-        width: opts?.width ? { size: opts.width, type: WidthType.PERCENTAGE } : undefined,
-        columnSpan: opts?.colSpan,
-        children: [
-            new Paragraph({
-                alignment: opts?.center ? AlignmentType.CENTER : AlignmentType.LEFT,
-                children: [
-                    new TextRun({
-                        text: text || '',
-                        bold: opts?.bold ?? false,
-                        size: 14,
-                        font: 'Arial',
-                    }),
-                ],
-            }),
-        ],
-    });
+function teamDisplayName(block: ActaExportContext['teamA']): string {
+    return `${block.name}${block.city ? ` · ${block.city}` : ''}`;
 }
 
-function headerRow(cells: string[]): TableRow {
-    return new TableRow({
-        children: cells.map((t) => cell(t, { bold: true, center: true })),
-    });
+let templateCache: ArrayBuffer | null = null;
+
+async function loadTemplateBytes(): Promise<ArrayBuffer> {
+    if (templateCache) return templateCache;
+    templateCache = await fetchActaTemplateBytes();
+    return templateCache;
 }
 
-function dataRow(values: string[]): TableRow {
-    return new TableRow({
-        children: values.map((t) => cell(t)),
-    });
-}
-
-function rosterGridRows(ctx: ActaExportContext): TableRow[] {
-    const rows: TableRow[] = [];
-    const pad = (players: ActaExportContext['teamA']['players']) => {
-        const list = [...players];
-        while (list.length < MATCH_REPORT_GRID_ROWS) {
-            list.push({ number: '', name: '', docsOk: true });
-        }
-        return list.slice(0, MATCH_REPORT_GRID_ROWS);
-    };
-    const listA = pad(ctx.teamA.players);
-    const listB = pad(ctx.teamB.players);
-
-    rows.push(
-        headerRow([
-            'Nº',
-            'NOMBRE A',
-            'EX1',
-            'EX2',
-            'D',
-            'DD',
-            'JA',
-            'TA',
-            'TB',
-            'JB',
-            'JA',
-            'TA',
-            'TB',
-            'JB',
-            'Nº',
-            'TA',
-            'Nº',
-            'TB',
-            'JB',
-            'Nº',
-            'NOMBRE B',
-            'EX1',
-            'EX2',
-            'D',
-            'DD',
-        ])
-    );
-
-    for (let i = 0; i < MATCH_REPORT_GRID_ROWS; i++) {
-        const a = listA[i]!;
-        const b = listB[i]!;
-        rows.push(
-            new TableRow({
-                children: [
-                    cell(a.number, { center: true }),
-                    cell(a.name),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(b.number, { center: true }),
-                    cell(b.name),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                    cell(''),
-                ],
-            })
-        );
-    }
-    return rows;
-}
-
-/** Genera un .docx alineado al modelo acta playa Kolosaurios (tablas rellenables). */
+/** Genera un .docx a partir de la plantilla Kolosaurios (logos, colores, layout oficial). */
 export async function generateActaDocxBlob(ctx: ActaExportContext): Promise<Blob> {
-    const doc = new Document({
-        sections: [
-            {
-                properties: {
-                    page: {
-                        size: { width: 11906, height: 16838 },
-                        margin: { top: 400, right: 400, bottom: 400, left: 400 },
-                    },
-                },
-                children: [
-                    new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        children: [
-                            new TextRun({
-                                text: ctx.competitionName,
-                                bold: true,
-                                size: 28,
-                                font: 'Arial',
-                            }),
-                        ],
-                    }),
-                    new Paragraph({
-                        children: [new TextRun({ text: 'ACTA BALONMANO PLAYA', bold: true, size: 18 })],
-                        alignment: AlignmentType.CENTER,
-                    }),
-                    new Paragraph({ text: '' }),
-                    new Table({
-                        width: { size: 100, type: WidthType.PERCENTAGE },
-                        rows: [
-                            headerRow(['TORNEO', 'CATEGORÍA', 'MAS/FEM/MIX', 'FASE', 'GRUPO', 'JORNADA']),
-                            dataRow([
-                                ctx.competitionName,
-                                ctx.category,
-                                ctx.gender,
-                                ctx.phase,
-                                ctx.group,
-                                ctx.scheduleDay,
-                            ]),
-                        ],
-                    }),
-                    new Paragraph({ text: '' }),
-                    new Table({
-                        width: { size: 100, type: WidthType.PERCENTAGE },
-                        rows: [
-                            headerRow(['TEMPORADA', 'FECHA', 'HORA', 'TERRENO DE JUEGO']),
-                            dataRow(['', ctx.scheduleDay, ctx.time, ctx.court]),
-                        ],
-                    }),
-                    new Paragraph({ text: '' }),
-                    new Table({
-                        width: { size: 100, type: WidthType.PERCENTAGE },
-                        rows: [
-                            headerRow(['EQUIPO ORGANIZADOR (A)', 'RESULTADO', 'EQUIPO VISITANTE (B)']),
-                            dataRow([
-                                `${ctx.teamA.name}${ctx.teamA.city ? ` · ${ctx.teamA.city}` : ''}`,
-                                '',
-                                `${ctx.teamB.name}${ctx.teamB.city ? ` · ${ctx.teamB.city}` : ''}`,
-                            ]),
-                        ],
-                    }),
-                    new Paragraph({ text: '' }),
-                    new Paragraph({
-                        children: [
-                            new TextRun({
-                                text: 'Plantilla y tanteo (rellenar en pista)',
-                                italics: true,
-                                size: 16,
-                            }),
-                        ],
-                    }),
-                    new Table({
-                        width: { size: 100, type: WidthType.PERCENTAGE },
-                        rows: rosterGridRows(ctx),
-                    }),
-                    new Paragraph({ text: '' }),
-                    new Table({
-                        width: { size: 100, type: WidthType.PERCENTAGE },
-                        rows: [
-                            headerRow(['ÁRBITRO 1', 'ÁRBITRO 2', 'ANOTADOR', 'CRONOMETRADOR']),
-                            dataRow(['', '', '', '']),
-                        ],
-                    }),
-                    new Paragraph({
-                        children: [
-                            new TextRun({
-                                text: 'Modelo Kolosaurios / Torneo Muskiz — generado automáticamente.',
-                                size: 14,
-                                italics: true,
-                            }),
-                        ],
-                    }),
-                ],
-            },
-        ],
-    });
-
-    return Packer.toBlob(doc);
+    const template = await loadTemplateBytes();
+    return fillActaTemplateBlob(ctx, template);
 }
 
 export async function downloadActaDocx(match: Match, teams: Team[]): Promise<void> {
@@ -254,14 +43,16 @@ export async function downloadActasZip(
     const sorted = sortMatchesForActas(matchList);
     if (sorted.length === 0) throw new Error('No hay partidos para exportar.');
 
+    const template = await loadTemplateBytes();
     const zip = new JSZip();
     const folder = zip.folder(safeZipFolder(label)) ?? zip;
 
     for (const match of sorted) {
         const ctx = buildActaExportContext(match, teams);
         if (format === 'docx' || format === 'both') {
-            const blob = await generateActaDocxBlob(ctx);
-            folder.file(`acta_${ctx.fileBaseName}.docx`, blob);
+            const blob = await fillActaTemplateBlob(ctx, template);
+            const buf = await blob.arrayBuffer();
+            folder.file(`acta_${ctx.fileBaseName}.docx`, buf);
         }
     }
 
@@ -277,7 +68,7 @@ function safeZipFolder(s: string): string {
         .slice(0, 48);
 }
 
-/** Abre ventana de impresión con el HTML del acta (PDF vía «Guardar como PDF»). */
+/** Abre ventana de impresión (HTML simplificado; el DOCX usa la plantilla oficial). */
 export function printActaHtml(match: Match, teams: Team[]): void {
     const ctx = buildActaExportContext(match, teams);
     const w = window.open('', '_blank', 'noopener,noreferrer');
@@ -285,46 +76,43 @@ export function printActaHtml(match: Match, teams: Team[]): void {
         throw new Error('Permite ventanas emergentes para imprimir el acta.');
     }
 
-    const gridHtml = (() => {
-        const listA = [...ctx.teamA.players];
-        const listB = [...ctx.teamB.players];
-        while (listA.length < MATCH_REPORT_GRID_ROWS) listA.push({ number: '', name: '', docsOk: true });
-        while (listB.length < MATCH_REPORT_GRID_ROWS) listB.push({ number: '', name: '', docsOk: true });
-        let html = '';
-        for (let i = 0; i < MATCH_REPORT_GRID_ROWS; i++) {
-            const a = listA[i]!;
-            const b = listB[i]!;
-            html += `<tr>
-        <td class="c">${a.number}</td><td class="n">${escapeHtml(a.name)}</td>
-        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
-        <td class="s"></td><td class="s"></td><td class="s"></td><td class="s"></td>
-        <td class="s"></td><td class="s"></td><td class="s"></td><td class="s"></td>
-        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
-        <td class="c">${b.number}</td><td class="n">${escapeHtml(b.name)}</td>
-        <td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td>
-      </tr>`;
-        }
-        return html;
-    })();
+    const teamA = escapeHtml(teamDisplayName(ctx.teamA));
+    const teamB = escapeHtml(teamDisplayName(ctx.teamB));
+    const rowsA = ctx.teamA.players.slice(0, ACTA_TEMPLATE_PLAYER_ROWS);
+    const rowsB = ctx.teamB.players.slice(0, ACTA_TEMPLATE_PLAYER_ROWS);
+    while (rowsA.length < ACTA_TEMPLATE_PLAYER_ROWS) rowsA.push({ number: '', name: '', docsOk: true });
+    while (rowsB.length < ACTA_TEMPLATE_PLAYER_ROWS) rowsB.push({ number: '', name: '', docsOk: true });
 
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Acta ${escapeHtml(ctx.teamA.name)}</title>
+    const rosterRows = (players: typeof rowsA) =>
+        players
+            .map(
+                (p) =>
+                    `<tr><td class="c">${escapeHtml(p.number)}</td><td class="n">${escapeHtml(p.name)}</td><td></td><td></td><td></td><td></td></tr>`
+            )
+            .join('');
+
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Acta ${teamA}</title>
 <style>
-@page{size:A4 portrait;margin:6mm}
-body{font-family:Arial,sans-serif;font-size:6px;margin:0}
-h1{text-align:center;font-size:10px;margin:4px 0}
-table{border-collapse:collapse;width:100%;table-layout:fixed}
-th,td{border:1px solid #000;padding:1px 2px;vertical-align:middle}
-th{background:#eee;font-size:5px;text-transform:uppercase}
-.c{text-align:center;width:2%}
-.n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:5px}
-.s{height:6px}
+@page{size:A4 portrait;margin:8mm}
+body{font-family:Arial,sans-serif;font-size:8px;margin:0}
+h1{text-align:center;font-size:11px;margin:4px 0}
+.note{text-align:center;font-size:7px;color:#555;margin-bottom:6px}
+table{border-collapse:collapse;width:100%;margin-bottom:4px}
+th,td{border:1px solid #000;padding:2px}
+th{background:#d9e8f7;font-size:7px}
+.c{text-align:center;width:8%}
+.n{min-width:30%}
 </style></head><body>
 <h1>${escapeHtml(ctx.competitionName)}</h1>
+<p class="note">Vista impresión rápida. Para el acta oficial con logos y formato RFEBM, descarga el DOCX.</p>
 <table><tr><th>Torneo</th><th>Categoría</th><th>M/F</th><th>Fase</th><th>Grupo</th><th>Día</th></tr>
 <tr><td>${escapeHtml(ctx.competitionName)}</td><td>${escapeHtml(ctx.category)}</td><td>${escapeHtml(ctx.gender)}</td><td>${escapeHtml(ctx.phase)}</td><td>${escapeHtml(ctx.group)}</td><td>${escapeHtml(ctx.scheduleDay)}</td></tr></table>
-<table><tr><th>Hora</th><th>Campo</th><th colspan="2">Equipos</th></tr>
-<tr><td>${escapeHtml(ctx.time)}</td><td>${escapeHtml(ctx.court)}</td><td colspan="2">${escapeHtml(ctx.teamA.name)} vs ${escapeHtml(ctx.teamB.name)}</td></tr></table>
-<table>${gridHtml}</table>
+<table><tr><th>Hora</th><th>Campo</th><th>Equipo A</th><th>Equipo B</th></tr>
+<tr><td>${escapeHtml(ctx.time)}</td><td>${escapeHtml(ctx.court)}</td><td>${teamA}</td><td>${teamB}</td></tr></table>
+<h2 style="font-size:9px;margin:6px 0 2px">Equipo organizador (A)</h2>
+<table><tr><th>Nº</th><th>Nombre</th><th>EX1</th><th>EX2</th><th>D</th><th>DD</th></tr>${rosterRows(rowsA)}</table>
+<h2 style="font-size:9px;margin:6px 0 2px">Equipo visitante (B)</h2>
+<table><tr><th>Nº</th><th>Nombre</th><th>EX1</th><th>EX2</th><th>D</th><th>DD</th></tr>${rosterRows(rowsB)}</table>
 <script>window.onload=function(){window.print()}</script>
 </body></html>`);
     w.document.close();
@@ -337,3 +125,5 @@ function escapeHtml(s: string): string {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 }
+
+export { ACTA_TEMPLATE_URL };

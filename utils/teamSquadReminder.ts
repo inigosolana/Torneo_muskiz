@@ -80,7 +80,7 @@ export function getTeamSquadReminderStatus(team: Team): TeamSquadReminderStatus 
     }
 
     if (needsReminder) {
-        summaryLines.push(`Plazo licencias y plantilla completa: hasta el ${PLAYER_LICENSE_LAST_DAY} inclusive.`);
+        summaryLines.push(`Plazo licencias y plantilla completa: hasta el ${PLAYER_LICENSE_LAST_DAY}.`);
     }
 
     return {

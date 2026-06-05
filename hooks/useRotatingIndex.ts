@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
-/** Índice cíclico que avanza cada `intervalMs` (p. ej. carruseles de 5 s). */
-export function useRotatingIndex(length: number, intervalMs = 5000): number {
+/** Índice cíclico que avanza cada `intervalMs` (p. ej. carruseles de 3-5 s). */
+export function useRotatingIndex(length: number, intervalMs = 5000, randomInitial = false): number {
     const [index, setIndex] = useState(0);
 
     useEffect(() => {
@@ -13,12 +13,16 @@ export function useRotatingIndex(length: number, intervalMs = 5000): number {
             setIndex(0);
             return;
         }
-        setIndex((i) => i % length);
+        if (randomInitial) {
+            setIndex(Math.floor(Math.random() * length));
+        } else {
+            setIndex((i) => i % length);
+        }
         const id = window.setInterval(() => {
             setIndex((i) => (i + 1) % length);
         }, intervalMs);
         return () => window.clearInterval(id);
-    }, [length, intervalMs]);
+    }, [length, intervalMs, randomInitial]);
 
     return length <= 0 ? 0 : index % length;
 }

@@ -26,8 +26,9 @@ export const ManagerLogin: React.FC = () => {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
+        const normalizedEmail = email.trim().toLowerCase();
 
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
 
         if (error) {
             toast.error('Email o contraseña incorrectos.');
@@ -46,7 +47,7 @@ export const ManagerLogin: React.FC = () => {
                 const { count: approvedTeams } = await supabase
                     .from('teams')
                     .select('id', { count: 'exact', head: true })
-                    .eq('manager_email', email)
+                    .ilike('manager_email', normalizedEmail)
                     .eq('status', 'approved');
 
                 if (!approvedTeams || approvedTeams < 1) {

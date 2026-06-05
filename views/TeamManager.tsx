@@ -4,7 +4,13 @@ import { toast, Toaster } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { teamService } from '../services/teamService';
 import { supabase } from '../services/supabaseClient';
-import { isTeamRegistrationClosed } from '../constants/registrationDeadlines';
+import {
+    getRegistrationTimeLeft,
+    isSquadRegistrationClosed,
+    isTeamRegistrationClosed,
+    PLAYER_LICENSE_CLOSE_AT,
+    PLAYER_LICENSE_LAST_DAY,
+} from '../constants/registrationDeadlines';
 import {
     MAX_COACHES_PER_TEAM,
     MAX_OFFICIALS_PER_TEAM,
@@ -40,8 +46,15 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     }, [teams, selectedTeamId]);
 
     const [timeLeft, setTimeLeft] = useState<number>(0);
+    const [squadTick, setSquadTick] = useState(0);
 
     const selectedTeam = teams.find(t => t.id === selectedTeamId) || teams[0];
+
+    useEffect(() => {
+        if (isSquadRegistrationClosed()) return;
+        const id = window.setInterval(() => setSquadTick((t) => t + 1), 30_000);
+        return () => window.clearInterval(id);
+    }, []);
 
     useEffect(() => {
         if (selectedTeam?.paymentStatus === 'PENDING' && selectedTeam.paymentExpiresAt) {
@@ -122,7 +135,15 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     const hasCoach = currentCoachCount >= MAX_COACHES_PER_TEAM;
     const hasOfficial = currentOfficialCount >= MAX_OFFICIALS_PER_TEAM;
 
+    const squadRegistrationClosed = isSquadRegistrationClosed();
+    const squadTimeLeft = getRegistrationTimeLeft(PLAYER_LICENSE_CLOSE_AT);
+    void squadTick; // refresco del aviso de plazo
+
     const handleManualAdd = async () => {
+        if (squadRegistrationClosed) {
+            toast.error(`El plazo para apuntar jugadores finalizó el ${PLAYER_LICENSE_LAST_DAY}.`);
+            return;
+        }
         if (!manualPlayer.name) {
             toast.error('El nombre es obligatorio');
             return;
@@ -264,6 +285,11 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
     };
 
     const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (squadRegistrationClosed) {
+            toast.error(`El plazo para apuntar jugadores finalizó el ${PLAYER_LICENSE_LAST_DAY}.`);
+            e.target.value = '';
+            return;
+        }
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -456,6 +482,29 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                             </div>
                         ) : (
                             <>
+                                {squadRegistrationClosed ? (
+                                    <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900/40 p-4 flex items-start gap-3">
+                                        <span className="material-symbols-outlined text-red-600">event_busy</span>
+                                        <div>
+                                            <p className="font-bold text-red-800 dark:text-red-300 text-sm">Plazo de plantilla cerrado</p>
+                                            <p className="text-xs text-red-700/90 dark:text-red-200/90 mt-1">
+                                                El último momento para apuntar jugadores fue el <strong>{PLAYER_LICENSE_LAST_DAY}</strong>.
+                                                Puedes seguir subiendo DNI y seguro de quien ya esté inscrito.
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/40 p-3 flex items-center gap-2 text-xs text-amber-900 dark:text-amber-100">
+                                        <span className="material-symbols-outlined text-base">schedule</span>
+                                        <span>
+                                            Puedes apuntar jugadores hasta el <strong>{PLAYER_LICENSE_LAST_DAY}</strong>
+                                            {!squadTimeLeft.isClosed && (
+                                                <> · quedan <strong>{squadTimeLeft.hours} h {squadTimeLeft.minutes.toString().padStart(2, '0')} min</strong></>
+                                            )}
+                                        </span>
+                                    </div>
+                                )}
+
                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-surface-dark p-4 rounded-xl border border-slate-100 dark:border-white/5 shadow-sm">
                                     <div>
                                         <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -480,9 +529,9 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                         <button onClick={downloadCsvTemplate} className="flex items-center gap-1 px-3 py-2 bg-slate-50 dark:bg-white/5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors">
                                             <span className="material-symbols-outlined text-sm">download</span> Excel
                                         </button>
-                                        <label className="flex items-center gap-1 px-3 py-2 bg-slate-50 dark:bg-white/5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition-colors cursor-pointer">
+                                        <label className={`flex items-center gap-1 px-3 py-2 bg-slate-50 dark:bg-white/5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors ${squadRegistrationClosed ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-100 cursor-pointer'}`}>
                                             <span className="material-symbols-outlined text-sm">upload_file</span> CSV
-                                            <input type="file" name="csvImport" id="csv-import-roster" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+                                            <input type="file" name="csvImport" id="csv-import-roster" accept=".csv" className="hidden" disabled={squadRegistrationClosed} onChange={handleCsvUpload} />
                                         </label>
                                     </div>
                                 </div>
@@ -567,7 +616,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ teams, onUpdateTeam })
                                     ))}
                                 </div>
 
-                                {canAddMore && (
+                                {canAddMore && !squadRegistrationClosed && (
                                     <div className="grid grid-cols-1 gap-4">
                                         <button onClick={() => setShowManualModal(true)} className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-slate-50 transition-all">
                                             <span className="material-symbols-outlined text-3xl text-slate-300 mb-2">edit_note</span>

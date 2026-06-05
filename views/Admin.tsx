@@ -4671,7 +4671,8 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                     })}
                                 </div>
                                 <div className="mt-6 border-t border-slate-200 pt-4">
-                                    <p className="text-xs font-bold uppercase text-slate-500 mb-2">Vista previa acta Kolosaurios (auto-rellena)</p>
+                                    <p className="text-xs font-bold uppercase text-slate-500 mb-1">Vista previa orientativa (pantalla)</p>
+                                    <p className="text-[11px] text-slate-500 mb-2">El <strong>DOCX</strong> usa la plantilla oficial Kolosaurios (logos, colores, 12 filas de jugador, shoot out).</p>
                                     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 max-h-[280px] overflow-y-auto">
                                         <div className="origin-top-left scale-[0.55] w-[181%]">
                                             <MatchReportSheet match={selectedMatchForReport} teams={teams} />

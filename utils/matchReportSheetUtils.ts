@@ -6,6 +6,9 @@ import { playersListedOnActa } from '../utils/squadLimits';
 /** Filas del tanteo punto a punto según modelo acta playa (Kolosaurios / RFEBM). */
 export const MATCH_REPORT_GRID_ROWS = 44;
 
+/** Columnas de la tabla central: 6 (A) + 4 (set1) + 4 (set2) + 5 (shoot out) + 6 (B). */
+export const ACTA_MAIN_GRID_COLUMNS = 25;
+
 const DAY_ORDER: Record<MuskizScheduleDayLabel, number> = { Viernes: 0, Sábado: 1, Domingo: 2 };
 
 function timeSortKey(time: string): number {

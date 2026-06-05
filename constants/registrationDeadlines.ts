@@ -5,8 +5,9 @@ export const TEAM_REGISTRATION_LAST_DAY = '1 de junio';
 /** Cierre anticipado manual (prioritario sobre la fecha). */
 export const TEAM_REGISTRATION_FORCE_CLOSED = true;
 
-export const PLAYER_LICENSE_CLOSE_AT = '2026-06-05T00:00:00';
-export const PLAYER_LICENSE_LAST_DAY = '4 de junio';
+/** Alta de jugadores en plantilla (responsables + autoinscripción). Hora local del navegador. */
+export const PLAYER_LICENSE_CLOSE_AT = '2026-06-04T17:00:00';
+export const PLAYER_LICENSE_LAST_DAY = '4 de junio a las 17:00';
 
 export function isPastDeadline(closeAtIso: string): boolean {
   return Date.now() > new Date(closeAtIso).getTime();
@@ -16,6 +17,11 @@ export function isPastDeadline(closeAtIso: string): boolean {
 export function isTeamRegistrationClosed(now = Date.now()): boolean {
   if (TEAM_REGISTRATION_FORCE_CLOSED) return true;
   return now > new Date(TEAM_REGISTRATION_CLOSE_AT).getTime();
+}
+
+/** Alta de jugadores / plantilla cerrada. */
+export function isSquadRegistrationClosed(now = Date.now()): boolean {
+  return now > new Date(PLAYER_LICENSE_CLOSE_AT).getTime();
 }
 
 export interface RegistrationTimeLeft {

@@ -14,7 +14,7 @@ interface RotatingTeamSpotlightProps {
 export const RotatingTeamSpotlight: React.FC<RotatingTeamSpotlightProps> = ({
     teams,
     className = '',
-    intervalMs = 5000,
+    intervalMs = 3000,
     onlyPaid = true,
 }) => {
     const roster = useMemo(() => {
@@ -22,7 +22,7 @@ export const RotatingTeamSpotlight: React.FC<RotatingTeamSpotlightProps> = ({
         return [...list].sort((a, b) => a.name.localeCompare(b.name, 'es'));
     }, [teams, onlyPaid]);
 
-    const index = useRotatingIndex(roster.length, intervalMs);
+    const index = useRotatingIndex(roster.length, intervalMs, true);
     const current = roster[index];
 
     if (!current) {
