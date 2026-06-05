@@ -14,6 +14,7 @@ import {
 } from '../utils/homeLiveMatches';
 import { resolveTeamShield } from '../constants/teamShields';
 import { TeamNameWithShield } from './TeamShield';
+import { TournamentLiveStreamLink } from './TournamentLiveStreamLink';
 
 interface HomeTournamentLivePanelProps {
     matches: Match[];
@@ -128,13 +129,16 @@ export const HomeTournamentLivePanel: React.FC<HomeTournamentLivePanelProps> = (
                                 {tournamentDay ? `${tournamentDay} · ${clockLabel}` : `Ahora · ${clockLabel}`}
                             </h2>
                         </div>
-                        <Link
-                            to="/schedule?tab=calendar"
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 px-4 py-2 text-sm font-bold text-white transition-colors"
-                        >
-                            Ver calendario completo
-                            <span className="material-symbols-outlined text-base">arrow_forward</span>
-                        </Link>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <TournamentLiveStreamLink variant="panel" />
+                            <Link
+                                to="/schedule?tab=calendar"
+                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 px-4 py-2 text-sm font-bold text-white transition-colors"
+                            >
+                                Ver calendario completo
+                                <span className="material-symbols-outlined text-base">arrow_forward</span>
+                            </Link>
+                        </div>
                     </div>
 
                     <div className="grid lg:grid-cols-2 gap-0 lg:divide-x divide-white/10">

@@ -7,6 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import { getOfficialSponsorsSorted, isOfficialSponsorName, sortSponsorsByTier } from '../constants/officialSponsors';
 import { normalizeSponsor } from '../utils/sponsorDisplay';
 import { HomeTournamentLivePanel } from '../components/HomeTournamentLivePanel';
+import { TournamentLiveStreamLink } from '../components/TournamentLiveStreamLink';
 import { RotatingSponsorSpotlight } from '../components/RotatingSponsorSpotlight';
 import { RotatingTeamSpotlight } from '../components/RotatingTeamSpotlight';
 import { totalParticipantPlayers } from '../utils/squadLimits';
@@ -94,6 +95,7 @@ export const Home: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap gap-4 mt-4">
+                <TournamentLiveStreamLink variant="hero" />
                 <button
                   onClick={() => navigate('/schedule?tab=calendar')}
                   className="flex items-center justify-center gap-2 bg-white text-slate-900 hover:bg-slate-100 px-8 py-3 rounded-lg font-bold text-base transition-colors min-w-[160px]"
