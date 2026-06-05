@@ -74,28 +74,29 @@ export const Home: React.FC = () => {
 
         <div className="relative z-10 w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-20">
           <div className="grid lg:grid-cols-12 gap-8 items-end">
-            {/* Hero Text */}
-            <div
-              className={`lg:col-span-12 flex flex-col gap-6 mb-8 lg:mb-0 ${
-                showLivePlayer ? 'xl:col-span-7' : 'xl:col-span-12'
-              }`}
-            >
+            <div className="lg:col-span-12 flex flex-col gap-6 mb-8 lg:mb-0">
               <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black text-white leading-[0.9] tracking-tighter uppercase drop-shadow-lg">
                 {siteContent.heroTitle}
               </h1>
-              <div className="flex flex-col lg:flex-row gap-8 items-center lg:items-center">
-                <div className="flex-1">
+              <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 items-stretch lg:items-center">
+                <div className="flex-1 min-w-0">
                   <p className="text-lg sm:text-xl text-slate-300 max-w-xl font-light border-l-4 border-primary pl-4">
                     {siteContent.heroSubtitle}
                   </p>
                 </div>
-                <div className="w-48 h-48 flex items-center justify-center bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-4 shrink-0">
-                  <img 
-                    src="/logo_kolosaurios.png" 
-                    alt="Logo Kolosaurios" 
-                    className="max-w-full max-h-full object-contain animate-float"
-                  />
-                </div>
+                {showLivePlayer ? (
+                  <div className="w-full lg:w-[min(100%,400px)] xl:w-[min(100%,440px)] shrink-0">
+                    <TournamentLiveStreamPlayer variant="hero" />
+                  </div>
+                ) : (
+                  <div className="w-48 h-48 flex items-center justify-center bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-4 shrink-0 mx-auto lg:mx-0">
+                    <img
+                      src="/logo_kolosaurios.png"
+                      alt="Logo Kolosaurios"
+                      className="max-w-full max-h-full object-contain animate-float"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-4 mt-4">
@@ -115,12 +116,6 @@ export const Home: React.FC = () => {
                 )}
               </div>
             </div>
-
-            {showLivePlayer && (
-              <div className="xl:col-span-5 w-full">
-                <TournamentLiveStreamPlayer variant="hero" className="w-full min-h-[320px]" />
-              </div>
-            )}
           </div>
         </div>
       </section>

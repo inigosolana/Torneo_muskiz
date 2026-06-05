@@ -81,7 +81,7 @@ export const TournamentLiveStreamPlayer: React.FC<TournamentLiveStreamPlayerProp
                 <div
                     className={`relative w-full ${
                         isHero
-                            ? 'aspect-video min-h-[220px]'
+                            ? 'aspect-video min-h-[180px] sm:min-h-[200px]'
                             : isCompact
                               ? 'aspect-video max-h-44 sm:max-h-52'
                               : 'aspect-video'
