@@ -79,17 +79,12 @@ export const Home: React.FC = () => {
                 {siteContent.heroTitle}
               </h1>
               <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 items-stretch lg:items-center">
-                <div className="flex-1 min-w-0">
-                  <p className="text-lg sm:text-xl text-slate-300 max-w-xl font-light border-l-4 border-primary pl-4">
-                    {siteContent.heroSubtitle}
-                  </p>
-                </div>
                 {showLivePlayer ? (
-                  <div className="w-full lg:w-[min(100%,400px)] xl:w-[min(100%,440px)] shrink-0">
+                  <div className="w-full max-w-md lg:max-w-lg shrink-0">
                     <TournamentLiveStreamPlayer variant="hero" />
                   </div>
                 ) : (
-                  <div className="w-48 h-48 flex items-center justify-center bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-4 shrink-0 mx-auto lg:mx-0">
+                  <div className="w-48 h-48 flex items-center justify-center bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-4 shrink-0">
                     <img
                       src="/logo_kolosaurios.png"
                       alt="Logo Kolosaurios"
