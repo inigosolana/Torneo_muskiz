@@ -86,16 +86,12 @@ export function isValidSetsPair(setsA: number, setsB: number): boolean {
 }
 
 /** Marcador a mostrar en tabla (solo sets; usa detalle o scoreA/scoreB legacy). */
-/** Goles totales de cada equipo (suma de sets; shootout solo si hubo 1-1 en sets). */
+/** Goles para clasificación GF/GC: solo suma del 1.er y 2.º set (sin shootout). */
 export function sumGoalsFromSetScores(s: BeachSetScores): { goalsA: number; goalsB: number } {
-    let goalsA = (s.set1A ?? 0) + (s.set2A ?? 0);
-    let goalsB = (s.set1B ?? 0) + (s.set2B ?? 0);
-    const computed = computeSetsResultFromDetail(s);
-    if (computed?.finished && computed.needsShootout) {
-        goalsA += s.shootoutA ?? 0;
-        goalsB += s.shootoutB ?? 0;
-    }
-    return { goalsA, goalsB };
+    return {
+        goalsA: (s.set1A ?? 0) + (s.set2A ?? 0),
+        goalsB: (s.set1B ?? 0) + (s.set2B ?? 0),
+    };
 }
 
 export function getMatchGoalTotals(match: Match): { goalsA: number; goalsB: number } {
