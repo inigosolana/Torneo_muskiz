@@ -32,6 +32,68 @@ export function sortMatchesForActas(matches: Match[]): Match[] {
     });
 }
 
+export interface ActaDayCourtSlot {
+    day: MuskizScheduleDayLabel;
+    court: string;
+    key: string;
+    label: string;
+    count: number;
+}
+
+const DAY_COURT_KEY_SEP = '::';
+
+export function dayCourtSlotKey(day: MuskizScheduleDayLabel, court: string): string {
+    return `${day}${DAY_COURT_KEY_SEP}${court}`;
+}
+
+export function parseDayCourtSlotKey(key: string): { day: MuskizScheduleDayLabel; court: string } | null {
+    const idx = key.indexOf(DAY_COURT_KEY_SEP);
+    if (idx < 0) return null;
+    const day = key.slice(0, idx) as MuskizScheduleDayLabel;
+    const court = key.slice(idx + DAY_COURT_KEY_SEP.length);
+    if (!WEEKEND_SCHEDULE_DAYS.includes(day) || !court) return null;
+    return { day, court };
+}
+
+/** Slots día + campo con partidos (para llevar actas a cada pista). */
+export function listActaDayCourtSlots(matches: Match[]): ActaDayCourtSlot[] {
+    const counts = new Map<string, { day: MuskizScheduleDayLabel; court: string; count: number }>();
+    for (const m of matches) {
+        const day = inferMatchScheduleDay(m);
+        const court = (m.court ?? '').trim();
+        if (!day || !court) continue;
+        const key = dayCourtSlotKey(day, court);
+        const prev = counts.get(key);
+        if (prev) prev.count += 1;
+        else counts.set(key, { day, court, count: 1 });
+    }
+    return [...counts.values()]
+        .sort((a, b) => {
+            const oa = DAY_ORDER[a.day];
+            const ob = DAY_ORDER[b.day];
+            if (oa !== ob) return oa - ob;
+            return a.court.localeCompare(b.court, 'es');
+        })
+        .map(({ day, court, count }) => ({
+            day,
+            court,
+            key: dayCourtSlotKey(day, court),
+            label: `${day} · ${court} (${count})`,
+            count,
+        }));
+}
+
+export function filterMatchesByDayCourt(
+    matches: Match[],
+    day: MuskizScheduleDayLabel,
+    court: string,
+): Match[] {
+    const courtNorm = court.trim();
+    return matches.filter(
+        (m) => inferMatchScheduleDay(m) === day && (m.court ?? '').trim() === courtNorm,
+    );
+}
+
 export function inferGenderMixLabel(team: Team | undefined): string {
     const d = (team?.division ?? '').toLowerCase();
     if (d.includes('femen')) return 'FEM';

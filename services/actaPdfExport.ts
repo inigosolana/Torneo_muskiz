@@ -10,8 +10,26 @@ import {
     prepareActaHtmlForPdfExport,
 } from './actaHtmlTemplateFill';
 
+export interface ActaPdfExportOptions {
+    /** Escala de captura html2canvas (2 = máxima nitidez; 1.25–1.5 recomendado en lotes grandes). */
+    captureScale?: number;
+}
+
+export interface ActaCapturedPage {
+    dataUrl: string;
+    format: 'PNG' | 'JPEG';
+    ratio: number;
+}
+
 const CAPTURE_ROOT_ID = 'acta-pdf-capture-root';
 const CAPTURE_SURFACE_ID = 'acta-pdf-capture-surface';
+
+const DEFAULT_CAPTURE_SCALE = 2;
+const BULK_CAPTURE_SCALE = 1.35;
+
+export function bulkActaCaptureScale(): number {
+    return BULK_CAPTURE_SCALE;
+}
 
 function waitForImages(root: HTMLElement): Promise<void> {
     const imgs = [...root.querySelectorAll('img')];
@@ -73,8 +91,19 @@ function applyCaptureScale(surface: HTMLElement, scale: number): number {
     return Math.max(1, Math.ceil(surface.scrollHeight * scale));
 }
 
-/** Convierte el HTML del acta en un PDF A4 (1 página). */
-export async function actaHtmlToPdfBlob(html: string, contentZoom = 1): Promise<Blob> {
+function canvasToDataUrl(canvas: HTMLCanvasElement): { dataUrl: string; format: 'PNG' | 'JPEG' } {
+    try {
+        return { dataUrl: canvas.toDataURL('image/png'), format: 'PNG' };
+    } catch {
+        return { dataUrl: canvas.toDataURL('image/jpeg', 0.92), format: 'JPEG' };
+    }
+}
+
+async function renderActaCaptureCanvas(
+    html: string,
+    contentZoom: number,
+    captureScale: number,
+): Promise<ActaCapturedPage> {
     const prepared = prepareActaHtmlForPdfExport(withDocumentBase(html), contentZoom);
 
     const iframe = document.createElement('iframe');
@@ -124,10 +153,8 @@ export async function actaHtmlToPdfBlob(html: string, contentZoom = 1): Promise<
 
         const captureTarget = scale >= 0.999 ? surface : root;
         const captureHeight = Math.min(ACTA_PDF_HEIGHT_PX, visualHeight);
-        const canvas = await html2canvas(captureTarget, {
-            scale: 2,
-            useCORS: true,
-            allowTaint: false,
+        const canvasOptions = {
+            scale: captureScale,
             logging: false,
             backgroundColor: '#ffffff',
             width: scale >= 0.999 ? undefined : ACTA_PDF_WIDTH_PX,
@@ -137,7 +164,7 @@ export async function actaHtmlToPdfBlob(html: string, contentZoom = 1): Promise<
             imageTimeout: 20000,
             letterRendering: true,
             foreignObjectRendering: false,
-            onclone: (clonedDoc) => {
+            onclone: (clonedDoc: Document) => {
                 const clonedSurface = clonedDoc.getElementById(CAPTURE_SURFACE_ID);
                 if (clonedSurface) {
                     const el = clonedSurface as HTMLElement;
@@ -145,23 +172,79 @@ export async function actaHtmlToPdfBlob(html: string, contentZoom = 1): Promise<
                     el.style.webkitFontSmoothing = 'antialiased';
                 }
             },
-        });
+        };
 
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const pageW = pdf.internal.pageSize.getWidth();
-        const pageH = pdf.internal.pageSize.getHeight();
-        const ratio = canvas.width / canvas.height;
-        const drawW = pageW;
-        const drawH = Math.min(pageH, drawW / ratio);
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, drawW, drawH, undefined, 'FAST');
-        return pdf.output('blob');
+        let canvas: HTMLCanvasElement;
+        try {
+            canvas = await html2canvas(captureTarget, {
+                ...canvasOptions,
+                useCORS: true,
+                allowTaint: false,
+            });
+        } catch {
+            canvas = await html2canvas(captureTarget, {
+                ...canvasOptions,
+                useCORS: true,
+                allowTaint: true,
+            });
+        }
+
+        const { dataUrl, format } = canvasToDataUrl(canvas);
+        return { dataUrl, format, ratio: canvas.width / canvas.height };
     } finally {
         document.body.removeChild(iframe);
     }
 }
 
-export async function generateActaPdfBlob(ctx: ActaExportContext): Promise<Blob> {
+function capturedPageToPdfBlob(page: ActaCapturedPage): Blob {
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const drawW = pageW;
+    const drawH = Math.min(pageH, drawW / page.ratio);
+    pdf.addImage(page.dataUrl, page.format, 0, 0, drawW, drawH, undefined, 'FAST');
+    return pdf.output('blob');
+}
+
+/** Convierte el HTML del acta en un PDF A4 (1 página). */
+export async function actaHtmlToPdfBlob(
+    html: string,
+    contentZoom = 1,
+    options: ActaPdfExportOptions = {},
+): Promise<Blob> {
+    const captureScale = options.captureScale ?? DEFAULT_CAPTURE_SCALE;
+    const page = await renderActaCaptureCanvas(html, contentZoom, captureScale);
+    return capturedPageToPdfBlob(page);
+}
+
+export async function captureActaPageFromContext(
+    ctx: ActaExportContext,
+    options: ActaPdfExportOptions = {},
+): Promise<ActaCapturedPage> {
     const html = await buildActaPrintHtmlAsync(ctx);
     const contentZoom = actaSinglePageZoom(ctx.teamA.players.length, ctx.teamB.players.length);
-    return actaHtmlToPdfBlob(html, contentZoom);
+    const captureScale = options.captureScale ?? DEFAULT_CAPTURE_SCALE;
+    return renderActaCaptureCanvas(html, contentZoom, captureScale);
+}
+
+export async function generateActaPdfBlob(
+    ctx: ActaExportContext,
+    options: ActaPdfExportOptions = {},
+): Promise<Blob> {
+    const page = await captureActaPageFromContext(ctx, options);
+    return capturedPageToPdfBlob(page);
+}
+
+/** Pausa breve para que el navegador libere memoria entre actas en exportaciones masivas. */
+export function yieldBetweenActaExports(index: number): Promise<void> {
+    const delay = index > 0 && index % 8 === 0 ? 120 : 0;
+    return new Promise((resolve) => {
+        requestAnimationFrame(() => {
+            if (delay > 0) {
+                window.setTimeout(resolve, delay);
+            } else {
+                resolve();
+            }
+        });
+    });
 }

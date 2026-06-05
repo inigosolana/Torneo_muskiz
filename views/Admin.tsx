@@ -56,7 +56,16 @@ import { CompetitionResultsTable } from '../components/CompetitionResultsTable';
 import { TeamNameWithShield } from '../components/TeamShield';
 import { CompetitionDraftPicker } from '../components/CompetitionDraftPicker';
 import { saveBulkActasPayload } from '../utils/bulkActasSession';
-import { downloadTournamentGridExcel, printTournamentGridPdf } from '../utils/tournamentGridExport';
+import {
+    courtScorerExportFilename,
+    downloadTournamentGridExcel,
+    printTournamentGridPdf,
+} from '../utils/tournamentGridExport';
+import {
+    filterMatchesByDayCourt,
+    listActaDayCourtSlots,
+    parseDayCourtSlotKey,
+} from '../utils/matchReportSheetUtils';
 import { downloadAllTournamentPlayersExcel } from '../utils/tournamentPlayersExport';
 import {
     isPlayerRole,
@@ -70,7 +79,12 @@ import {
 } from '../utils/squadLimits';
 import { buildInitialDigitalReportStats } from '../utils/actaBuildContext';
 import { normalizeDniInput, resolveDniStatusFromNumber } from '../utils/dniValidation';
-import { downloadActaPdf, downloadActasZip, printActaHtml } from '../services/actaExportService';
+import {
+    downloadActaPdf,
+    downloadActasMergedPdf,
+    downloadActasZip,
+    printActaHtml,
+} from '../services/actaExportService';
 import { MatchReportSheet } from '../components/MatchReportSheet';
 import { CompetitionGroupManager } from '../components/CompetitionGroupManager';
 import { AdminSocialContentPanel } from '../components/AdminSocialContentPanel';
@@ -219,6 +233,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     );
     const [standingsGroupFilter, setStandingsGroupFilter] = useState<string>('A');
     const [resultsDivisionFilter, setResultsDivisionFilter] = useState<Team['division'] | 'all'>('all');
+    const [resultsDayCourtKey, setResultsDayCourtKey] = useState('');
     /** Simulación vs Oficial (toda la sección Competición) */
     const [compArenaMode, setCompArenaMode] = useState<AdminPreviewMode>(
         savedAdminUi.compArenaMode ?? savedAdminUi.compPreviewMode ?? 'simulation'
@@ -638,6 +653,27 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         if (resultsDivisionFilter === 'all') return compDisplayMatches;
         return compDisplayMatches.filter((m) => resolveMatchDivision(m, teams) === resultsDivisionFilter);
     }, [compDisplayMatches, resultsDivisionFilter, teams]);
+
+    const resultsDayCourtSlots = useMemo(
+        () => listActaDayCourtSlots(resultsFilteredMatches),
+        [resultsFilteredMatches],
+    );
+
+    const resultsDayCourtMatches = useMemo(() => {
+        const parsed = parseDayCourtSlotKey(resultsDayCourtKey);
+        if (!parsed) return [];
+        return filterMatchesByDayCourt(resultsFilteredMatches, parsed.day, parsed.court);
+    }, [resultsFilteredMatches, resultsDayCourtKey]);
+
+    useEffect(() => {
+        if (resultsDayCourtSlots.length === 0) {
+            if (resultsDayCourtKey) setResultsDayCourtKey('');
+            return;
+        }
+        if (!resultsDayCourtSlots.some((s) => s.key === resultsDayCourtKey)) {
+            setResultsDayCourtKey(resultsDayCourtSlots[0]!.key);
+        }
+    }, [resultsDayCourtSlots, resultsDayCourtKey]);
 
     /** Grupos reales de la categoría (BD o distribución calculada). Sin «Todos». */
     const standingsGroupKeys = useMemo(() => {
@@ -1810,20 +1846,82 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     const [actaExporting, setActaExporting] = useState(false);
 
+    const actaExportLabel = useCallback(() => {
+        const label =
+            compArenaMode === 'simulation'
+                ? simulationViewDraftId === 'all'
+                    ? 'simulacion_todos'
+                    : simDrafts.find((d) => d.id === simulationViewDraftId)?.name ?? 'simulacion'
+                : 'oficial';
+        const cat = resultsDivisionFilter !== 'all' ? `_${resultsDivisionFilter.replace(/\s+/g, '_')}` : '';
+        return `${label}${cat}`;
+    }, [compArenaMode, resultsDivisionFilter, simulationViewDraftId, simDrafts]);
+
+    const runBulkActaExport = async (
+        mode: 'zip' | 'merged',
+        matchList: Match[],
+        label: string,
+        successMessage: string,
+    ) => {
+        const toastId = toast.loading(`Generando actas 0/${matchList.length}…`);
+        setActaExporting(true);
+        try {
+            const onProgress = (current: number, total: number) => {
+                toast.loading(`Generando actas ${current}/${total}…`, { id: toastId });
+            };
+            if (mode === 'zip') {
+                await downloadActasZip(label, matchList, teams, 'pdf', onProgress);
+            } else {
+                await downloadActasMergedPdf(label, matchList, teams, onProgress);
+            }
+            toast.success(successMessage, { id: toastId });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Error al generar actas.';
+            if (msg.includes('Fallaron') || msg.includes('ZIP con') || msg.includes('PDF con')) {
+                toast.warning(msg, { id: toastId, duration: 12000 });
+            } else {
+                toast.error(msg, { id: toastId });
+            }
+        } finally {
+            setActaExporting(false);
+        }
+    };
+
     const handleDownloadCategoryActas = async (division: Team['division'], catMatches: Match[]) => {
         if (catMatches.length === 0) {
             toast.error('No hay partidos en esta categoría.');
             return;
         }
-        setActaExporting(true);
-        try {
-            await downloadActasZip(division, catMatches, teams, 'pdf');
-            toast.success(`${catMatches.length} actas PDF descargadas (ZIP).`);
-        } catch (e: unknown) {
-            toast.error(e instanceof Error ? e.message : 'Error al generar actas.');
-        } finally {
-            setActaExporting(false);
+        await runBulkActaExport('zip', catMatches, division, `${catMatches.length} actas PDF descargadas (ZIP).`);
+    };
+
+    const handleDownloadAllActasMergedPdf = async () => {
+        if (resultsFilteredMatches.length === 0) {
+            toast.error('No hay partidos en la lista actual.');
+            return;
         }
+        await runBulkActaExport(
+            'merged',
+            resultsFilteredMatches,
+            actaExportLabel(),
+            `PDF único con ${resultsFilteredMatches.length} actas listo para copistería.`,
+        );
+    };
+
+    const handleDownloadDayCourtActasPdf = async () => {
+        const parsed = parseDayCourtSlotKey(resultsDayCourtKey);
+        if (!parsed || resultsDayCourtMatches.length === 0) {
+            toast.error('Elige un día y campo con partidos.');
+            return;
+        }
+        const slotLabel = `${parsed.day} · ${parsed.court}`;
+        const fileLabel = `${actaExportLabel()}_${courtScorerExportFilename(parsed.day, parsed.court)}`;
+        await runBulkActaExport(
+            'merged',
+            resultsDayCourtMatches,
+            fileLabel,
+            `PDF listo para ${slotLabel} (${resultsDayCourtMatches.length} actas).`,
+        );
     };
 
     const handleDownloadAllActasDocx = async () => {
@@ -1831,23 +1929,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             toast.error('No hay partidos en la lista actual.');
             return;
         }
-        setActaExporting(true);
-        try {
-            const label =
-                compArenaMode === 'simulation'
-                    ? simulationViewDraftId === 'all'
-                        ? 'simulacion_todos'
-                        : simDrafts.find((d) => d.id === simulationViewDraftId)?.name ?? 'simulacion'
-                    : 'oficial';
-            const cat =
-                resultsDivisionFilter !== 'all' ? `_${resultsDivisionFilter.replace(/\s+/g, '_')}` : '';
-            await downloadActasZip(`${label}${cat}`, resultsFilteredMatches, teams, 'pdf');
-            toast.success(`ZIP con ${resultsFilteredMatches.length} actas PDF.`);
-        } catch (e: unknown) {
-            toast.error(e instanceof Error ? e.message : 'Error al generar actas.');
-        } finally {
-            setActaExporting(false);
-        }
+        await runBulkActaExport(
+            'zip',
+            resultsFilteredMatches,
+            actaExportLabel(),
+            `ZIP con ${resultsFilteredMatches.length} actas PDF.`,
+        );
     };
 
     const handleOpenBulkActas = () => {
@@ -4093,12 +4180,24 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             </button>
                                             <button
                                                 type="button"
+                                                onClick={() => void handleDownloadAllActasMergedPdf()}
+                                                disabled={resultsFilteredMatches.length === 0 || actaExporting}
+                                                className="px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50 bg-teal-700 hover:bg-teal-800 text-white"
+                                            >
+                                                <span className="material-symbols-outlined text-lg">picture_as_pdf</span>
+                                                Descargar todas (1 PDF)
+                                                <span className="text-xs font-semibold opacity-90">
+                                                    ({resultsFilteredMatches.length})
+                                                </span>
+                                            </button>
+                                            <button
+                                                type="button"
                                                 onClick={() => void handleDownloadAllActasDocx()}
                                                 disabled={resultsFilteredMatches.length === 0 || actaExporting}
                                                 className="px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50 bg-slate-800 hover:bg-slate-900 text-white"
                                             >
-                                                <span className="material-symbols-outlined text-lg">download</span>
-                                                Descargar todas (PDF ZIP)
+                                                <span className="material-symbols-outlined text-lg">folder_zip</span>
+                                                Descargar todas (ZIP)
                                             </button>
                                             <a
                                                 href="/templates/actaplaya_kolosaurios.html"
@@ -4108,6 +4207,51 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 Plantilla vacía Kolosaurios
                                             </a>
                                         </div>
+
+                                        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2">
+                                            <div className="flex flex-col gap-2 max-w-md flex-1 min-w-[220px]">
+                                                <label
+                                                    htmlFor="results-day-court-filter"
+                                                    className="text-[10px] font-black uppercase text-slate-400"
+                                                >
+                                                    Día y campo (actas en pista)
+                                                </label>
+                                                <select
+                                                    id="results-day-court-filter"
+                                                    value={resultsDayCourtKey}
+                                                    onChange={(e) => setResultsDayCourtKey(e.target.value)}
+                                                    disabled={resultsDayCourtSlots.length === 0}
+                                                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                                                >
+                                                    {resultsDayCourtSlots.length === 0 ? (
+                                                        <option value="">Sin campos en la lista</option>
+                                                    ) : (
+                                                        resultsDayCourtSlots.map((slot) => (
+                                                            <option key={slot.key} value={slot.key}>
+                                                                {slot.label}
+                                                            </option>
+                                                        ))
+                                                    )}
+                                                </select>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleDownloadDayCourtActasPdf()}
+                                                disabled={
+                                                    resultsDayCourtMatches.length === 0 || actaExporting
+                                                }
+                                                className="px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50 bg-amber-600 hover:bg-amber-700 text-white"
+                                            >
+                                                <span className="material-symbols-outlined text-lg">stadium</span>
+                                                PDF actas del campo
+                                                <span className="text-xs font-semibold opacity-90">
+                                                    ({resultsDayCourtMatches.length})
+                                                </span>
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-slate-500 -mt-1">
+                                            Un PDF por día y campo, ordenado por hora — para imprimir y llevar a esa pista.
+                                        </p>
                                         <CompetitionResultsTable
                                             matches={resultsFilteredMatches}
                                             teams={teams}
