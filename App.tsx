@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Team, Match, CategoryLimits } from './types';
 import { Layout } from './components/Layout';
@@ -26,6 +26,11 @@ import { reportOpsAlert } from './services/opsAlertService';
 import { Toaster, toast } from 'sonner';
 import type { User } from '@supabase/supabase-js';
 import { TournamentDataProvider } from './context/TournamentDataContext';
+import {
+    applyFinalPhaseResolution,
+    getFinalPhaseTeamPatches,
+    persistFinalPhaseTeamNames,
+} from './utils/resolveFinalPhaseTeams';
 import {
     fetchCalendarSimulations,
     fetchScheduleVisibility,
@@ -235,9 +240,43 @@ const App: React.FC = () => {
   };
 
   const updateMatches = async (newMatches: Match[]) => {
-    setMatches(newMatches);
-    await matchService.saveMatches(newMatches);
+    const { matches: synced } = applyFinalPhaseResolution(newMatches, teams);
+    setMatches(synced);
+    await matchService.saveMatches(synced);
   };
+
+  const isStaff = userRole === 'staff' || userRole === 'admin';
+  const lastFinalPhasePatchKeyRef = useRef('');
+
+  /** Si hay placeholders pendientes en BD, staff los persiste al cargar (sin re-guardar todo el calendario). */
+  useEffect(() => {
+    if (!dataLoaded || !isStaff || teams.length === 0 || matches.length === 0) return;
+    const { patches } = getFinalPhaseTeamPatches(matches, teams);
+    if (patches.length === 0) {
+      lastFinalPhasePatchKeyRef.current = '';
+      return;
+    }
+    const patchKey = patches
+        .map((p) => `${p.id}|${p.teamA}|${p.teamB}`)
+        .sort()
+        .join(';;');
+    if (patchKey === lastFinalPhasePatchKeyRef.current) return;
+
+    void persistFinalPhaseTeamNames(matches, teams, (p) => matchService.patchMatchTeamNames(p, teams))
+        .then(({ changed, divisionsUpdated }) => {
+            if (!changed) return;
+            lastFinalPhasePatchKeyRef.current = patchKey;
+            setMatches(applyFinalPhaseResolution(matches, teams).matches);
+            toast.success(
+                divisionsUpdated.length === 1
+                    ? `Fase final de ${divisionsUpdated[0]} actualizada según grupos.`
+                    : `Fase final actualizada: ${divisionsUpdated.join(', ')}.`
+            );
+        })
+        .catch(() => {
+            /* reintenta en el siguiente cambio de partidos */
+        });
+  }, [dataLoaded, isStaff, teams, matches]);
 
   const persistPublicMatchesVisible = async (visible: boolean) => {
     setPublicMatchesVisible(visible);
@@ -252,11 +291,16 @@ const App: React.FC = () => {
     }
   };
 
+  const displayMatches = useMemo(
+    () => applyFinalPhaseResolution(matches, teams).matches,
+    [matches, teams]
+  );
+
   const publicDisplayMatches = useMemo(() => {
-    const official = matchesForPublicSchedule(matches);
+    const official = matchesForPublicSchedule(displayMatches);
     if (official.length > 0) return official;
     return matchesForPublicSchedule(publicSimulationMatches);
-  }, [matches, publicSimulationMatches]);
+  }, [displayMatches, publicSimulationMatches]);
 
   const managerEmail = normalizeEmail(user?.email);
   const hasApprovedTeam = teams.some(
@@ -280,6 +324,7 @@ const App: React.FC = () => {
             setTeams,
             matches,
             setMatches,
+            displayMatches,
             categoryLimits,
             setCategoryLimits,
             publicMatchesVisible,

@@ -4,8 +4,11 @@ import { CategoryLimits, Match, Team } from '../types';
 interface TournamentDataContextValue {
   teams: Team[];
   setTeams: React.Dispatch<React.SetStateAction<Team[]>>;
+  /** Partidos tal como están en BD. */
   matches: Match[];
   setMatches: React.Dispatch<React.SetStateAction<Match[]>>;
+  /** Partidos con placeholders de fase final sustituidos por equipos reales (solo lectura). */
+  displayMatches: Match[];
   categoryLimits: CategoryLimits;
   setCategoryLimits: React.Dispatch<React.SetStateAction<CategoryLimits>>;
   /** Calendario / resultados / clasificación visibles para cualquier visitante (no staff). */

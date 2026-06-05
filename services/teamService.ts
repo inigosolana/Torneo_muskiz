@@ -2,7 +2,8 @@ import { supabase } from './supabaseClient';
 import { Team, Player, Match } from '../types';
 import { applySmBitxiBlueFlowGroupSwap } from '../utils/smBitxiBlueFlowGroupSwap';
 import { normalizeDniInput, resolveDniStatusFromNumber } from '../utils/dniValidation';
-import { databaseRowToMatch, enrichMatchGoalsFromSetScores, matchToDatabaseRow } from './matchDbMapper';
+import { databaseRowToMatch, enrichMatchGoalsFromSetScores, matchToDatabaseRow, resolveTeamIdForMatchSide } from './matchDbMapper';
+import { divisionFromMatchRound } from './muskizScheduleSimulator';
 
 export const teamService = {
     async getTeams(): Promise<Team[]> {
@@ -344,6 +345,31 @@ export const matchService = {
         if (error) {
             console.error('Error saving matches:', error);
             throw new Error(error.message);
+        }
+    },
+
+    async patchMatchTeamNames(
+        patches: { id: string; teamA: string; teamB: string }[],
+        teams: Team[]
+    ): Promise<void> {
+        if (patches.length === 0) return;
+        const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+        for (const patch of patches) {
+            if (!UUID_RX.test(patch.id)) continue;
+            const sample = await this.getMatchById(patch.id);
+            const division = sample?.round ? divisionFromMatchRound(sample.round) : null;
+            const row = {
+                team_a_name: patch.teamA,
+                team_b_name: patch.teamB,
+                team_a_id: resolveTeamIdForMatchSide(patch.teamA, division, teams),
+                team_b_id: resolveTeamIdForMatchSide(patch.teamB, division, teams),
+            };
+            const { error } = await supabase.from('matches').update(row).eq('id', patch.id);
+            if (error) {
+                console.error('Error patching match teams:', patch.id, error);
+                throw new Error(error.message);
+            }
         }
     },
 

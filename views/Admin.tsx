@@ -23,6 +23,12 @@ import {
 } from '../services/tournamentScheduleService';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 import {
+    applyFinalPhaseResolution,
+    divisionsWithCompleteGroupStage,
+    hasPendingFinalPhaseTeamPatches,
+    persistFinalPhaseTeamNames,
+} from '../utils/resolveFinalPhaseTeams';
+import {
     rankThirdPlaceCandidates,
     splitThirdPlaceQualification,
 } from '../utils/thirdPlaceQualification';
@@ -192,7 +198,8 @@ function AdminNavButton({
 
 export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onUpdateLimits }) => {
     const navigate = useNavigate();
-    const { teams, matches, categoryLimits, publicMatchesVisible, persistPublicMatchesVisible } = useTournamentData();
+    const { teams, matches, setMatches, displayMatches, categoryLimits, publicMatchesVisible, persistPublicMatchesVisible } =
+        useTournamentData();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [adminEmail, setAdminEmail] = useState('');
     const [passwordInput, setPasswordInput] = useState('');
@@ -635,8 +642,52 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     }, [simulationViewDraftId, simDrafts, allSimDraftMatches]);
 
     const compDisplayMatches = useMemo(
-        () => (compArenaMode === 'simulation' ? simulationViewMatches : matches),
-        [compArenaMode, simulationViewMatches, matches]
+        () => (compArenaMode === 'simulation' ? simulationViewMatches : displayMatches),
+        [compArenaMode, simulationViewMatches, displayMatches]
+    );
+
+    const divisionsReadyForFinal = useMemo(
+        () => divisionsWithCompleteGroupStage(teams, matches),
+        [teams, matches]
+    );
+
+    const [finalPhaseSyncing, setFinalPhaseSyncing] = useState(false);
+    const finalPhaseSyncingRef = React.useRef(false);
+
+    const syncFinalPhaseToDatabase = useCallback(
+        async (silent = false): Promise<boolean> => {
+            if (finalPhaseSyncingRef.current) return false;
+            if (!hasPendingFinalPhaseTeamPatches(teams, matches)) {
+                if (!silent) toast.message('La fase final ya está actualizada en todas las categorías.');
+                return false;
+            }
+            finalPhaseSyncingRef.current = true;
+            setFinalPhaseSyncing(true);
+            try {
+                const { changed, divisionsUpdated } = await persistFinalPhaseTeamNames(
+                    matches,
+                    teams,
+                    (patches) => matchService.patchMatchTeamNames(patches, teams)
+                );
+                if (!changed) return false;
+                setMatches(applyFinalPhaseResolution(matches, teams).matches);
+                if (!silent) {
+                    toast.success(
+                        divisionsUpdated.length === 1
+                            ? `Fase final de ${divisionsUpdated[0]} guardada según clasificación de grupos.`
+                            : `Fase final guardada: ${divisionsUpdated.join(', ')}.`
+                    );
+                }
+                return true;
+            } catch {
+                toast.error('No se pudo guardar la fase final en la base de datos.');
+                return false;
+            } finally {
+                finalPhaseSyncingRef.current = false;
+                setFinalPhaseSyncing(false);
+            }
+        },
+        [matches, teams, setMatches]
     );
 
     const resultsMatchCountByDivision = useMemo(() => {
@@ -704,22 +755,20 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         [teams, standingsDivision, standingsGroupFilter, standingsGroupKeys]
     );
 
+    const standingsSourceMatches = useMemo(
+        () => (compArenaMode === 'simulation' ? simulationViewMatches : displayMatches),
+        [compArenaMode, simulationViewMatches, displayMatches]
+    );
+
     const standings = useMemo(
         () =>
-            computeStandings(teams, compArenaMode === 'simulation' ? simulationViewMatches : matches, {
+            computeStandings(teams, standingsSourceMatches, {
                 division: standingsDivision,
                 group: 'all',
                 onlyPaidTeams: false,
                 rosterOverride: standingsRoster,
             }),
-        [
-            matches,
-            simulationViewMatches,
-            compArenaMode,
-            teams,
-            standingsDivision,
-            standingsRoster,
-        ]
+        [standingsSourceMatches, teams, standingsDivision, standingsRoster]
     );
     const thirdPlaceRanking = useMemo(() => {
         const groups = getGroupDistributionForDivision(teams, standingsDivision, false).map((g) => ({
@@ -729,7 +778,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         if (groups.length !== 3 || groups.some((g) => !Array.isArray(g.names))) return null;
         const ranked = rankThirdPlaceCandidates(
             teams,
-            compArenaMode === 'simulation' ? simulationViewMatches : matches,
+            standingsSourceMatches,
             groups,
             standingsDivision,
             false
@@ -738,7 +787,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         const slots = splitThirdPlaceQualification(ranked);
         if (!slots) return null;
         return { ranked, slots };
-    }, [teams, standingsDivision, compArenaMode, simulationViewMatches, matches]);
+    }, [teams, standingsDivision, standingsSourceMatches]);
 
     const allCompSubTabs: { id: AdminCompSubTab; label: string; icon: string }[] = [
         { id: 'structure', label: 'Estructura', icon: 'account_tree' },
@@ -1832,11 +1881,29 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         await offerRegenerateSimulationIfNeeded(updatedTeams, team.division);
     };
 
+    const persistOfficialMatchesWithFinalPhase = useCallback(
+        async (nextMatches: Match[]) => {
+            const { matches: synced, changed, divisionsUpdated } = applyFinalPhaseResolution(
+                nextMatches,
+                teams
+            );
+            await onUpdateMatches(synced);
+            if (changed) {
+                toast.success(
+                    divisionsUpdated.length === 1
+                        ? `Fase final de ${divisionsUpdated[0]} actualizada según clasificación de grupos.`
+                        : `Fase final actualizada: ${divisionsUpdated.join(', ')}.`
+                );
+            }
+        },
+        [teams, onUpdateMatches]
+    );
+
     const updateMatchSetScores = (matchId: string, setScores: BeachSetScores) => {
         const updatedMatches = matches.map((m) =>
             m.id === matchId ? applySetScoresToMatch(m, setScores) : m
         );
-        onUpdateMatches(updatedMatches);
+        void persistOfficialMatchesWithFinalPhase(updatedMatches);
     };
 
     const isDraftMatchId = useCallback(
@@ -2024,7 +2091,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             const updatedMatches = matches.map((m) =>
                 m.id === selectedMatchForReport.id ? selectedMatchForReport : m
             );
-            onUpdateMatches(updatedMatches);
+            void persistOfficialMatchesWithFinalPhase(updatedMatches);
         }
         setSelectedMatchForReport(null);
     };
@@ -4328,6 +4395,28 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                 ))
                                             )}
                                         </div>
+
+                                        {compArenaMode === 'official' && divisionsReadyForFinal.length > 0 && (
+                                            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 flex flex-wrap items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="text-sm font-bold text-emerald-900">
+                                                        Fase de grupos terminada
+                                                    </p>
+                                                    <p className="text-xs text-emerald-800 mt-0.5">
+                                                        {divisionsReadyForFinal.join(' · ')} — los equipos se colocan
+                                                        solos en repesca, cuartos, semis y final según la clasificación.
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    disabled={finalPhaseSyncing}
+                                                    onClick={() => void syncFinalPhaseToDatabase()}
+                                                    className="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-60"
+                                                >
+                                                    {finalPhaseSyncing ? 'Guardando…' : 'Actualizar fase final'}
+                                                </button>
+                                            </div>
+                                        )}
 
                                         {compArenaMode === 'simulation' && (
                                             <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
