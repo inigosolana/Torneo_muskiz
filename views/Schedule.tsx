@@ -184,7 +184,7 @@ export const Schedule: React.FC = () => {
                                                             <span className="material-symbols-outlined text-secondary">health_and_safety</span>
                                                             <h4 className="font-bold text-slate-900 dark:text-white uppercase text-xs tracking-widest">Seguro Deportivo</h4>
                                                         </div>
-                                                        <p className="text-xs text-slate-500 leading-relaxed">Todos los jugadores inscritos están cubiertos por el seguro de accidentes del torneo.</p>
+                                                        <p className="text-xs text-slate-500 leading-relaxed">Cada jugador debe disponer de su ficha federada o de un seguro privado.</p>
                                                     </div>
                                                     <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-5 border border-slate-100 dark:border-white/5">
                                                         <div className="flex items-center gap-3 mb-2">
