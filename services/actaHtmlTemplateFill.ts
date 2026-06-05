@@ -99,8 +99,19 @@ function setCellContent(
     const safe = escapeHtml(fitted);
     const pt = fontPt(fitted, kind);
     const align = opts?.center ? 'center' : 'left';
-    const inner = `<p class="c22" style="text-align:${align};margin:0;padding:0;line-height:0.92"><span class="c0" style="font-size:${pt}pt;color:#000000;font-family:Arial,sans-serif;line-height:0.92;vertical-align:top">${safe}</span></p>`;
-    return tdHtml.replace(/<td([^>]*)>[\s\S]*<\/td>/, `<td$1>${inner}</td>`);
+    const inner =
+        kind === 'team'
+            ? `<p class="c22 acta-team-name" style="text-align:${align};margin:0;padding:0 2pt 5pt;line-height:1;height:auto"><span class="c0" style="font-size:${pt}pt;color:#000000;font-family:Arial,sans-serif;line-height:1;display:block;position:relative;top:-3px">${safe}</span></p>`
+            : `<p class="c22" style="text-align:${align};margin:0;padding:0;line-height:0.92"><span class="c0" style="font-size:${pt}pt;color:#000000;font-family:Arial,sans-serif;line-height:0.92;vertical-align:top">${safe}</span></p>`;
+    return tdHtml.replace(/<td([^>]*)>[\s\S]*<\/td>/, (_match, attrs: string) => {
+        const tdAttrs =
+            kind === 'team' && attrs.includes('class="')
+                ? attrs.replace(/class="([^"]*)"/, 'class="$1 acta-team-cell"')
+                : kind === 'team'
+                  ? `${attrs} class="acta-team-cell"`
+                  : attrs;
+        return `<td${tdAttrs}>${inner}</td>`;
+    });
 }
 
 function setPlayerRowCells(rowHtml: string, number: string, name: string): string {
@@ -235,6 +246,9 @@ body.doc-content>div{width:210mm;margin:0 auto}
 p.c267{text-align:center!important;margin:0 auto!important;padding:2pt 0!important;line-height:1.2!important}
 p.c267 img{display:inline-block!important;vertical-align:middle!important;object-fit:contain!important}
 table{margin:0 auto;width:100%}
+td.acta-team-cell{vertical-align:middle!important}
+p.acta-team-name{height:auto!important;max-height:none!important;line-height:1!important;padding-bottom:5pt!important}
+p.acta-team-name span{position:relative!important;top:-3px!important;line-height:1!important;display:block!important}
 @media print{
 html,body{width:210mm;margin:0 auto}
 }
@@ -395,7 +409,10 @@ body.doc-content>div{width:210mm!important;max-width:210mm!important;margin:0 au
 table{width:100%!important;margin:0 auto!important;border-collapse:collapse!important}
 table td,table th{padding:0!important;vertical-align:top!important;line-height:0.92!important}
 body table td p{line-height:0.92!important;margin:0!important;padding:0!important}
-body table td p span{line-height:0.92!important;vertical-align:top!important;display:inline-block;position:relative;top:-1px}
+body table td p:not(.acta-team-name) span{line-height:0.92!important;vertical-align:top!important;display:inline-block;position:relative;top:-1px}
+td.acta-team-cell{vertical-align:middle!important}
+p.acta-team-name{height:auto!important;max-height:none!important;line-height:1!important;padding-bottom:5pt!important}
+p.acta-team-name span{position:relative!important;top:-3px!important;line-height:1!important;display:block!important}
 p.c267{text-align:center!important;margin:0 auto!important;padding:0!important;line-height:1.1!important}
 p.c267 img{display:inline-block!important;vertical-align:middle!important;object-fit:contain!important}
 </style>`;
