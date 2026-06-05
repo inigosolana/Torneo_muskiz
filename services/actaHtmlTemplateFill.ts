@@ -375,6 +375,27 @@ export function fillActaHtmlTemplate(html: string, ctx: ActaExportContext): stri
     return out;
 }
 
+/** Ancho/alto A4 en px (96 dpi) para captura fiable con html2canvas. */
+export const ACTA_PDF_WIDTH_PX = 794;
+export const ACTA_PDF_HEIGHT_PX = 1123;
+
+/** Quita estilos de impresión/zoom y fija layout A4 para exportar PDF en el navegador. */
+export function prepareActaHtmlForPdfExport(html: string): string {
+    let out = html
+        .replace(/<style id="acta-single-page">[\s\S]*?<\/style>/g, '')
+        .replace(/<style id="acta-print-base">[\s\S]*?<\/style>/g, '')
+        .replace(/\bacta-compact\s*/g, '');
+
+    const capture = `<style id="acta-pdf-capture">
+html,body{margin:0!important;padding:0!important;width:${ACTA_PDF_WIDTH_PX}px!important;background:#fff!important;display:block!important}
+body.doc-content,body.doc-content>div{width:${ACTA_PDF_WIDTH_PX}px!important;max-width:${ACTA_PDF_WIDTH_PX}px!important}
+table{width:${ACTA_PDF_WIDTH_PX}px!important;max-width:${ACTA_PDF_WIDTH_PX}px!important;border-collapse:collapse}
+body table td p{line-height:1.05!important;margin:0!important}
+p.c267{text-align:center!important}
+</style>`;
+    return out.replace('</head>', `${capture}</head>`);
+}
+
 /** Rutas relativas para PDF con puppeteer / archivo local (baseURL = /public). */
 export function toActaOfflineAssetPaths(html: string): string {
     return html.replace(/src="\/templates\/images\//g, 'src="templates/images/');

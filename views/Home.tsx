@@ -9,6 +9,7 @@ import { normalizeSponsor } from '../utils/sponsorDisplay';
 import { HomeTournamentLivePanel } from '../components/HomeTournamentLivePanel';
 import { RotatingSponsorSpotlight } from '../components/RotatingSponsorSpotlight';
 import { RotatingTeamSpotlight } from '../components/RotatingTeamSpotlight';
+import { totalParticipantPlayers } from '../utils/squadLimits';
 
 export const Home: React.FC = () => {
   const { teams, publicDisplayMatches, publicMatchesVisible } = useTournamentData();
@@ -42,6 +43,12 @@ export const Home: React.FC = () => {
 
   const topSponsors = useMemo(() => homeSponsors, [homeSponsors]);
   const registrationClosed = isTeamRegistrationClosed();
+
+  const paidTeamCount = useMemo(
+    () => teams.filter((t) => t.paymentStatus === 'PAID').length,
+    [teams],
+  );
+  const participantPlayerCount = useMemo(() => totalParticipantPlayers(teams), [teams]);
 
   return (
     <div className="animate-in fade-in duration-500">
@@ -88,7 +95,7 @@ export const Home: React.FC = () => {
 
               <div className="flex flex-wrap gap-4 mt-4">
                 <button
-                  onClick={() => navigate('/schedule')}
+                  onClick={() => navigate('/schedule?tab=calendar')}
                   className="flex items-center justify-center gap-2 bg-white text-slate-900 hover:bg-slate-100 px-8 py-3 rounded-lg font-bold text-base transition-colors min-w-[160px]"
                 >
                   Ver Calendario
@@ -182,12 +189,29 @@ export const Home: React.FC = () => {
             </div>
 
             {/* Stats */}
-            <div className="bg-primary/10 dark:bg-primary/5 rounded-2xl p-8 border border-primary/20 flex flex-col items-center justify-center text-center gap-4">
-              <div className="size-20 rounded-full bg-surface-light dark:bg-surface-dark flex items-center justify-center text-primary shadow-lg mb-2">
+            <div className="bg-primary/10 dark:bg-primary/5 rounded-2xl p-8 border border-primary/20 flex flex-col items-center justify-center text-center gap-6">
+              <div className="size-20 rounded-full bg-surface-light dark:bg-surface-dark flex items-center justify-center text-primary shadow-lg">
                 <span className="material-symbols-outlined text-4xl">trophy</span>
               </div>
-              <h4 className="text-5xl font-black text-slate-900 dark:text-white">{teams.filter(t => t.paymentStatus === 'PAID').length}</h4>
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">Equipos Inscritos</p>
+              <div className="flex w-full items-center justify-center gap-8 sm:gap-10">
+                <div className="flex flex-col items-center gap-1 min-w-[88px]">
+                  <h4 className="text-4xl sm:text-5xl font-black text-slate-900 dark:text-white leading-none">
+                    {paidTeamCount}
+                  </h4>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm font-medium uppercase tracking-wider">
+                    Equipos inscritos
+                  </p>
+                </div>
+                <div className="w-px h-16 bg-primary/25 shrink-0" aria-hidden />
+                <div className="flex flex-col items-center gap-1 min-w-[88px]">
+                  <h4 className="text-4xl sm:text-5xl font-black text-slate-900 dark:text-white leading-none">
+                    {participantPlayerCount}
+                  </h4>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm font-medium uppercase tracking-wider">
+                    Jugadores participantes
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -54,8 +54,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   }));
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-background-dark/95 backdrop-blur-md text-white shadow-lg">
+    <div className="flex flex-col min-h-screen bg-background-light dark:bg-background-dark transition-colors duration-300">
+      <header className="sticky top-0 z-50 w-full border-b border-slate-200 dark:border-white/10 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md text-slate-900 dark:text-white shadow-lg transition-colors duration-300">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
           <div
             className={`flex items-center justify-between ${
@@ -73,10 +73,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <img src="/logo_kolosaurios.png" alt="Kolosaurios" className={`${isAdminRoute ? 'hidden sm:block h-10' : 'h-10'} w-auto object-contain transition-transform group-hover:scale-105`} />
               </div>
               <div className={isAdminRoute ? 'min-w-0' : 'hidden sm:block'}>
-                <h1 className={`font-bold tracking-tight uppercase leading-none text-white truncate ${isAdminRoute ? 'text-sm sm:text-xl' : 'text-xl'}`}>
+                <h1 className={`font-bold tracking-tight uppercase leading-none text-slate-900 dark:text-white truncate ${isAdminRoute ? 'text-sm sm:text-xl' : 'text-xl'}`}>
                   {isAdminRoute ? 'Panel Admin' : 'II Torneo'}
                 </h1>
-                <span className={`font-medium text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors ${isAdminRoute ? 'text-[10px] sm:text-xs hidden sm:block' : 'text-xs'}`}>
+                <span className={`font-medium text-slate-500 dark:text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors ${isAdminRoute ? 'text-[10px] sm:text-xs hidden sm:block' : 'text-xs'}`}>
                   {isAdminRoute ? 'Organización' : 'Muskizko Udala'}
                 </span>
               </div>
@@ -90,7 +90,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   to={item.path}
                   className={`text-sm font-medium transition-colors uppercase tracking-wide ${location.pathname === item.path
                       ? 'text-primary border-b-2 border-primary'
-                      : 'text-slate-300 hover:text-white'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                     }`}
                 >
                   {item.label}
@@ -102,8 +102,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <div className="flex items-center gap-4">
               <button
                 onClick={toggleTheme}
-                className="p-2 rounded-full bg-white/5 hover:bg-white/20 text-yellow-400 transition-colors"
-                title="Toggle Theme"
+                className="p-2 rounded-full border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/20 text-amber-600 dark:text-yellow-400 transition-colors"
+                title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
               >
                 <span className="material-symbols-outlined">{theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
               </button>
@@ -125,7 +125,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               {!isAdminRoute ? (
                 <button
                   type="button"
-                  className="lg:hidden p-2 text-slate-300 hover:text-primary"
+                  className="lg:hidden p-2 text-slate-600 dark:text-slate-300 hover:text-primary"
                   onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                   aria-label="Menú del torneo"
                 >
@@ -145,7 +145,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Mobile Menu (no en /admin: el panel tiene su propia barra inferior) */}
         {mobileMenuOpen && !isAdminRoute && (
-          <div className="lg:hidden bg-background-dark border-t border-white/10">
+          <div className="lg:hidden bg-white dark:bg-background-dark border-t border-slate-200 dark:border-white/10">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
               {navItems.map((item) => (
                 <Link
@@ -154,7 +154,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   onClick={() => setMobileMenuOpen(false)}
                   className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${location.pathname === item.path
                       ? 'bg-primary/10 text-primary'
-                      : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
                     }`}
                 >
                   {item.label}
@@ -176,14 +176,14 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         {children}
       </main>
 
-      <footer className="bg-background-dark border-t border-white/10 pt-16 pb-8 text-slate-400">
+      <footer className="bg-slate-100 dark:bg-background-dark border-t border-slate-200 dark:border-white/10 pt-16 pb-8 text-slate-600 dark:text-slate-400 transition-colors duration-300">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
             {/* Column 1: Brand */}
             <div className="col-span-1 md:col-span-1">
               <div className="flex items-center gap-2 mb-4">
                 <span className="material-symbols-outlined text-primary text-3xl">sports_handball</span>
-                <span className="text-xl font-bold uppercase tracking-tight text-white">Muskizko Udala</span>
+                <span className="text-xl font-bold uppercase tracking-tight text-slate-900 dark:text-white">Muskizko Udala</span>
               </div>
               <p className="text-sm leading-relaxed mb-6">
                 La experiencia definitiva de balonmano playa en Muskiz. Reuniendo a atletas de todo el mundo.
@@ -233,9 +233,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
             {/* Column 2: Tournament */}
             <div>
-              <h4 className="font-bold text-white uppercase tracking-wider mb-6 text-sm">Competición</h4>
+              <h4 className="font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-6 text-sm">Competición</h4>
               <ul className="space-y-3 text-sm">
-                <li><Link to="/schedule" className="hover:text-primary text-left">Calendario y Resultados</Link></li>
+                <li><Link to="/schedule?tab=calendar" className="hover:text-primary text-left">Calendario y Resultados</Link></li>
                 <li><Link to="/team-manager" className="hover:text-primary text-left">Inscripción Equipos</Link></li>
                 <li><Link to="/media" className="hover:text-primary text-left">Galería Multimedia</Link></li>
               </ul>
@@ -243,7 +243,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
             {/* Column 3: Legal */}
             <div>
-              <h4 className="font-bold text-white uppercase tracking-wider mb-6 text-sm">Legal</h4>
+              <h4 className="font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-6 text-sm">Legal</h4>
               <ul className="space-y-3 text-sm">
                 <li><button className="hover:text-primary text-left">Aviso Legal</button></li>
                 <li><button className="hover:text-primary text-left">Política de Privacidad</button></li>
@@ -253,23 +253,23 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
             {/* Column 4: Admin Access (Prominent) */}
             <div>
-              <h4 className="font-bold text-white uppercase tracking-wider mb-6 text-sm">Organización</h4>
+              <h4 className="font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-6 text-sm">Organización</h4>
               <Link
                 to="/admin"
-                className="w-full group flex items-center gap-3 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white px-4 py-4 rounded-xl border border-white/10 hover:border-primary/50 transition-all text-left"
+                className="w-full group flex items-center gap-3 bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white px-4 py-4 rounded-xl border border-slate-200 dark:border-white/10 hover:border-primary/50 transition-all text-left"
               >
-                <div className="size-10 rounded-lg bg-black/40 flex items-center justify-center group-hover:bg-primary group-hover:text-background-dark transition-colors border border-white/5">
+                <div className="size-10 rounded-lg bg-slate-200 dark:bg-black/40 flex items-center justify-center group-hover:bg-primary group-hover:text-background-dark transition-colors border border-slate-300 dark:border-white/5">
                   <span className="material-symbols-outlined">admin_panel_settings</span>
                 </div>
                 <div>
-                  <span className="block text-xs font-bold uppercase text-white group-hover:text-primary">Acceso Staff</span>
-                  <span className="block text-[10px] text-slate-500">Solo personal autorizado</span>
+                  <span className="block text-xs font-bold uppercase text-slate-900 dark:text-white group-hover:text-primary">Acceso Staff</span>
+                  <span className="block text-[10px] text-slate-500 dark:text-slate-500">Solo personal autorizado</span>
                 </div>
               </Link>
             </div>
           </div>
 
-          <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs">
+          <div className="border-t border-slate-200 dark:border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs">
             <span>&copy; 2026 Torneo Muskizko Udala. Todos los derechos reservados.</span>
             <div className="flex items-center gap-6">
               <Link to="/sponsors" className="hover:text-primary">Patrocinadores</Link>

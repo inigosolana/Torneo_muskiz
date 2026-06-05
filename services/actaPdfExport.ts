@@ -2,6 +2,11 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import type { ActaExportContext } from '../utils/actaBuildContext';
 import { buildActaPrintHtmlAsync } from '../utils/actaPrintHtml';
+import {
+    ACTA_PDF_HEIGHT_PX,
+    ACTA_PDF_WIDTH_PX,
+    prepareActaHtmlForPdfExport,
+} from './actaHtmlTemplateFill';
 
 function waitForImages(root: HTMLElement): Promise<void> {
     const imgs = [...root.querySelectorAll('img')];
@@ -27,14 +32,24 @@ function withDocumentBase(html: string): string {
     return html.replace('<head>', `<head><base href="${base}">`);
 }
 
+function applyFitZoom(body: HTMLElement, zoom: number): void {
+    body.style.zoom = String(zoom);
+    body.style.width = `${ACTA_PDF_WIDTH_PX}px`;
+    body.style.margin = '0';
+    body.style.padding = '0';
+    body.style.background = '#ffffff';
+}
+
 /** Convierte el HTML del acta en un PDF A4 (1 página). */
 export async function actaHtmlToPdfBlob(html: string): Promise<Blob> {
+    const prepared = prepareActaHtmlForPdfExport(withDocumentBase(html));
+
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.left = '-12000px';
     iframe.style.top = '0';
-    iframe.style.width = '210mm';
-    iframe.style.height = '1px';
+    iframe.style.width = `${ACTA_PDF_WIDTH_PX}px`;
+    iframe.style.height = `${ACTA_PDF_HEIGHT_PX}px`;
     iframe.style.border = '0';
     iframe.style.overflow = 'hidden';
     document.body.appendChild(iframe);
@@ -45,7 +60,7 @@ export async function actaHtmlToPdfBlob(html: string): Promise<Blob> {
         throw new Error('No se pudo preparar el documento para el PDF.');
     }
     doc.open();
-    doc.write(withDocumentBase(html));
+    doc.write(prepared);
     doc.close();
 
     const sheet = doc.body;
@@ -53,32 +68,33 @@ export async function actaHtmlToPdfBlob(html: string): Promise<Blob> {
     try {
         await waitForImages(sheet);
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        iframe.style.height = `${Math.max(sheet.scrollHeight, 1)}px`;
+
+        const naturalHeight = sheet.scrollHeight;
+        const fitZoom = Math.min(1, (ACTA_PDF_HEIGHT_PX / Math.max(naturalHeight, 1)) * 0.995);
+        applyFitZoom(sheet, fitZoom);
+
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+        const captureHeight = Math.min(ACTA_PDF_HEIGHT_PX, Math.ceil(sheet.scrollHeight));
+        iframe.style.height = `${captureHeight}px`;
 
         const canvas = await html2canvas(sheet, {
-            scale: 2,
+            scale: 3,
             useCORS: true,
             allowTaint: false,
             logging: false,
             backgroundColor: '#ffffff',
-            width: sheet.scrollWidth,
-            height: sheet.scrollHeight,
-            imageTimeout: 15000,
+            width: ACTA_PDF_WIDTH_PX,
+            height: captureHeight,
+            windowWidth: ACTA_PDF_WIDTH_PX,
+            windowHeight: captureHeight,
+            imageTimeout: 20000,
         });
 
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const pageW = pdf.internal.pageSize.getWidth();
         const pageH = pdf.internal.pageSize.getHeight();
-        const ratio = canvas.width / canvas.height;
-        let drawW = pageW;
-        let drawH = drawW / ratio;
-        if (drawH > pageH) {
-            drawH = pageH;
-            drawW = drawH * ratio;
-        }
-        const x = (pageW - drawW) / 2;
-        const y = Math.max(0, (pageH - drawH) / 2);
-        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', x, y, drawW, drawH);
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pageW, pageH, undefined, 'MEDIUM');
         return pdf.output('blob');
     } finally {
         document.body.removeChild(iframe);

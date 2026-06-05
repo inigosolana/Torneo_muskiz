@@ -46,6 +46,19 @@ export function countSquadPlayers(players: Player[]): number {
     return players.filter((p) => isPlayerRole(p.role)).length;
 }
 
+/** Estimación cuando un equipo inscrito aún no ha cargado plantilla. */
+export const ESTIMATED_PLAYERS_IF_EMPTY_ROSTER = 10;
+
+export function participantPlayerCountForTeam(team: Team): number {
+    const registered = countSquadPlayers(team.players);
+    return registered > 0 ? registered : ESTIMATED_PLAYERS_IF_EMPTY_ROSTER;
+}
+
+export function totalParticipantPlayers(teams: Team[], onlyPaid = true): number {
+    const list = onlyPaid ? teams.filter((t) => t.paymentStatus === 'PAID') : teams;
+    return list.reduce((sum, team) => sum + participantPlayerCountForTeam(team), 0);
+}
+
 export function countSquadCoaches(players: Player[]): number {
     return players.filter((p) => p.role === 'COACH').length;
 }

@@ -16,6 +16,13 @@
 
 body {
   font-family: "Noto Sans", sans-serif;
+  background-color: #f8fcfc;
+  color: #0f172a;
+}
+
+.dark body {
+  background-color: #102222;
+  color: #e2e8f0;
 }
 
 h1,
@@ -40,15 +47,27 @@ h6 {
 }
 
 ::-webkit-scrollbar-track {
-  background: #102222;
+  background: #e2e8f0;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2a3e3e;
+  background: #94a3b8;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
+  background: #007c7c;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #102222;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #2a3e3e;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
   background: #0df2f2;
 }
 

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PLAYER_LICENSE_LAST_DAY } from '../constants/registrationDeadlines';
 import { searchRules } from '../services/geminiService';
 import { useTournamentData } from '../context/TournamentDataContext';
@@ -7,9 +8,25 @@ import { CompetitionPublicResultsSection } from '../components/CompetitionPublic
 import { CompetitionPublicStandingsSection } from '../components/CompetitionPublicStandingsSection';
 import { CompetitionPublicFinalPhaseSection } from '../components/CompetitionPublicFinalPhaseSection';
 
+type ScheduleTab = 'info' | 'calendar' | 'results' | 'standings' | 'finals';
+
+function tabFromSearchParam(value: string | null): ScheduleTab | null {
+    if (value === 'info' || value === 'calendar' || value === 'results' || value === 'standings' || value === 'finals') {
+        return value;
+    }
+    return null;
+}
+
 export const Schedule: React.FC = () => {
     const { teams, categoryLimits, publicMatchesVisible, publicDisplayMatches } = useTournamentData();
-    const [activeTab, setActiveTab] = useState<'info' | 'calendar' | 'results' | 'standings' | 'finals'>('info');
+    const [searchParams] = useSearchParams();
+    const requestedTab = tabFromSearchParam(searchParams.get('tab'));
+    const [activeTab, setActiveTab] = useState<ScheduleTab>(requestedTab ?? 'info');
+
+    useEffect(() => {
+        const tab = tabFromSearchParam(searchParams.get('tab'));
+        if (tab) setActiveTab(tab);
+    }, [searchParams]);
     const [infoSubTab, setInfoSubTab] = useState<'general' | 'rules'>('general');
 
     const publicMatches = publicDisplayMatches;
