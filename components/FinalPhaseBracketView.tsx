@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import type { Match, Team } from '../types';
+import { applyFinalPhaseResolution } from '../utils/resolveFinalPhaseTeams';
 import {
     findMatchForEliminationSlot,
     formatEliminationMatchLine,
@@ -63,6 +64,11 @@ export const FinalPhaseBracketView: React.FC<FinalPhaseBracketViewProps> = ({
     onlyRelevantSlots = false,
     showTeamPaths = false,
 }) => {
+    const resolvedMatches = useMemo(
+        () => applyFinalPhaseResolution(matches, teams).matches,
+        [matches, teams]
+    );
+
     const resolvedFocusTeams = useMemo(() => {
         if (focusTeams?.length) return focusTeams.filter((t) => t.division === division);
         if (focusTeam?.division === division) return [focusTeam];
@@ -75,22 +81,22 @@ export const FinalPhaseBracketView: React.FC<FinalPhaseBracketViewProps> = ({
         if (!onlyRelevantSlots || resolvedFocusTeams.length === 0) return allSlots;
         const labels = new Set<string>();
         for (const t of resolvedFocusTeams) {
-            for (const p of getTeamFinalPhasePaths(t, teams, matches)) {
+            for (const p of getTeamFinalPhasePaths(t, teams, resolvedMatches)) {
                 labels.add(p.slot.roundLabel);
             }
         }
         return allSlots.filter((s) => labels.has(s.roundLabel));
-    }, [allSlots, onlyRelevantSlots, resolvedFocusTeams, teams, matches]);
+    }, [allSlots, onlyRelevantSlots, resolvedFocusTeams, teams, resolvedMatches]);
 
     const byPhase = useMemo(() => groupSlotsByPhase(slots), [slots]);
 
     const focusPaths = useMemo(() => {
         const paths: ReturnType<typeof getTeamFinalPhasePaths> = [];
         for (const t of resolvedFocusTeams) {
-            paths.push(...getTeamFinalPhasePaths(t, teams, matches));
+            paths.push(...getTeamFinalPhasePaths(t, teams, resolvedMatches));
         }
         return paths;
-    }, [resolvedFocusTeams, teams, matches]);
+    }, [resolvedFocusTeams, teams, resolvedMatches]);
 
     if (slots.length === 0) {
         return (
@@ -112,7 +118,7 @@ export const FinalPhaseBracketView: React.FC<FinalPhaseBracketViewProps> = ({
         <div className="space-y-6">
             {showTeamPaths &&
                 resolvedFocusTeams.map((team) => {
-                    const paths = getTeamFinalPhasePaths(team, teams, matches);
+                    const paths = getTeamFinalPhasePaths(team, teams, resolvedMatches);
                     if (paths.length === 0) return null;
                     return <TeamPathsCard key={team.id} team={team} paths={paths} />;
                 })}
@@ -151,7 +157,7 @@ export const FinalPhaseBracketView: React.FC<FinalPhaseBracketViewProps> = ({
                                     {phaseSlots.map((slot) => {
                                         const scheduled = findMatchForEliminationSlot(
                                             slot,
-                                            matches,
+                                            resolvedMatches,
                                             division,
                                             teams
                                         );
