@@ -62,7 +62,10 @@ const TEAM_SHIELD_MATCHERS: ShieldMatcher[] = [
             /\brosé\s*camargo\b/.test(n) ||
             (/\bcamargo\b/.test(n) && /\brose\b/.test(n)) ||
             /\brose\s*camargo\s*beach\b/.test(n) ||
-            /\brosé\s*camargo\s*beach\b/.test(n),
+            /\brosé\s*camargo\s*beach\b/.test(n) ||
+            /\brose\s*de\s*sf\b/.test(n) ||
+            /\brose\s*beach\b/.test(n) ||
+            /\brosé\s*beach\b/.test(n),
         src: roseCamargoShield,
     },
     {

@@ -126,7 +126,9 @@ export function resolvePublicTeamShieldUrl(teamName: string, logoFromDb?: string
   if (
     /\brose\s*camargo\b/.test(n) ||
     (/\bcamargo\b/.test(n) && /\brose\b/.test(n)) ||
-    /\brose\s*camargo\s*beach\b/.test(n)
+    /\brose\s*camargo\s*beach\b/.test(n) ||
+    /\brose\s*de\s*sf\b/.test(n) ||
+    /\brose\s*beach\b/.test(n)
   ) {
     return `${base}/escudos/rose-camargo.png`;
   }
