@@ -274,7 +274,19 @@ const App: React.FC = () => {
             );
         })
         .catch(() => {
-            /* reintenta en el siguiente cambio de partidos */
+            const resolved = applyFinalPhaseResolution(matches, teams);
+            if (!resolved.changed) return;
+            void matchService.saveMatches(resolved.matches).then(() => {
+                lastFinalPhasePatchKeyRef.current = patchKey;
+                setMatches(resolved.matches);
+                toast.success(
+                    resolved.divisionsUpdated.length === 1
+                        ? `Fase final de ${resolved.divisionsUpdated[0]} actualizada según grupos.`
+                        : `Fase final actualizada: ${resolved.divisionsUpdated.join(', ')}.`
+                );
+            }).catch(() => {
+                /* reintenta en el siguiente cambio de partidos */
+            });
         });
   }, [dataLoaded, isStaff, teams, matches]);
 

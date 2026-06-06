@@ -18,7 +18,6 @@ import {
     isPlaceholderTeamName,
     normalizeTeamLabel,
     resolveMatchDivision,
-    teamsEligibleForSchedule,
 } from '../services/muskizScheduleSimulator';
 
 export interface FinalPhaseResolutionResult {
@@ -28,8 +27,12 @@ export interface FinalPhaseResolutionResult {
     divisionsUpdated: Team['division'][];
 }
 
-function eligibleTeamsInDivision(teams: Team[], division: Team['division']): Team[] {
-    return teamsEligibleForSchedule(teams).filter((t) => t.division === division);
+function tournamentDivisions(teams: Team[]): Team['division'][] {
+    return [...new Set(teams.filter((t) => t.status === 'approved').map((t) => t.division))] as Team['division'][];
+}
+
+function rosterForFinalPhase(teams: Team[], division: Team['division']): Team[] {
+    return teams.filter((t) => t.division === division && t.status === 'approved');
 }
 
 /** Placeholders de plantilla que no cubre `isPlaceholderTeamName`. */
@@ -49,21 +52,51 @@ function mapKey(label: string): string {
 }
 
 function getMatchWinner(m: Match): string | null {
-    if (m.status !== 'FINISHED' || m.scoreA === null || m.scoreB === null) return null;
-    if (m.scoreA === m.scoreB) return null;
-    return m.scoreA > m.scoreB ? m.teamA : m.teamB;
+    if (!isMatchEffectivelyFinished(m)) return null;
+    return m.scoreA! > m.scoreB! ? m.teamA : m.teamB;
 }
 
 function getMatchLoser(m: Match): string | null {
-    if (m.status !== 'FINISHED' || m.scoreA === null || m.scoreB === null) return null;
-    if (m.scoreA === m.scoreB) return null;
-    return m.scoreA > m.scoreB ? m.teamB : m.teamA;
+    if (!isMatchEffectivelyFinished(m)) return null;
+    return m.scoreA! > m.scoreB! ? m.teamB : m.teamA;
+}
+
+/** Partido decidido (marcador válido), aunque status no sea FINISHED en BD. */
+export function isMatchEffectivelyFinished(m: Match): boolean {
+    if (m.status === 'FINISHED') {
+        return m.scoreA !== null && m.scoreB !== null && m.scoreA !== m.scoreB;
+    }
+    return m.scoreA !== null && m.scoreB !== null && m.scoreA !== m.scoreB;
+}
+
+/** Normaliza partidos para clasificación: cuenta como FINISHED si ya hay marcador. */
+function matchesForStandingsComputation(matches: Match[]): Match[] {
+    return matches.map((m) => {
+        if (m.status === 'FINISHED' || !isMatchEffectivelyFinished(m)) return m;
+        return { ...m, status: 'FINISHED' as const };
+    });
+}
+
+function placeholderLookupKeys(label: string): string[] {
+    const key = mapKey(label);
+    const keys = [key];
+    const gr = key.match(/^(\d+º)\s*Gr\.?\s*([A-D])\b/i);
+    if (gr) {
+        keys.push(mapKey(`${gr[1]!} Gr.${gr[2]!.toUpperCase()}`));
+        keys.push(mapKey(`${gr[1]!} Gr. ${gr[2]!.toUpperCase()}`));
+    }
+    const ganSemi = key.match(/^Gan\.?\s*Semi\s*([A-Z]{2})\s*(\d+)\b/i);
+    if (ganSemi) {
+        keys.push(mapKey(`Gan.Semi ${ganSemi[1]!.toUpperCase()} ${ganSemi[2]!}`));
+    }
+    return keys;
 }
 
 function resolveFromMap(name: string, map: Map<string, string>): string {
-    const key = mapKey(name);
-    const hit = map.get(key);
-    if (hit) return hit;
+    for (const key of placeholderLookupKeys(name)) {
+        const hit = map.get(key);
+        if (hit) return hit;
+    }
     if (!isExtendedEliminationPlaceholder(name)) return name;
     return name;
 }
@@ -84,13 +117,7 @@ export function isGroupStageCompleteForDivision(
         return true;
     });
     if (groupMatches.length === 0) return false;
-    return groupMatches.every(
-        (m) =>
-            m.status === 'FINISHED' &&
-            m.scoreA !== null &&
-            m.scoreB !== null &&
-            m.scoreA !== m.scoreB
-    );
+    return groupMatches.every(isMatchEffectivelyFinished);
 }
 
 function findEliminationMatch(
@@ -119,33 +146,38 @@ function buildGroupStandingsMap(
     division: Team['division']
 ): Map<string, string> {
     const map = new Map<string, string>();
-    const eligible = eligibleTeamsInDivision(teams, division);
-    const eligibleIds = new Set(eligible.map((t) => t.id));
+    const roster = rosterForFinalPhase(teams, division);
+    const rosterIds = new Set(roster.map((t) => t.id));
+    const standingsMatches = matchesForStandingsComputation(matches);
     const groups = getGroupDistributionForDivision(teams, division, false)
         .map((g) => ({
             key: g.key,
-            teams: g.teams.filter((t) => eligibleIds.has(t.id)),
+            teams: g.teams.filter((t) => rosterIds.has(t.id)),
         }))
         .filter((g) => g.teams.length > 0);
 
     for (const g of groups) {
-        const table = computeStandings(teams, matches, {
+        const table = computeStandings(teams, standingsMatches, {
             division,
             group: g.key,
             onlyPaidTeams: false,
             rosterOverride: g.teams,
         });
-        if (table[0]) map.set(mapKey(`1º Gr.${g.key}`), table[0].name);
-        if (table[1]) map.set(mapKey(`2º Gr.${g.key}`), table[1].name);
-        if (table[2]) map.set(mapKey(`3º Gr.${g.key}`), table[2].name);
+        const pos = (p: number, k: string, name: string) => {
+            map.set(mapKey(`${p}º Gr.${k}`), name);
+            map.set(mapKey(`${p}º Gr. ${k}`), name);
+        };
+        if (table[0]) pos(1, g.key, table[0].name);
+        if (table[1]) pos(2, g.key, table[1].name);
+        if (table[2]) pos(3, g.key, table[2].name);
     }
 
     if (groups.length <= 1) {
-        const table = computeStandings(teams, matches, {
+        const table = computeStandings(teams, standingsMatches, {
             division,
             group: 'all',
             onlyPaidTeams: false,
-            rosterOverride: eligible,
+            rosterOverride: roster,
         });
         const labels = ['1º Clasificado', '2º Clasificado', '3º Clasificado', '4º Clasificado'] as const;
         labels.forEach((label, i) => {
@@ -158,7 +190,7 @@ function buildGroupStandingsMap(
             key: g.key,
             names: g.teams.map((t) => t.name),
         }));
-        const ranked = rankThirdPlaceCandidates(teams, matches, groupDefs, division, false);
+        const ranked = rankThirdPlaceCandidates(teams, standingsMatches, groupDefs, division, false);
         const slots = ranked ? splitThirdPlaceQualification(ranked) : null;
         if (slots) {
             map.set(mapKey('Mejor 3º (directo)'), slots.bestDirect.name);
@@ -177,8 +209,8 @@ function buildKnockoutOutcomeMap(
     base: Map<string, string>
 ): Map<string, string> {
     const map = new Map(base);
-    const eligible = eligibleTeamsInDivision(teams, division);
-    const template = getDivisionEliminationTemplate(eligible);
+    const roster = rosterForFinalPhase(teams, division);
+    const template = getDivisionEliminationTemplate(roster);
     const code = DIVISION_CODE[division];
     const phases: DivisionEliminationSlot['phase'][] = [
         'REPESCA',
@@ -197,8 +229,11 @@ function buildKnockoutOutcomeMap(
             const match = findEliminationMatch(slot, matches, division, teams);
             if (!match) continue;
 
-            const winner = getMatchWinner(match);
-            const loser = getMatchLoser(match);
+            const resolvedA = resolveFromMap(match.teamA, map);
+            const resolvedB = resolveFromMap(match.teamB, map);
+            const resolvedMatch = { ...match, teamA: resolvedA, teamB: resolvedB };
+            const winner = getMatchWinner(resolvedMatch);
+            const loser = getMatchLoser(resolvedMatch);
             if (!winner && !loser) continue;
 
             if (phase === 'REPESCA' && winner) {
@@ -274,15 +309,13 @@ export function applyFinalPhaseResolution(
     teams: Team[],
     divisionFilter?: Team['division']
 ): FinalPhaseResolutionResult {
-    const divisions = divisionFilter
-        ? [divisionFilter]
-        : ([...new Set(teamsEligibleForSchedule(teams).map((t) => t.division))] as Team['division'][]);
+    const divisions = divisionFilter ? [divisionFilter] : tournamentDivisions(teams);
 
     let working = matches;
     const divisionsUpdated: Team['division'][] = [];
 
     for (const division of divisions) {
-        if (eligibleTeamsInDivision(teams, division).length < 2) continue;
+        if (rosterForFinalPhase(teams, division).length < 2) continue;
         const { matches: next, changed } = resolveDivision(teams, working, division);
         if (changed) {
             working = next;
@@ -330,10 +363,9 @@ export function divisionsWithCompleteGroupStage(
     teams: Team[],
     matches: Match[]
 ): Team['division'][] {
-    return teamsEligibleForSchedule(teams)
-        .map((t) => t.division)
-        .filter((div, i, arr) => arr.indexOf(div) === i)
-        .filter((div) => isGroupStageCompleteForDivision(teams, matches, div));
+    return tournamentDivisions(teams).filter((div) =>
+        isGroupStageCompleteForDivision(teams, matches, div)
+    );
 }
 
 /** Hay cruces de fase final con placeholders que se pueden rellenar desde clasificación. */

@@ -680,8 +680,22 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                 }
                 return true;
             } catch {
-                toast.error('No se pudo guardar la fase final en la base de datos.');
-                return false;
+                try {
+                    const resolved = applyFinalPhaseResolution(matches, teams);
+                    if (!resolved.changed) return false;
+                    await onUpdateMatches(resolved.matches);
+                    if (!silent) {
+                        toast.success(
+                            resolved.divisionsUpdated.length === 1
+                                ? `Fase final de ${resolved.divisionsUpdated[0]} guardada según clasificación de grupos.`
+                                : `Fase final guardada: ${resolved.divisionsUpdated.join(', ')}.`
+                        );
+                    }
+                    return true;
+                } catch {
+                    toast.error('No se pudo guardar la fase final en la base de datos.');
+                    return false;
+                }
             } finally {
                 finalPhaseSyncingRef.current = false;
                 setFinalPhaseSyncing(false);
