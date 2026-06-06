@@ -308,11 +308,16 @@ const App: React.FC = () => {
     [matches, teams]
   );
 
+  const resolvedPublicSimulationMatches = useMemo(
+    () => applyFinalPhaseResolution(publicSimulationMatches, teams).matches,
+    [publicSimulationMatches, teams]
+  );
+
   const publicDisplayMatches = useMemo(() => {
     const official = matchesForPublicSchedule(displayMatches);
     if (official.length > 0) return official;
-    return matchesForPublicSchedule(publicSimulationMatches);
-  }, [displayMatches, publicSimulationMatches]);
+    return matchesForPublicSchedule(resolvedPublicSimulationMatches);
+  }, [displayMatches, resolvedPublicSimulationMatches]);
 
   const managerEmail = normalizeEmail(user?.email);
   const hasApprovedTeam = teams.some(

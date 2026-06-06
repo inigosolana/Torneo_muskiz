@@ -23,10 +23,13 @@ import {
 } from '../services/tournamentScheduleService';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 import {
+    applyFinalPhasePatchesToDrafts,
     applyFinalPhaseResolution,
     divisionsWithCompleteGroupStage,
+    getFinalPhaseTeamPatches,
     hasPendingFinalPhaseTeamPatches,
     persistFinalPhaseTeamNames,
+    resolveMatchesForDisplay,
 } from '../utils/resolveFinalPhaseTeams';
 import {
     rankThirdPlaceCandidates,
@@ -637,9 +640,12 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     );
 
     const simulationViewMatches = useMemo(() => {
-        if (simulationViewDraftId === 'all') return allSimDraftMatches;
-        return simDrafts.find((d) => d.id === simulationViewDraftId)?.matches ?? [];
-    }, [simulationViewDraftId, simDrafts, allSimDraftMatches]);
+        const raw =
+            simulationViewDraftId === 'all'
+                ? allSimDraftMatches
+                : simDrafts.find((d) => d.id === simulationViewDraftId)?.matches ?? [];
+        return resolveMatchesForDisplay(raw, allSimDraftMatches, teams);
+    }, [simulationViewDraftId, simDrafts, allSimDraftMatches, teams]);
 
     const compDisplayMatches = useMemo(
         () => (compArenaMode === 'simulation' ? simulationViewMatches : displayMatches),
@@ -647,8 +653,11 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     );
 
     const divisionsReadyForFinal = useMemo(
-        () => divisionsWithCompleteGroupStage(teams, matches),
-        [teams, matches]
+        () =>
+            compArenaMode === 'simulation'
+                ? divisionsWithCompleteGroupStage(teams, allSimDraftMatches)
+                : divisionsWithCompleteGroupStage(teams, matches),
+        [teams, matches, compArenaMode, allSimDraftMatches]
     );
 
     const [finalPhaseSyncing, setFinalPhaseSyncing] = useState(false);
@@ -657,13 +666,33 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     const syncFinalPhaseToDatabase = useCallback(
         async (silent = false): Promise<boolean> => {
             if (finalPhaseSyncingRef.current) return false;
-            if (!hasPendingFinalPhaseTeamPatches(teams, matches)) {
+
+            const sourceMatches = compArenaMode === 'simulation' ? allSimDraftMatches : matches;
+            if (!hasPendingFinalPhaseTeamPatches(teams, sourceMatches)) {
                 if (!silent) toast.message('La fase final ya está actualizada en todas las categorías.');
                 return false;
             }
             finalPhaseSyncingRef.current = true;
             setFinalPhaseSyncing(true);
             try {
+                if (compArenaMode === 'simulation') {
+                    const { drafts, changed, divisionsUpdated } = applyFinalPhasePatchesToDrafts(
+                        simDrafts,
+                        teams
+                    );
+                    if (!changed) return false;
+                    setSimDrafts(drafts);
+                    await persistSimDraftsAsync(drafts, activeDraftId);
+                    if (!silent) {
+                        toast.success(
+                            divisionsUpdated.length === 1
+                                ? `Fase final de ${divisionsUpdated[0]} guardada según clasificación de grupos.`
+                                : `Fase final guardada: ${divisionsUpdated.join(', ')}.`
+                        );
+                    }
+                    return true;
+                }
+
                 const { changed, divisionsUpdated } = await persistFinalPhaseTeamNames(
                     matches,
                     teams,
@@ -701,7 +730,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                 setFinalPhaseSyncing(false);
             }
         },
-        [matches, teams, setMatches]
+        [matches, teams, setMatches, compArenaMode, allSimDraftMatches, simDrafts, activeDraftId, onUpdateMatches]
     );
 
     const resultsMatchCountByDivision = useMemo(() => {
@@ -916,6 +945,28 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             setSimulationsSaving(false);
         }
     };
+
+    const lastSimFinalPhasePatchKeyRef = React.useRef('');
+    /** Persiste placeholders de fase final en borradores cuando grupos ya están cerrados. */
+    useEffect(() => {
+        if (!simulationsLoaded || teams.length === 0 || simDrafts.length === 0) return;
+        const { patches } = getFinalPhaseTeamPatches(allSimDraftMatches, teams);
+        if (patches.length === 0) {
+            lastSimFinalPhasePatchKeyRef.current = '';
+            return;
+        }
+        const patchKey = patches
+            .map((p) => `${p.id}|${p.teamA}|${p.teamB}`)
+            .sort()
+            .join(';;');
+        if (patchKey === lastSimFinalPhasePatchKeyRef.current) return;
+        const { drafts, changed } = applyFinalPhasePatchesToDrafts(simDrafts, teams);
+        if (!changed) return;
+        lastSimFinalPhasePatchKeyRef.current = patchKey;
+        setSimDrafts(drafts);
+        void persistSimDraftsAsync(drafts, activeDraftId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- simDrafts: evita bucle; patchKey deduplica
+    }, [simulationsLoaded, teams, allSimDraftMatches, activeDraftId]);
 
     /** Completa borradores del sábado/domingo (semis SF, semis IM, vueltas JF-A, etc.) si faltan partidos. */
     useEffect(() => {
@@ -2049,12 +2100,21 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     };
 
     const updateDraftMatchSetScores = async (matchId: string, setScores: BeachSetScores) => {
-        const next = simDrafts.map((d) => ({
+        let next = simDrafts.map((d) => ({
             ...d,
             matches: d.matches.map((m) => (m.id === matchId ? applySetScoresToMatch(m, setScores) : m)),
         }));
+        const { drafts: patched, changed, divisionsUpdated } = applyFinalPhasePatchesToDrafts(next, teams);
+        if (changed) next = patched;
         setSimDrafts(next);
         await persistSimDraftsAsync(next, activeDraftId);
+        if (changed && divisionsUpdated.length > 0) {
+            toast.success(
+                divisionsUpdated.length === 1
+                    ? `Fase final de ${divisionsUpdated[0]} actualizada según clasificación de grupos.`
+                    : `Fase final actualizada: ${divisionsUpdated.join(', ')}.`
+            );
+        }
     };
 
     // --- Report (Acta) Logic ---
@@ -4410,7 +4470,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                             )}
                                         </div>
 
-                                        {compArenaMode === 'official' && divisionsReadyForFinal.length > 0 && (
+                                        {divisionsReadyForFinal.length > 0 && (
                                             <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 flex flex-wrap items-center justify-between gap-3">
                                                 <div>
                                                     <p className="text-sm font-bold text-emerald-900">
@@ -4419,6 +4479,9 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                     <p className="text-xs text-emerald-800 mt-0.5">
                                                         {divisionsReadyForFinal.join(' · ')} — los equipos se colocan
                                                         solos en repesca, cuartos, semis y final según la clasificación.
+                                                        {compArenaMode === 'simulation'
+                                                            ? ' (borrador de simulación)'
+                                                            : ''}
                                                     </p>
                                                 </div>
                                                 <button

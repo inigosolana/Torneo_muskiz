@@ -368,6 +368,39 @@ export function divisionsWithCompleteGroupStage(
     );
 }
 
+/** Resuelve placeholders en memoria usando el contexto completo (p. ej. todos los borradores). */
+export function resolveMatchesForDisplay(
+    source: Match[],
+    contextMatches: Match[],
+    teams: Team[]
+): Match[] {
+    const { matches: resolved } = applyFinalPhaseResolution(contextMatches, teams);
+    const byId = new Map(resolved.map((m) => [m.id, m]));
+    return source.map((m) => byId.get(m.id) ?? m);
+}
+
+/** Aplica parches de fase final a borradores de simulación (calendar_simulations). */
+export function applyFinalPhasePatchesToDrafts<T extends { matches: Match[] }>(
+    drafts: T[],
+    teams: Team[],
+    divisionFilter?: Team['division']
+): { drafts: T[]; changed: boolean; divisionsUpdated: Team['division'][] } {
+    const merged = drafts.flatMap((d) => d.matches);
+    const { patches, divisionsUpdated } = getFinalPhaseTeamPatches(merged, teams, divisionFilter);
+    if (patches.length === 0) {
+        return { drafts, changed: false, divisionsUpdated: [] };
+    }
+    const patchById = new Map(patches.map((p) => [p.id, p]));
+    const nextDrafts = drafts.map((d) => ({
+        ...d,
+        matches: d.matches.map((m) => {
+            const p = patchById.get(m.id);
+            return p ? { ...m, teamA: p.teamA, teamB: p.teamB } : m;
+        }),
+    }));
+    return { drafts: nextDrafts, changed: true, divisionsUpdated };
+}
+
 /** Hay cruces de fase final con placeholders que se pueden rellenar desde clasificación. */
 export function hasPendingFinalPhaseTeamPatches(teams: Team[], matches: Match[]): boolean {
     return getFinalPhaseTeamPatches(matches, teams).patches.length > 0;
