@@ -42,3 +42,10 @@ export function filterActiveTeams(
 ): Team[] {
     return teams.filter((t) => !isTeamWithdrawn(t, extra));
 }
+
+export function hasWithdrawnTeamInDivision(
+    division: Team['division'],
+    extra: WithdrawnTeamSpec[] = TOURNAMENT_WITHDRAWN_TEAMS
+): boolean {
+    return extra.some((w) => w.division === division);
+}

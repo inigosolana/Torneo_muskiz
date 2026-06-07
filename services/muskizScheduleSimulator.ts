@@ -28,7 +28,7 @@
  */
 import type { Match, Team } from '../types';
 import { SUNDAY_BREAK_START, SUNDAY_FINAL_START } from '../utils/sundaySchedule';
-import { isTeamWithdrawn } from '../utils/teamWithdrawals';
+import { hasWithdrawnTeamInDivision, isTeamWithdrawn } from '../utils/teamWithdrawals';
 
 export type MuskizScheduleDayLabel = 'Viernes' | 'Sábado' | 'Domingo';
 
@@ -2738,16 +2738,92 @@ export function syncInfantilMasculinoSemisInSundayDraft(
 }
 
 /**
+ * Tras baja IM: sustituye todo el domingo IM (liguilla + semis 1º–4º/2º–3º + 3º/4º + final)
+ * por la plantilla con equipos activos, conservando hora y marcador de partidos que siguen.
+ */
+export function reconcileSundayInfantilMasculinoDraft(
+    teams: Team[],
+    sundayMatches: Match[],
+    options?: MuskizSimulatorOptions
+): { matches: Match[]; changed: boolean; notes: string[] } {
+    if (!hasWithdrawnTeamInDivision('Infantil Masculino')) {
+        return { matches: sundayMatches, changed: false, notes: [] };
+    }
+
+    const { matches: freshSunday } = buildMuskizDayDraftMatches(teams, 'Domingo', options);
+    const freshIm = freshSunday.filter((m) => divisionFromMatchRound(m.round) === 'Infantil Masculino');
+    if (freshIm.length === 0) {
+        return { matches: sundayMatches, changed: false, notes: [] };
+    }
+
+    const existingIm = sundayMatches.filter((m) => divisionFromMatchRound(m.round) === 'Infantil Masculino');
+    const existingByKey = new Map<string, Match>();
+    for (const m of existingIm) {
+        existingByKey.set(matchPlanKey(m), m);
+    }
+
+    const reconciledIm = freshIm.map((fresh) => {
+        const prev = existingByKey.get(matchPlanKey(fresh));
+        if (!prev) return fresh;
+        return {
+            ...fresh,
+            id: prev.id,
+            time: prev.time && prev.time !== 'PENDIENTE' ? prev.time : fresh.time,
+            court: prev.court || fresh.court,
+            scoreA: prev.scoreA,
+            scoreB: prev.scoreB,
+            status: prev.status,
+            report: prev.report,
+            isPublic: prev.isPublic ?? fresh.isPublic,
+        };
+    });
+
+    const nonIm = sundayMatches.filter((m) => divisionFromMatchRound(m.round) !== 'Infantil Masculino');
+    const merged = [...nonIm, ...reconciledIm].sort((a, b) => {
+        const ta = a.time === 'PENDIENTE' ? 99_999 : timeToMinutes(a.time);
+        const tb = b.time === 'PENDIENTE' ? 99_999 : timeToMinutes(b.time);
+        if (ta !== tb) return ta - tb;
+        return (a.court ?? '').localeCompare(b.court ?? '', 'es');
+    });
+
+    const imBlockSignature = (list: Match[]) =>
+        list
+            .filter((m) => divisionFromMatchRound(m.round) === 'Infantil Masculino')
+            .map((m) => `${matchPlanKey(m)}|${m.time}|${m.court}|${m.teamA}|${m.teamB}`)
+            .sort()
+            .join(';;');
+
+    if (imBlockSignature(sundayMatches) === imBlockSignature(merged)) {
+        return { matches: sundayMatches, changed: false, notes: [] };
+    }
+
+    return {
+        matches: merged,
+        changed: true,
+        notes: ['infantil masculino (liguilla, semis 1º–4º/2º–3º, 3º/4º y final)'],
+    };
+}
+
+/**
  * Sustituye el bloque eliminatorio IF/IM del domingo por la plantilla actual
  * (semis, 3º/4º y final), conservando horarios de partidos de grupos.
  */
 export function syncSundayInfantilEliminationInDraft(
     teams: Team[],
     sundayMatches: Match[],
-    options?: MuskizSimulatorOptions
+    options?: MuskizSimulatorOptions,
+    opts?: { onlyDivisions?: Team['division'][] }
 ): { matches: Match[]; changed: boolean } {
-    const isInfantilElim = (m: Match) =>
-        isInfantilFemeninoEliminationMatch(m) || isInfantilMasculinoEliminationMatch(m);
+    const isInfantilElim = (m: Match) => {
+        const div = divisionFromMatchRound(m.round);
+        if (div === 'Infantil Femenino' && isInfantilFemeninoEliminationMatch(m)) {
+            return !opts?.onlyDivisions || opts.onlyDivisions.includes('Infantil Femenino');
+        }
+        if (div === 'Infantil Masculino' && isInfantilMasculinoEliminationMatch(m)) {
+            return !opts?.onlyDivisions || opts.onlyDivisions.includes('Infantil Masculino');
+        }
+        return false;
+    };
 
     const { matches: freshSunday } = buildMuskizDayDraftMatches(teams, 'Domingo', options);
     const freshElim = freshSunday.filter(isInfantilElim);
@@ -2777,15 +2853,35 @@ export function patchSundaySimulationDraft(
     sundayMatches: Match[],
     options?: MuskizSimulatorOptions
 ): { matches: Match[]; changed: boolean; notes: string[] } {
-    const infantilElim = syncSundayInfantilEliminationInDraft(teams, sundayMatches, options);
-    if (!infantilElim.changed) {
+    const notes: string[] = [];
+    let working = sundayMatches;
+    let changed = false;
+
+    const imReconcile = reconcileSundayInfantilMasculinoDraft(teams, working, options);
+    if (imReconcile.changed) {
+        working = imReconcile.matches;
+        notes.push(...imReconcile.notes);
+        changed = true;
+    }
+
+    const imWithdrawn = hasWithdrawnTeamInDivision('Infantil Masculino');
+    const infantilElim = syncSundayInfantilEliminationInDraft(teams, working, options, {
+        onlyDivisions: imWithdrawn ? ['Infantil Femenino'] : undefined,
+    });
+    if (infantilElim.changed) {
+        working = infantilElim.matches;
+        notes.push(
+            imWithdrawn
+                ? 'fase final infantil femenino'
+                : 'fase final infantil (semis, 3º/4º y finales)'
+        );
+        changed = true;
+    }
+
+    if (!changed) {
         return { matches: sundayMatches, changed: false, notes: [] };
     }
-    return {
-        matches: infantilElim.matches,
-        changed: true,
-        notes: ['fase final infantil (semis, 3º/4º y finales)'],
-    };
+    return { matches: working, changed: true, notes };
 }
 
 /** Partido de vuelta en fase de grupos (grupos de 3, ida y vuelta). */

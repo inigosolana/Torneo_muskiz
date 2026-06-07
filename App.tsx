@@ -311,27 +311,27 @@ const App: React.FC = () => {
     }
   };
 
+  const publicTeams = useMemo(() => filterActiveTeams(teams), [teams]);
+
   const displayMatches = useMemo(
-    () => applyFinalPhaseResolution(matches, teams).matches,
-    [matches, teams]
+    () => applyFinalPhaseResolution(matches, publicTeams).matches,
+    [matches, publicTeams]
   );
 
   const resolvedPublicSimulationMatches = useMemo(
-    () => applyFinalPhaseResolution(publicSimulationMatches, teams).matches,
-    [publicSimulationMatches, teams]
+    () => applyFinalPhaseResolution(publicSimulationMatches, publicTeams).matches,
+    [publicSimulationMatches, publicTeams]
   );
-
-  const publicTeams = useMemo(() => filterActiveTeams(teams), [teams]);
 
   const publicDisplayMatches = useMemo(() => {
     const official = matchesForPublicSchedule(displayMatches);
     const simulation = matchesForPublicSchedule(resolvedPublicSimulationMatches);
     return excludeWithdrawnTeamMatches(
       mergePublicScheduleMatches(official, simulation),
-      teams,
+      publicTeams,
       TOURNAMENT_WITHDRAWN_TEAMS
     );
-  }, [displayMatches, resolvedPublicSimulationMatches, teams]);
+  }, [displayMatches, resolvedPublicSimulationMatches, publicTeams]);
 
   const managerEmail = normalizeEmail(user?.email);
   const hasApprovedTeam = teams.some(

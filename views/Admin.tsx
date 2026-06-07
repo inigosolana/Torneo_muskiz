@@ -23,6 +23,7 @@ import {
 } from '../services/tournamentScheduleService';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
 import { removeTeamFromScheduleMatches } from '../utils/groupMatchSync';
+import { isTeamWithdrawn } from '../utils/teamWithdrawals';
 import {
     applyFinalPhasePatchesToDrafts,
     applyFinalPhaseResolution,
@@ -1017,7 +1018,7 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     /** Quita del borrador partidos de equipos ya dados de baja (p. ej. Astillero domingo). */
     useEffect(() => {
         if (!simulationsLoaded || teams.length === 0 || simDrafts.length === 0) return;
-        const withdrawn = teams.filter((t) => t.status === 'rejected');
+        const withdrawn = teams.filter((t) => isTeamWithdrawn(t));
         if (withdrawn.length === 0) {
             lastWithdrawnPurgeKeyRef.current = '';
             return;
