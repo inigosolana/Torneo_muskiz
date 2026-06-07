@@ -3,6 +3,8 @@ import { CategoryLimits, Match, Team } from '../types';
 
 interface TournamentDataContextValue {
   teams: Team[];
+  /** Equipos activos (sin bajas confirmadas) — clasificación y vistas públicas. */
+  publicTeams: Team[];
   setTeams: React.Dispatch<React.SetStateAction<Team[]>>;
   /** Partidos tal como están en BD. */
   matches: Match[];

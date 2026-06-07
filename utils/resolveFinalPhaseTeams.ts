@@ -1,5 +1,6 @@
 import type { Match, Team } from '../types';
 import { computeStandings } from './computeStandings';
+import { isTeamWithdrawn } from './teamWithdrawals';
 import {
     findMatchForEliminationSlot,
     isEliminationMatch,
@@ -28,11 +29,11 @@ export interface FinalPhaseResolutionResult {
 }
 
 function tournamentDivisions(teams: Team[]): Team['division'][] {
-    return [...new Set(teams.filter((t) => t.status === 'approved').map((t) => t.division))] as Team['division'][];
+    return [...new Set(teams.filter((t) => t.status === 'approved' && !isTeamWithdrawn(t)).map((t) => t.division))] as Team['division'][];
 }
 
 function rosterForFinalPhase(teams: Team[], division: Team['division']): Team[] {
-    return teams.filter((t) => t.division === division && t.status === 'approved');
+    return teams.filter((t) => t.division === division && t.status === 'approved' && !isTeamWithdrawn(t));
 }
 
 /** Placeholders de plantilla que no cubre `isPlaceholderTeamName`. */

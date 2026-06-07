@@ -18,7 +18,7 @@ function tabFromSearchParam(value: string | null): ScheduleTab | null {
 }
 
 export const Schedule: React.FC = () => {
-    const { teams, categoryLimits, publicMatchesVisible, publicDisplayMatches } = useTournamentData();
+    const { publicTeams, categoryLimits, publicMatchesVisible, publicDisplayMatches } = useTournamentData();
     const [searchParams] = useSearchParams();
     const requestedTab = tabFromSearchParam(searchParams.get('tab'));
     const [activeTab, setActiveTab] = useState<ScheduleTab>(requestedTab ?? 'info');
@@ -281,7 +281,7 @@ export const Schedule: React.FC = () => {
                             <div className="animate-in fade-in">
                                 <CompetitionCalendarViews
                                     matches={publicMatches}
-                                    teams={teams}
+                                    teams={publicTeams}
                                     readOnly
                                     readOnlyAudience="public"
                                     title="Calendario oficial (Viernes · Sábado · Domingo)"
@@ -291,15 +291,15 @@ export const Schedule: React.FC = () => {
                         )}
 
                         {activeTab === 'results' && (
-                            <CompetitionPublicResultsSection matches={publicMatches} teams={teams} />
+                            <CompetitionPublicResultsSection matches={publicMatches} teams={publicTeams} />
                         )}
 
                         {activeTab === 'standings' && (
-                            <CompetitionPublicStandingsSection matches={publicMatches} teams={teams} />
+                            <CompetitionPublicStandingsSection matches={publicMatches} teams={publicTeams} />
                         )}
 
                         {activeTab === 'finals' && (
-                            <CompetitionPublicFinalPhaseSection matches={publicMatches} teams={teams} />
+                            <CompetitionPublicFinalPhaseSection matches={publicMatches} teams={publicTeams} />
                         )}
                     </div>
                 </div>

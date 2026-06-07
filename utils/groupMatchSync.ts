@@ -1,4 +1,5 @@
 import type { Match, Team } from '../types';
+import { isTeamWithdrawn } from './teamWithdrawals';
 import {
     autoGroupCount,
     computeGroups,
@@ -122,7 +123,7 @@ function rosterForDivision(
 ): Team[] {
     return teams.filter((t) => {
         if (t.division !== division) return false;
-        if (t.status === 'rejected') return false;
+        if (isTeamWithdrawn(t)) return false;
         if (onlyPaid && t.paymentStatus !== 'PAID') return false;
         return true;
     });
@@ -317,7 +318,7 @@ export function getTeamsInDivisionGroup(
     return teams.filter(
         (t) =>
             t.division === division &&
-            t.status !== 'rejected' &&
+            !isTeamWithdrawn(t) &&
             (t.competitionGroup ?? '').trim() === groupKey
     );
 }

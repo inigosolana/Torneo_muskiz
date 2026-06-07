@@ -12,7 +12,7 @@ import { isTournamentWeekendDay } from '../constants/tournamentDates';
 import { totalParticipantPlayers } from '../utils/squadLimits';
 
 export const Home: React.FC = () => {
-  const { teams, publicDisplayMatches, publicMatchesVisible } = useTournamentData();
+  const { teams, publicTeams, publicDisplayMatches, publicMatchesVisible } = useTournamentData();
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
 
@@ -117,7 +117,7 @@ export const Home: React.FC = () => {
 
       <HomeTournamentLivePanel
         matches={publicDisplayMatches}
-        teams={teams}
+        teams={publicTeams}
         publicMatchesVisible={publicMatchesVisible}
       />
 

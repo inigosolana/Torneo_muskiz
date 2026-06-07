@@ -28,6 +28,7 @@
  */
 import type { Match, Team } from '../types';
 import { SUNDAY_BREAK_START, SUNDAY_FINAL_START } from '../utils/sundaySchedule';
+import { isTeamWithdrawn } from '../utils/teamWithdrawals';
 
 export type MuskizScheduleDayLabel = 'Viernes' | 'Sábado' | 'Domingo';
 
@@ -41,7 +42,9 @@ export const TARGET_REAL_MATCHES_PER_TEAM = 4;
 
 /** Equipos reales que entran en el calendario: pagados y aprobados por el staff. */
 export function teamsEligibleForSchedule(allTeams: Team[]): Team[] {
-    return allTeams.filter((t) => t.paymentStatus === 'PAID' && t.status === 'approved');
+    return allTeams.filter(
+        (t) => t.paymentStatus === 'PAID' && t.status === 'approved' && !isTeamWithdrawn(t)
+    );
 }
 
 /** Partidos de grupos con ambos bandos = equipos inscritos (para conteo de mínimos por equipo). */

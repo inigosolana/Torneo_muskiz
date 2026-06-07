@@ -1,19 +1,7 @@
 import type { WithdrawnTeamSpec } from '../constants/tournamentWithdrawals';
 import type { Match, Team } from '../types';
 import { normalizeTeamLabel, resolveMatchDivision } from '../services/muskizScheduleSimulator';
-
-function mergeWithdrawnSpecs(teams: Team[], extra: WithdrawnTeamSpec[]): WithdrawnTeamSpec[] {
-    const map = new Map<string, WithdrawnTeamSpec>();
-    for (const w of extra) {
-        const key = w.id ?? `${w.division}|${normalizeTeamLabel(w.name)}`;
-        map.set(key, w);
-    }
-    for (const t of teams.filter((x) => x.status === 'rejected')) {
-        const key = t.id ?? `${t.division}|${normalizeTeamLabel(t.name)}`;
-        map.set(key, { id: t.id, name: t.name, division: t.division });
-    }
-    return [...map.values()];
-}
+import { mergedWithdrawnSpecs } from './teamWithdrawals';
 
 function matchSideWithdrawn(
     side: string,
@@ -72,7 +60,7 @@ export function excludeWithdrawnTeamMatches(
     teams: Team[],
     extraWithdrawals: WithdrawnTeamSpec[] = []
 ): Match[] {
-    const withdrawn = mergeWithdrawnSpecs(teams, extraWithdrawals);
+    const withdrawn = mergedWithdrawnSpecs(teams, extraWithdrawals);
     if (withdrawn.length === 0) return matches;
     return matches.filter((m) => {
         const division = resolveMatchDivision(m, teams);

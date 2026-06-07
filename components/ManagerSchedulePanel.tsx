@@ -28,7 +28,7 @@ function matchesForTeam(matches: Match[], team: Team): Match[] {
 }
 
 export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ managerTeams }) => {
-    const { publicDisplayMatches, teams: allTeams, publicMatchesVisible } = useTournamentData();
+    const { publicDisplayMatches, teams: allTeams, publicTeams, publicMatchesVisible } = useTournamentData();
     const [panelTab, setPanelTab] = useState<PanelTab>('calendar');
     const [teamFilterId, setTeamFilterId] = useState<'all' | string>(
         managerTeams.length === 1 ? managerTeams[0]!.id : 'all'
@@ -229,7 +229,7 @@ export const ManagerSchedulePanel: React.FC<ManagerSchedulePanelProps> = ({ mana
                                 division={team.division}
                                 groupKey={gk}
                                 matches={publicDisplayMatches}
-                                teams={allTeams}
+                                teams={publicTeams}
                                 resultsMatches={
                                     teamFilterId === 'all' ? teamMatches : filteredMatches
                                 }

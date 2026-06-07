@@ -1,5 +1,6 @@
 import type { Match, Team } from '../types';
 import { resolveTeamShield } from '../constants/teamShields';
+import { isTeamWithdrawn } from './teamWithdrawals';
 import { getMatchGoalTotals } from './beachSetScoring';
 import { DIVISION_CODE, normalizeTeamLabel, resolveMatchDivision } from '../services/muskizScheduleSimulator';
 import { getTeamsInDivisionGroup } from './groupMatchSync';
@@ -63,7 +64,7 @@ export function computeStandings(
         opts.rosterOverride ??
         teams.filter((t) => {
             if (t.division !== opts.division) return false;
-            if (t.status === 'rejected') return false;
+            if (isTeamWithdrawn(t)) return false;
             if (onlyPaid && t.paymentStatus !== 'PAID') return false;
             if (opts.group !== 'all' && (t.competitionGroup ?? '').trim() !== opts.group) return false;
             return true;

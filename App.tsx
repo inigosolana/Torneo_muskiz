@@ -40,6 +40,7 @@ import {
     saveScheduleVisibility,
 } from './services/tournamentScheduleService';
 import { TOURNAMENT_WITHDRAWN_TEAMS } from './constants/tournamentWithdrawals';
+import { filterActiveTeams } from './utils/teamWithdrawals';
 import {
   excludeWithdrawnTeamMatches,
   matchesForPublicSchedule,
@@ -320,6 +321,8 @@ const App: React.FC = () => {
     [publicSimulationMatches, teams]
   );
 
+  const publicTeams = useMemo(() => filterActiveTeams(teams), [teams]);
+
   const publicDisplayMatches = useMemo(() => {
     const official = matchesForPublicSchedule(displayMatches);
     const simulation = matchesForPublicSchedule(resolvedPublicSimulationMatches);
@@ -349,6 +352,7 @@ const App: React.FC = () => {
         <TournamentDataProvider
           value={{
             teams,
+            publicTeams,
             setTeams,
             matches,
             setMatches,

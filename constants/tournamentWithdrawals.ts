@@ -7,16 +7,11 @@ export interface WithdrawnTeamSpec {
     division: Team['division'];
 }
 
-/** Bajas confirmadas (domingo 2026): Astillero infantil. */
+/** Bajas confirmadas (domingo 2026): solo Astillero Blues infantil masculino. */
 export const TOURNAMENT_WITHDRAWN_TEAMS: WithdrawnTeamSpec[] = [
     {
         id: '555414c0-fd48-4446-8b2a-0f64c6f08ccf',
         name: 'ASTILLERO BLUES',
         division: 'Infantil Masculino',
-    },
-    {
-        id: '66493b59-e1ab-4168-ba91-153d57ea297c',
-        name: 'ASTILLERO BLUES',
-        division: 'Infantil Femenino',
     },
 ];
