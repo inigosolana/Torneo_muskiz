@@ -53,6 +53,7 @@ import {
     resolveTeamForMatchSide,
     auditSaturdayGroupPhase,
     patchSaturdaySimulationDraft,
+    patchSundaySimulationDraft,
     teamsEligibleForSchedule,
     type MuskizSimulatorOptions,
     type MuskizScheduleDayLabel,
@@ -1126,7 +1127,16 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
             }
         }
 
-        // Domingo: no se parchea al cargar; se conserva tal cual está guardado en calendar_simulations.
+        const sundayDraft = simDrafts.find((d) => d.scheduleDay === 'Domingo');
+        if (sundayDraft) {
+            const patched = patchDraft(sundayDraft, patchSundaySimulationDraft);
+            if (patched) {
+                nextDrafts = nextDrafts.map((d) =>
+                    d.id === sundayDraft.id ? { ...d, matches: patched } : d
+                );
+                anyChanged = true;
+            }
+        }
 
         if (!anyChanged) return;
 

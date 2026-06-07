@@ -7,7 +7,7 @@
  * - Domingo: infantiles (♀♂), 9:35–15:35, 4 campos.
  *
  * Formato por número de equipos en la categoría (Viernes, Sábado y Domingo):
- * - 2–6 equipos : liguilla (1 grupo) → final 1º vs 2º (sin semifinales), salvo Senior Femenino e Infantil Masculino (semis + final)
+ * - 2–6 equipos : liguilla (1 grupo) → final 1º vs 2º (sin semifinales), salvo Senior Femenino e Infantil Masculino (semis + final); IF e IM incluyen 3º/4º puesto
  * - 7 equipos   : grupos 3+4 → consolación (3ºA vs 3ºB) → semis (2 mejores/grupo) → final
  * - 8–10 equipos : 2 grupos → semis → final (9: 4+5)
  * - ≥11 equipos  : 3 grupos (11: 4+4+3) → repesca 2 peores 3º + cuartos (2×1º vs 3º, 1º vs 2º, 2º vs 2º) + semis → final
@@ -201,13 +201,36 @@ function generateSlotStarts(
 // ─── Fases ─────────────────────────────────────────────────────────────────
 type Phase = 'GRUPOS' | 'REPESCA' | 'CUARTOS' | 'SEMIS' | 'TERCER_PUESTO' | 'FINAL';
 
-/** JM, JF y SM: partido entre perdedores de semifinales. */
+/** JM, JF, SM e IM: partido entre perdedores de semifinales. */
 export function divisionUsesThirdFourthPlaceMatch(division: Team['division']): boolean {
     return (
         division === 'Juvenil Femenino' ||
         division === 'Juvenil Masculino' ||
-        division === 'Senior Masculino'
+        division === 'Senior Masculino' ||
+        division === 'Infantil Masculino'
     );
+}
+
+/** IF (liguilla sin semis): 3º y 4º de la clasificación general. */
+export function divisionUsesLiguillaThirdFourthPlace(division: Team['division']): boolean {
+    return division === 'Infantil Femenino';
+}
+
+function appendLiguillaThirdFourthPlaceMatch(
+    out: RawMatchSpec[],
+    div: Team['division'],
+    code: string,
+    phaseOrder: number
+): void {
+    if (!divisionUsesLiguillaThirdFourthPlace(div)) return;
+    out.push({
+        teamA: '3º Clasificado',
+        teamB: '4º Clasificado',
+        division: div,
+        phase: 'TERCER_PUESTO',
+        phaseOrder,
+        roundLabel: `3º y 4º puesto · ${code}`,
+    });
 }
 
 function appendThirdFourthPlaceMatch(
@@ -616,12 +639,13 @@ function appendSeniorFemeninoSemisAndFinal(
                 roundLabel: `Semi · ${code} 2`,
             }
         );
+        appendThirdFourthPlaceMatch(out, div, code, phaseOrderStart + 1);
         out.push({
             teamA: `Gan.Semi ${code} 1`,
             teamB: `Gan.Semi ${code} 2`,
             division: div,
             phase: 'FINAL',
-            phaseOrder: phaseOrderStart + 1,
+            phaseOrder: phaseOrderStart + 2,
             roundLabel: `Final · ${code}`,
         });
     } else if (n === 3) {
@@ -740,8 +764,20 @@ function specsForPaidDivision(teams: Team[]): RawMatchSpec[] {
     } else if (liguillaUsesCrossSemifinals(div) && n >= 3) {
         appendSeniorFemeninoSemisAndFinal(out, div, code, n, 1);
     } else {
-        // 2–6 equipos, 1 grupo: liguilla → final 1º vs 2º (sin semifinales)
-        out.push({ teamA: '1º Clasificado', teamB: '2º Clasificado', division: div, phase: 'FINAL', phaseOrder: 1, roundLabel: `Final · ${code} · 1º vs 2º` });
+        // 2–6 equipos, 1 grupo: liguilla → 3º/4º (IF) → final 1º vs 2º
+        let finalPhaseOrder = 1;
+        if (divisionUsesLiguillaThirdFourthPlace(div) && n >= 4) {
+            appendLiguillaThirdFourthPlaceMatch(out, div, code, 1);
+            finalPhaseOrder = 2;
+        }
+        out.push({
+            teamA: '1º Clasificado',
+            teamB: '2º Clasificado',
+            division: div,
+            phase: 'FINAL',
+            phaseOrder: finalPhaseOrder,
+            roundLabel: `Final · ${code} · 1º vs 2º`,
+        });
     }
 
     return out;
@@ -1105,7 +1141,7 @@ export function isPlaceholderTeamName(name: string): boolean {
     if (/^\d+º\b/u.test(n)) return true;
     if (/^Gan\./i.test(n)) return true;
     if (/^Perd\.Semi\b/i.test(n)) return true;
-    if (/^[12]º\s+Clasificado\b/i.test(n)) return true;
+    if (/^[1-4]º\s+Clasificado\b/i.test(n)) return true;
     if (/^3º\s+(peor|mejor)\b/i.test(n)) return true;
     if (/^3º\s+Gr\./i.test(n)) return true;
     if (/^1º\s+Grupo\b/i.test(n)) return true;
@@ -2593,11 +2629,34 @@ export function expectedLiguillaCrossSemiCount(paidTeamCount: number): number {
     return 2;
 }
 
-/** Partido eliminatorio de Infantil Masculino (semis o final) en el borrador. */
+/** Partido eliminatorio de Infantil Femenino (3º/4º o final) en el borrador. */
+export function isInfantilFemeninoEliminationMatch(m: Pick<Match, 'round'>): boolean {
+    if (divisionFromMatchRound(m.round) !== 'Infantil Femenino') return false;
+    const r = (m.round ?? '').toLowerCase();
+    return (
+        r.includes('semi') ||
+        /\bfinal\b/i.test(r) ||
+        r.includes('3º') ||
+        r.includes('4º') ||
+        r.includes('tercer')
+    );
+}
+
+/** Partido eliminatorio de Infantil Masculino (semis, 3º/4º o final) en el borrador. */
 export function isInfantilMasculinoEliminationMatch(m: Pick<Match, 'round'>): boolean {
     if (divisionFromMatchRound(m.round) !== 'Infantil Masculino') return false;
     const r = (m.round ?? '').toLowerCase();
-    return r.includes('semi') || r.includes('final');
+    return (
+        r.includes('semi') ||
+        /\bfinal\b/i.test(r) ||
+        r.includes('3º') ||
+        r.includes('4º') ||
+        r.includes('tercer')
+    );
+}
+
+function infantilEliminationMatchKey(m: Pick<Match, 'teamA' | 'teamB' | 'round'>): string {
+    return `${extractStructuralRoundLabel(m.round ?? '')}|${normalizeTeamLabel(m.teamA)}|${normalizeTeamLabel(m.teamB)}`;
 }
 
 export function countInfantilMasculinoSemisInMatches(matches: Pick<Match, 'round'>[]): number {
@@ -2675,22 +2734,55 @@ export function syncInfantilMasculinoSemisInSundayDraft(
     return { matches: merged, changed: true };
 }
 
-/** Parches del borrador del domingo (solo estructura IM; no modifica horarios guardados). */
+/**
+ * Sustituye el bloque eliminatorio IF/IM del domingo por la plantilla actual
+ * (semis, 3º/4º y final), conservando horarios de partidos de grupos.
+ */
+export function syncSundayInfantilEliminationInDraft(
+    teams: Team[],
+    sundayMatches: Match[],
+    options?: MuskizSimulatorOptions
+): { matches: Match[]; changed: boolean } {
+    const isInfantilElim = (m: Match) =>
+        isInfantilFemeninoEliminationMatch(m) || isInfantilMasculinoEliminationMatch(m);
+
+    const { matches: freshSunday } = buildMuskizDayDraftMatches(teams, 'Domingo', options);
+    const freshElim = freshSunday.filter(isInfantilElim);
+    if (freshElim.length === 0) return { matches: sundayMatches, changed: false };
+
+    const currentElim = sundayMatches.filter(isInfantilElim);
+    const currentKeys = new Set(currentElim.map(infantilEliminationMatchKey));
+    const freshKeys = new Set(freshElim.map(infantilEliminationMatchKey));
+    const same =
+        currentKeys.size === freshKeys.size &&
+        [...freshKeys].every((k) => currentKeys.has(k));
+    if (same) return { matches: sundayMatches, changed: false };
+
+    const without = sundayMatches.filter((m) => !isInfantilElim(m));
+    const merged = [...without, ...freshElim].sort((a, b) => {
+        const ta = a.time === 'PENDIENTE' ? 99_999 : timeToMinutes(a.time);
+        const tb = b.time === 'PENDIENTE' ? 99_999 : timeToMinutes(b.time);
+        if (ta !== tb) return ta - tb;
+        return (a.court ?? '').localeCompare(b.court ?? '', 'es');
+    });
+    return { matches: merged, changed: true };
+}
+
+/** Parches del borrador del domingo (eliminatoria infantil: semis, 3º/4º, final). */
 export function patchSundaySimulationDraft(
     teams: Team[],
     sundayMatches: Match[],
     options?: MuskizSimulatorOptions
 ): { matches: Match[]; changed: boolean; notes: string[] } {
-    let matches = sundayMatches;
-    const notes: string[] = [];
-
-    const semis = syncInfantilMasculinoSemisInSundayDraft(teams, matches, options);
-    if (semis.changed) {
-        matches = semis.matches;
-        notes.push('semifinales Infantil Masculino');
+    const infantilElim = syncSundayInfantilEliminationInDraft(teams, sundayMatches, options);
+    if (!infantilElim.changed) {
+        return { matches: sundayMatches, changed: false, notes: [] };
     }
-
-    return { matches, changed: notes.length > 0, notes };
+    return {
+        matches: infantilElim.matches,
+        changed: true,
+        notes: ['fase final infantil (semis, 3º/4º y finales)'],
+    };
 }
 
 /** Partido de vuelta en fase de grupos (grupos de 3, ida y vuelta). */

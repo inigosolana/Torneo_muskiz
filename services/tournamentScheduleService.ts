@@ -1,7 +1,13 @@
-import { supabase } from './supabaseClient';
+import { TOURNAMENT_WITHDRAWN_TEAMS } from '../constants/tournamentWithdrawals';
+import { removeTeamFromScheduleMatches } from '../utils/groupMatchSync';
 import { applySmBitxiBlueFlowSimulationPayload } from '../utils/smBitxiBlueFlowGroupSwap';
-import type { CalendarDraft, CalendarSimulationsPayload, Match, ScheduleVisibilityPayload } from '../types';
-import type { MuskizScheduleDayLabel } from './muskizScheduleSimulator';
+import type { CalendarDraft, CalendarSimulationsPayload, Match, ScheduleVisibilityPayload, Team } from '../types';
+import {
+    patchSundaySimulationDraft,
+    type MuskizScheduleDayLabel,
+    type MuskizSimulatorOptions,
+} from './muskizScheduleSimulator';
+import { supabase } from './supabaseClient';
 
 export const CALENDAR_SIMULATIONS_KEY = 'calendar_simulations';
 export const SCHEDULE_VISIBILITY_KEY = 'schedule_visibility';
@@ -117,6 +123,31 @@ export function normalizeCalendarSimulations(payload: CalendarSimulationsPayload
             : weekendDrafts[0]!.id;
 
     return { drafts, activeDraftId };
+}
+
+/** Borradores listos para la web: bajas confirmadas + 3º/4º infantil en domingo. */
+export function prepareWeekendDraftsForPublicView(
+    drafts: CalendarDraft[],
+    teams: Team[],
+    options?: MuskizSimulatorOptions
+): CalendarDraft[] {
+    let working = drafts;
+    for (const spec of TOURNAMENT_WITHDRAWN_TEAMS) {
+        const team =
+            teams.find((t) => t.id === spec.id) ??
+            teams.find(
+                (t) => t.name === spec.name && t.division === spec.division
+            ) ?? { name: spec.name, division: spec.division };
+        working = working.map((d) => ({
+            ...d,
+            matches: removeTeamFromScheduleMatches(d.matches, team, teams),
+        }));
+    }
+    return working.map((d) => {
+        if (d.scheduleDay !== 'Domingo') return d;
+        const { matches } = patchSundaySimulationDraft(teams, d.matches, options);
+        return { ...d, matches };
+    });
 }
 
 /** Une los 3 calendarios de fin de semana para publicar en BD. */

@@ -36,8 +36,10 @@ import {
     fetchScheduleVisibility,
     mergeWeekendDraftMatches,
     normalizeCalendarSimulations,
+    prepareWeekendDraftsForPublicView,
     saveScheduleVisibility,
 } from './services/tournamentScheduleService';
+import { TOURNAMENT_WITHDRAWN_TEAMS } from './constants/tournamentWithdrawals';
 import {
   excludeWithdrawnTeamMatches,
   matchesForPublicSchedule,
@@ -129,7 +131,8 @@ const App: React.FC = () => {
       const simPayload = await fetchCalendarSimulations();
       if (simPayload?.drafts?.length) {
         const normalized = normalizeCalendarSimulations(simPayload);
-        setPublicSimulationMatches(mergeWeekendDraftMatches(normalized.drafts));
+        const publicDrafts = prepareWeekendDraftsForPublicView(normalized.drafts, dbTeams);
+        setPublicSimulationMatches(mergeWeekendDraftMatches(publicDrafts));
       } else {
         setPublicSimulationMatches([]);
       }
@@ -320,7 +323,11 @@ const App: React.FC = () => {
   const publicDisplayMatches = useMemo(() => {
     const official = matchesForPublicSchedule(displayMatches);
     const simulation = matchesForPublicSchedule(resolvedPublicSimulationMatches);
-    return excludeWithdrawnTeamMatches(mergePublicScheduleMatches(official, simulation), teams);
+    return excludeWithdrawnTeamMatches(
+      mergePublicScheduleMatches(official, simulation),
+      teams,
+      TOURNAMENT_WITHDRAWN_TEAMS
+    );
   }, [displayMatches, resolvedPublicSimulationMatches, teams]);
 
   const managerEmail = normalizeEmail(user?.email);
