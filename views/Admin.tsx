@@ -22,6 +22,7 @@ import {
     WEEKEND_SCHEDULE_DAYS,
 } from '../services/tournamentScheduleService';
 import { competitionGroupsForDivision, computeStandings } from '../utils/computeStandings';
+import { removeTeamFromScheduleMatches } from '../utils/groupMatchSync';
 import {
     applyFinalPhasePatchesToDrafts,
     applyFinalPhaseResolution,
@@ -412,6 +413,61 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
         });
     };
 
+    const purgeWithdrawnTeamFromSchedules = useCallback(
+        async (team: Team): Promise<number> => {
+            let removed = 0;
+            const nextDrafts = simDrafts.map((d) => {
+                const before = d.matches.length;
+                const nextMatches = removeTeamFromScheduleMatches(d.matches, team, teams);
+                removed += before - nextMatches.length;
+                return { ...d, matches: nextMatches };
+            });
+            if (removed > 0) {
+                setSimDrafts(nextDrafts);
+                await persistSimDraftsAsync(nextDrafts, activeDraftId);
+            }
+            const nextOfficial = removeTeamFromScheduleMatches(matches, team, teams);
+            if (nextOfficial.length !== matches.length) {
+                removed += matches.length - nextOfficial.length;
+                await onUpdateMatches(nextOfficial);
+            }
+            return removed;
+        },
+        [simDrafts, teams, matches, activeDraftId, onUpdateMatches]
+    );
+
+    const handleWithdrawTeam = async (team: Team) => {
+        const reason =
+            window.prompt(
+                `Motivo de baja para ${team.name} (${team.division}):`,
+                'Baja del torneo'
+            ) ?? '';
+        if (!reason.trim()) return;
+        if (
+            !window.confirm(
+                `¿Dar de baja a ${team.name}?\n\nSe eliminarán sus partidos del calendario (domingo y resto de borradores). El formato del torneo no cambia.`
+            )
+        ) {
+            return;
+        }
+        try {
+            const updatedTeam: Team = {
+                ...team,
+                status: 'rejected',
+                paymentFeedback: reason.trim(),
+            };
+            await onUpdateTeam(updatedTeam);
+            const removed = await purgeWithdrawnTeamFromSchedules(updatedTeam);
+            toast.success(
+                removed > 0
+                    ? `${team.name} dado de baja. ${removed} partido(s) eliminados del calendario.`
+                    : `${team.name} dado de baja.`
+            );
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'No se pudo dar de baja al equipo.');
+        }
+    };
+
     const handleSaveEdit = async () => {
         if (!editingTeam) return;
         try {
@@ -426,7 +482,15 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                 status: editForm.status as Team['status'],
                 fee: editForm.fee,
             };
-            onUpdateTeam(updatedTeam);
+            const becameRejected =
+                editingTeam.status !== 'rejected' && updatedTeam.status === 'rejected';
+            await onUpdateTeam(updatedTeam);
+            if (becameRejected) {
+                const removed = await purgeWithdrawnTeamFromSchedules(updatedTeam);
+                if (removed > 0) {
+                    toast.info(`${removed} partido(s) eliminados del calendario.`);
+                }
+            }
             setEditingTeam(null);
             toast.success(`Equipo "${editForm.name}" actualizado correctamente.`);
         } catch (error: any) {
@@ -947,6 +1011,42 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
     };
 
     const lastSimFinalPhasePatchKeyRef = React.useRef('');
+    const lastWithdrawnPurgeKeyRef = React.useRef('');
+
+    /** Quita del borrador partidos de equipos ya dados de baja (p. ej. Astillero domingo). */
+    useEffect(() => {
+        if (!simulationsLoaded || teams.length === 0 || simDrafts.length === 0) return;
+        const withdrawn = teams.filter((t) => t.status === 'rejected');
+        if (withdrawn.length === 0) {
+            lastWithdrawnPurgeKeyRef.current = '';
+            return;
+        }
+        const beforeCount = simDrafts.reduce((n, d) => n + d.matches.length, 0);
+        let nextDrafts = simDrafts;
+        for (const t of withdrawn) {
+            nextDrafts = nextDrafts.map((d) => ({
+                ...d,
+                matches: removeTeamFromScheduleMatches(d.matches, t, teams),
+            }));
+        }
+        const afterCount = nextDrafts.reduce((n, d) => n + d.matches.length, 0);
+        const removed = beforeCount - afterCount;
+        const key = `${withdrawn
+            .map((t) => t.id)
+            .sort()
+            .join(',')}|${afterCount}`;
+        if (removed === 0) {
+            lastWithdrawnPurgeKeyRef.current = key;
+            return;
+        }
+        if (key === lastWithdrawnPurgeKeyRef.current) return;
+        lastWithdrawnPurgeKeyRef.current = key;
+        setSimDrafts(nextDrafts);
+        void persistSimDraftsAsync(nextDrafts, activeDraftId);
+        toast.info(`Calendario actualizado: ${removed} partido(s) de equipos de baja eliminados.`);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- simDrafts: dedupe con key
+    }, [simulationsLoaded, teams, allSimDraftMatches.length, activeDraftId]);
+
     /** Persiste placeholders de fase final en borradores cuando grupos ya están cerrados. */
     useEffect(() => {
         if (!simulationsLoaded || teams.length === 0 || simDrafts.length === 0) return;
@@ -1236,9 +1336,23 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
 
     const handleRejectPayment = async (team: Team) => {
         const reason = window.prompt(`Motivo del rechazo para ${team.name}:`, 'El justificante no es válido o no se ve bien.');
-        if (reason) {
-            onUpdateTeam({ ...team, paymentStatus: 'EXPIRED', paymentFeedback: reason, status: 'rejected' });
-            toast.info('Pago rechazado. La plaza ha sido liberada y el equipo marcado como EXPIRADO.');
+        if (!reason) return;
+        try {
+            const updatedTeam: Team = {
+                ...team,
+                paymentStatus: 'EXPIRED',
+                paymentFeedback: reason,
+                status: 'rejected',
+            };
+            await onUpdateTeam(updatedTeam);
+            const removed = await purgeWithdrawnTeamFromSchedules(updatedTeam);
+            toast.info(
+                removed > 0
+                    ? `Pago rechazado. ${removed} partido(s) eliminados del calendario.`
+                    : 'Pago rechazado. La plaza ha sido liberada y el equipo marcado como EXPIRADO.'
+            );
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'No se pudo rechazar el pago.');
         }
     };
 
@@ -3383,6 +3497,17 @@ export const Admin: React.FC<AdminProps> = ({ onUpdateTeam, onUpdateMatches, onU
                                                             >
                                                                 <span className="material-symbols-outlined text-xs">how_to_reg</span>
                                                                 APROBAR
+                                                            </button>
+                                                        )}
+                                                        {team.status === 'approved' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => void handleWithdrawTeam(team)}
+                                                                className="bg-slate-800 text-white hover:bg-slate-900 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                                                title="Baja del torneo: quita sus partidos del calendario"
+                                                            >
+                                                                <span className="material-symbols-outlined text-xs">person_off</span>
+                                                                BAJA
                                                             </button>
                                                         )}
                                                         {squadReminder.needsReminder && (

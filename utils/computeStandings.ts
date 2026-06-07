@@ -63,6 +63,7 @@ export function computeStandings(
         opts.rosterOverride ??
         teams.filter((t) => {
             if (t.division !== opts.division) return false;
+            if (t.status === 'rejected') return false;
             if (onlyPaid && t.paymentStatus !== 'PAID') return false;
             if (opts.group !== 'all' && (t.competitionGroup ?? '').trim() !== opts.group) return false;
             return true;

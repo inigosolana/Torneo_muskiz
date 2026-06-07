@@ -38,7 +38,11 @@ import {
     normalizeCalendarSimulations,
     saveScheduleVisibility,
 } from './services/tournamentScheduleService';
-import { matchesForPublicSchedule, mergePublicScheduleMatches } from './utils/matchPublicView';
+import {
+  excludeWithdrawnTeamMatches,
+  matchesForPublicSchedule,
+  mergePublicScheduleMatches,
+} from './utils/matchPublicView';
 
 const App: React.FC = () => {
   const normalizeEmail = (value?: string | null) => String(value ?? '').trim().toLowerCase();
@@ -316,8 +320,8 @@ const App: React.FC = () => {
   const publicDisplayMatches = useMemo(() => {
     const official = matchesForPublicSchedule(displayMatches);
     const simulation = matchesForPublicSchedule(resolvedPublicSimulationMatches);
-    return mergePublicScheduleMatches(official, simulation);
-  }, [displayMatches, resolvedPublicSimulationMatches]);
+    return excludeWithdrawnTeamMatches(mergePublicScheduleMatches(official, simulation), teams);
+  }, [displayMatches, resolvedPublicSimulationMatches, teams]);
 
   const managerEmail = normalizeEmail(user?.email);
   const hasApprovedTeam = teams.some(

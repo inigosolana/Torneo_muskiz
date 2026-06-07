@@ -122,9 +122,19 @@ function rosterForDivision(
 ): Team[] {
     return teams.filter((t) => {
         if (t.division !== division) return false;
+        if (t.status === 'rejected') return false;
         if (onlyPaid && t.paymentStatus !== 'PAID') return false;
         return true;
     });
+}
+
+/** Elimina del calendario todos los partidos de la categoría donde participa el equipo. */
+export function removeTeamFromScheduleMatches(
+    matchList: Match[],
+    team: Pick<Team, 'name' | 'division'>,
+    teams: Team[]
+): Match[] {
+    return matchList.filter((m) => !matchInvolvesTeam(m, team.name, team.division, teams));
 }
 
 /** Comprueba si el reparto manual encaja con el formato del simulador. */
@@ -305,7 +315,10 @@ export function getTeamsInDivisionGroup(
     const block = dist.find((g) => g.key === groupKey);
     if (block?.teams.length) return block.teams;
     return teams.filter(
-        (t) => t.division === division && (t.competitionGroup ?? '').trim() === groupKey
+        (t) =>
+            t.division === division &&
+            t.status !== 'rejected' &&
+            (t.competitionGroup ?? '').trim() === groupKey
     );
 }
 

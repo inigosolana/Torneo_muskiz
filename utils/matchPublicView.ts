@@ -1,4 +1,5 @@
-import type { Match } from '../types';
+import type { Match, Team } from '../types';
+import { normalizeTeamLabel, resolveMatchDivision } from '../services/muskizScheduleSimulator';
 
 /** Quita actas del partido (solo staff en Admin oficial). Conserva setScores para clasificación GF/GC. */
 export function stripActaFromMatch(match: Match): Match {
@@ -38,4 +39,23 @@ export function mergePublicScheduleMatches(official: Match[], simulation: Match[
         if (!seen.has(m.id)) merged.push(m);
     }
     return stripActaFromMatches(merged);
+}
+
+/** Oculta partidos de equipos dados de baja (status rejected). */
+export function excludeWithdrawnTeamMatches(matches: Match[], teams: Team[]): Match[] {
+    const withdrawn = teams.filter((t) => t.status === 'rejected');
+    if (withdrawn.length === 0) return matches;
+    return matches.filter((m) => {
+        const division = resolveMatchDivision(m, teams);
+        for (const side of [m.teamA, m.teamB]) {
+            const label = normalizeTeamLabel(side);
+            const hit = withdrawn.find(
+                (t) =>
+                    normalizeTeamLabel(t.name) === label &&
+                    (!division || t.division === division)
+            );
+            if (hit) return false;
+        }
+        return true;
+    });
 }
